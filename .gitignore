@@ -1,0 +1,43 @@
+# Dependencies
+node_modules/
+client/node_modules/
+
+# Production builds
+dist/
+client/dist/
+
+# Local SQLite databases & runtime storage
+*.sqlite
+*.sqlite-journal
+*.sqlite-shm
+*.sqlite-wal
+*.db
+server/storage/*.sqlite*
+server/storage/pdfs/*
+!server/storage/pdfs/.gitkeep
+server/storage/uploads/*
+!server/storage/uploads/.gitkeep
+
+# Environment variables & credentials
+.env
+.env.local
+.env.*.local
+*.env
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Editor & OS files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?

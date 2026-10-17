@@ -1,0 +1,39 @@
+{
+  "name": "udhayam-quotation-maker",
+  "version": "1.0.0",
+  "description": "Udhayam Quotation Maker - Excel-Based Quotation Automation",
+  "main": "server/server.js",
+  "scripts": {
+    "server": "node server/server.js",
+    "client": "npm run dev --prefix client",
+    "dev": "concurrently --kill-others-on-fail -n \"SERVER,CLIENT\" -c \"blue,green\" \"npm run server\" \"npm run client\"",
+    "start": "npm run dev",
+    "test": "vitest run",
+    "build": "npm run build --prefix client"
+  },
+  "keywords": [
+    "quotation",
+    "udhayam",
+    "excel",
+    "whatsapp",
+    "inr"
+  ],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "better-sqlite3": "^13.0.3",
+    "concurrently": "^10.0.6",
+    "cors": "^2.8.6",
+    "dotenv": "^18.0.8",
+    "express": "^5.3.0",
+    "multer": "^2.4.0",
+    "nodemailer": "^10.1.2",
+    "pdfkit": "^0.20.2",
+    "xlsx": "^0.18.5",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "vitest": "^5.0.5"
+  }
+}
