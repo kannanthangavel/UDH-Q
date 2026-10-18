@@ -132,73 +132,220 @@ function extractCustomerDetails(text) {
   return { customerName, customerPhone };
 }
 
+const TYPO_MAP = [
+  { pattern: /\bblock\s+paint\b/gi, replacement: 'black paint' },
+  { pattern: /\bblock\b(?=\s+(?:enamel|spray|primer|distemper|color|colour|matte|mat|glossy|glsy))/gi, replacement: 'black' },
+  { pattern: /\bblck\b/gi, replacement: 'black' },
+  { pattern: /\bwite\b|\bwhte\b/gi, replacement: 'white' },
+  { pattern: /\benamal\b|\benaml\b/gi, replacement: 'enamel' },
+  { pattern: /\bthiner\b|\btinner\b/gi, replacement: 'thinner' },
+  { pattern: /\bmetrial\b|\bmeterial\b|\bmateriel\b/gi, replacement: 'material' },
+  { pattern: /\bbrsh\b/gi, replacement: 'brush' }
+];
+
+function correctTradeTypos(text) {
+  let cleaned = text;
+  for (const { pattern, replacement } of TYPO_MAP) {
+    cleaned = cleaned.replace(pattern, replacement);
+  }
+  return cleaned;
+}
+
+function isConversationalNoise(line) {
+  const trimmed = line.trim().toLowerCase();
+  if (trimmed.length < 3) return true;
+
+  if (/^(?:this\s+)?(?:material|metrial|meterial|item|items|goods)\s+(?:is\s+)?(?:needed|need|req|required|wanted|urgent)/i.test(trimmed)) {
+    return true;
+  }
+  if (/^(?:kindly|please|pls)?\s*(?:send|give|provide|share)\s+(?:quotation|quote|rate|rates|price|prices|estimate|bill)/i.test(trimmed)) {
+    return true;
+  }
+  if (/^(?:thanks|thank\s+you|tq|nandri|dhanyawad)\b/i.test(trimmed)) {
+    return true;
+  }
+  if (/(?:rate|bill|invoice)\s+(?:kudunga|anupunga|podunga|sollunga)/i.test(trimmed)) {
+    return true;
+  }
+  return false;
+}
+
+function stripListPrefix(line) {
+  return line.replace(/^\s*(?:(?:\d+|[a-zA-Z])[\.\)\-\:\/]\s*|[\*\-\•\⁃\–]\s*)/, '').trim();
+}
+
+function parseFraction(str) {
+  if (!str) return null;
+  const s = str.trim();
+
+  const mixed = s.match(/^(\d+)\s+(\d+)\s*\/\s*(\d+)/);
+  if (mixed) {
+    const whole = parseFloat(mixed[1]);
+    const num = parseFloat(mixed[2]);
+    const den = parseFloat(mixed[3]);
+    if (den !== 0) return { val: whole + (num / den), raw: mixed[0] };
+  }
+
+  const frac = s.match(/^(\d+)\s*\/\s*(\d+)/);
+  if (frac) {
+    const num = parseFloat(frac[1]);
+    const den = parseFloat(frac[2]);
+    if (den !== 0) return { val: num / den, raw: frac[0] };
+  }
+
+  if (/^half\b/i.test(s)) return { val: 0.5, raw: 'half' };
+  if (/^quarter\b/i.test(s)) return { val: 0.25, raw: 'quarter' };
+
+  const num = s.match(/^(\d+(?:\.\d+)?)/);
+  if (num) {
+    return { val: parseFloat(num[1]), raw: num[0] };
+  }
+
+  return null;
+}
+
 /**
  * Splits text into individual item requirement statements
  */
 function splitIntoItemLines(rawText) {
-  // Remove conversational greetings and closing lines
+  // Remove conversational greetings and closing lines using strict word boundaries
   let text = rawText
-    .replace(/(?:hi|hello|sir|vanakkam|dear sir|please|pls|send quotation|need quotation|prepare quotation|urgent|tq|thanks|thank you)[\.\,\s]*/gi, ' ')
+    .replace(/\b(?:hi|hello|sir|vanakkam|dear\s+sir|please|pls|send\s+quotation|need\s+quotation|prepare\s+quotation|urgent|tq|thanks|thank\s+you)\b[\.\,\s]*/gi, ' ')
     .replace(/\b(ud[\d\-]+|inv[\d\-]+)\b.*?(bill|invoice)/gi, ' ');
 
-  // Split by newlines, commas, or semicolons, or " and "
+  // Split by newlines, semicolons, commas (if not within fractions), or " and "
   const rawParts = text
-    .split(/\r?\n|;|,|\band\b/i)
+    .split(/\r?\n|;|\band\b/i)
     .map(p => p.trim())
-    .filter(p => p.length > 2);
+    .filter(p => p.length > 2 && !isConversationalNoise(p));
 
-  return rawParts;
+  // If newlines didn't produce multiple items, split by comma if comma doesn't look like decimal/fraction
+  const result = [];
+  for (const part of rawParts) {
+    if (part.includes(',') && !/\d+,\d+/.test(part)) {
+      part.split(',').map(sub => sub.trim()).filter(sub => sub.length > 2 && !isConversationalNoise(sub)).forEach(sub => result.push(sub));
+    } else {
+      result.push(part);
+    }
+  }
+
+  return result;
 }
 
 /**
  * Parses a single item line to extract quantity, unit, specification, and product name
  */
 function parseItemLine(rawPhrase) {
-  let phrase = rawPhrase.trim();
-  if (!phrase) return null;
+  let phrase = stripListPrefix(rawPhrase.trim());
+  if (!phrase || isConversationalNoise(phrase)) return null;
 
+  phrase = correctTradeTypos(phrase);
+
+  let productName = phrase;
+  let specification = '';
   let quantity = null;
   let unit = null;
-  let specification = '';
   let isQuantityMissing = false;
   let isUnitMissing = false;
 
-  // 1. Extract specifications first (e.g. 12mm, 1lt, 20L, 50kg, fe550d)
-  const matchedSpecs = [];
-  SPEC_PATTERNS.forEach(pattern => {
-    const matches = phrase.match(pattern);
-    if (matches) {
-      matches.forEach(m => matchedSpecs.push(m.trim()));
+  // Check for Key-Value separator: "=" or ":" or "@"
+  const kvMatch = phrase.match(/^(.*?)\s*(=|:)\s*(.*?)$/);
+
+  if (kvMatch) {
+    const leftPart = kvMatch[1].trim();
+    const rightPart = kvMatch[3].trim();
+
+    // 1. Extract specs from left part (e.g. "brush(2inch)" -> spec "2inch", name "brush")
+    let cleanLeft = leftPart;
+    const parenSpecMatch = cleanLeft.match(/\((.*?)\)/);
+    if (parenSpecMatch) {
+      specification = parenSpecMatch[1].trim();
+      cleanLeft = cleanLeft.replace(/\(.*?\)/, ' ').trim();
     }
-  });
 
-  if (matchedSpecs.length > 0) {
-    specification = matchedSpecs.join(', ');
-  }
-
-  // 2. Extract Quantity and Unit pattern: e.g. "20 bags", "10 numbers of", "5 buckets", "1Nos"
-  // Look for leading or trailing numbers
-  const qtyUnitRegex = /(\d+(?:\.\d+)?)\s*(bags?|nos?|numbers?|pieces?|pcs?|buckets?|bkts?|kgs?|kilos?|liters?|litres?|ltrs?|lt|l|boxes?|pkts?|bundles?|meters?|mtrs?|feet|ft)?\b/i;
-  
-  const match = phrase.match(qtyUnitRegex);
-  if (match) {
-    const parsedQty = parseFloat(match[1]);
-    if (!isNaN(parsedQty) && parsedQty > 0) {
-      quantity = parsedQty;
-      const rawUnit = (match[2] || '').toLowerCase();
-      if (rawUnit && UNIT_MAP[rawUnit]) {
-        unit = UNIT_MAP[rawUnit];
+    if (!specification) {
+      const specMatch = cleanLeft.match(/\b\d+(\.\d+)?\s*(mm|cm|inch|in|ft|meter|mtr|lt|ltr|litre|liter|l|ml|kg|gm|g)\b/i);
+      if (specMatch) {
+        specification = specMatch[0].trim();
       }
     }
-  }
 
-  // If unit not found directly after quantity, search phrase for known units
-  if (!unit) {
-    for (const [rawU, stdU] of Object.entries(UNIT_MAP)) {
-      const uRegex = new RegExp(`\\b${rawU}\\b`, 'i');
-      if (uRegex.test(phrase)) {
+    productName = cleanLeft;
+
+    // 2. Parse quantity and unit from right part (e.g. "1/2 litre", "2 nos", "5 bags")
+    const fracObj = parseFraction(rightPart);
+    if (fracObj) {
+      const afterFrac = rightPart.slice(fracObj.raw.length).trim();
+      const unitMatch = afterFrac.match(/^([a-zA-Z]+)/);
+      if (unitMatch) {
+        const rawU = unitMatch[1].toLowerCase();
+        if (UNIT_MAP[rawU]) {
+          unit = UNIT_MAP[rawU];
+        } else {
+          unit = rawU;
+        }
+      }
+
+      // If right part was a fraction of volume/weight like "1/2 litre"
+      if (fracObj.val < 1 && (unit === 'litres' || unit === 'kg')) {
+        if (unit === 'litres' && fracObj.val === 0.5) {
+          specification = specification ? `${specification}, 500ML` : '500ML';
+          quantity = 1;
+          unit = 'Nos';
+        } else if (unit === 'litres' && fracObj.val === 0.25) {
+          specification = specification ? `${specification}, 250ML` : '250ML';
+          quantity = 1;
+          unit = 'Nos';
+        } else {
+          quantity = fracObj.val;
+        }
+      } else {
+        quantity = fracObj.val;
+      }
+    }
+  } else {
+    // Non-delimited format: e.g. "20 bags OPC cement", "10 numbers of 12mm steel rods"
+    const specMatch = phrase.match(/\b\d+(\.\d+)?\s*(mm|cm|inch|in|ft|meter|mtr|lt|ltr|litre|liter|l|ml|kg|gm|g)\b/i);
+    if (specMatch) {
+      specification = specMatch[0].trim();
+    }
+
+    const fracVolMatch = phrase.match(/(?:(\d+\s*\/\s*\d+|half|quarter))\s*(litres?|liters?|ltrs?|lt|l|kg|kgs)\b/i);
+    if (fracVolMatch) {
+      const fracObj = parseFraction(fracVolMatch[1]);
+      const rawU = (fracVolMatch[2] || '').toLowerCase();
+      const stdU = UNIT_MAP[rawU] || rawU;
+
+      if (fracObj && fracObj.val === 0.5 && stdU === 'litres') {
+        specification = specification ? `${specification}, 500ML` : '500ML';
+        quantity = 1;
+        unit = 'Nos';
+      } else if (fracObj) {
+        quantity = fracObj.val;
         unit = stdU;
-        break;
+      }
+
+      productName = phrase.replace(fracVolMatch[0], ' ');
+    } else {
+      const qtyUnitRegex = /(\d+(?:\.\d+)?)\s*(bags?|nos?|numbers?|pieces?|pcs?|buckets?|bkts?|kgs?|kilos?|liters?|litres?|ltrs?|lt|l|boxes?|pkts?|bundles?|meters?|mtrs?|feet|ft)?\b/i;
+      const match = phrase.match(qtyUnitRegex);
+      if (match) {
+        quantity = parseFloat(match[1]);
+        const rawUnit = (match[2] || '').toLowerCase();
+        if (rawUnit && UNIT_MAP[rawUnit]) {
+          unit = UNIT_MAP[rawUnit];
+        }
+        productName = phrase.replace(match[0], ' ');
+      }
+    }
+
+    if (!unit) {
+      for (const [rawU, stdU] of Object.entries(UNIT_MAP)) {
+        const uRegex = new RegExp(`\\b${rawU}\\b`, 'i');
+        if (uRegex.test(phrase)) {
+          unit = stdU;
+          break;
+        }
       }
     }
   }
@@ -211,25 +358,18 @@ function parseItemLine(rawPhrase) {
     isUnitMissing = true;
   }
 
-  // 3. Clean product name by removing the parsed quantity, unit, and filler words
-  let productName = phrase;
-  if (quantity !== null) {
-    // Remove quantity from product name
-    productName = productName.replace(new RegExp(`\\b${quantity}\\b`, 'i'), ' ');
-  }
-  if (unit) {
-    // Remove unit words from product name
-    productName = productName.replace(new RegExp(`\\b(${unit}|bags?|nos?|numbers?|pieces?|pcs?|buckets?|bkts?|kgs?|kilos?|litres?|ltr|pkt|box|bundle)\\b`, 'gi'), ' ');
-  }
-
-  // Remove common connecting words
+  // Clean product name
   productName = productName
-    .replace(/\b(of|numbers of|pieces of|bags of|buckets of|packets of|boxes of|need|req|required|wanted|please|send)\b/gi, ' ')
+    .replace(/\b(of|numbers of|pieces of|bags of|buckets of|need|req|required|wanted|please|pls|send)\b/gi, ' ')
     .replace(/[^\w\s\.\-\/]/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
 
-  // If the product name became empty (e.g. phrase was just "20 bags"), fall back to raw phrase
+  let normalizedSpec = specification;
+  if (normalizedSpec) {
+    normalizedSpec = normalizedSpec.replace(/(\d+)\s*(?:inch|in)\b/gi, '$1"');
+  }
+
   if (!productName || productName.length < 2) {
     productName = phrase;
   }
@@ -237,9 +377,9 @@ function parseItemLine(rawPhrase) {
   return {
     rawPhrase,
     productName,
-    specification,
+    specification: normalizedSpec,
     quantity,
-    unit,
+    unit: unit || 'Nos',
     isQuantityMissing,
     isUnitMissing
   };

@@ -145,7 +145,7 @@ function suggestColumnMapping(headers) {
     hsn_code: [/hsn/i, /sac/i],
     sales_rate: [/sales?\s*rate/i, /selling\s*price/i, /^rate$/i, /^price$/i, /unit\s*rate/i, /mrp/i],
     purchase_rate: [/purchase\s*rate/i, /purchase\s*price/i, /cost\s*rate/i, /^cost$/i, /buy\s*rate/i],
-    unit: [/^unit$/i, /^uom$/i, /unit\s*of\s*measure/i],
+    unit: [/^unit$/i, /^uom$/i, /unit\s*of\s*measure/i, /main\s*unit/i],
     gst_rate: [/gst\s*%/i, /^gst$/i, /tax\s*%/i, /^tax$/i, /gst\s*percentage/i],
     item_code: [/item\s*code/i, /^code$/i, /^sku$/i, /item\s*no/i, /part\s*no/i],
     brand: [/^brand$/i, /^make$/i, /manufacturer/i],

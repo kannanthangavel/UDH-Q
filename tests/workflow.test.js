@@ -160,6 +160,10 @@ describe('Quotation Lifecycle & Workflow Integrity Suite', () => {
     const now = new Date().toISOString();
     const testQuoteNum = `TEST-CLEAR-${Date.now()}`;
 
+    // Backup existing catalog so running test suite never destroys user catalog
+    const savedPriceLists = db.prepare('SELECT * FROM price_lists').all();
+    const savedProducts = db.prepare('SELECT * FROM products').all();
+
     try {
       // Create a quotation
       const quoteId = db.prepare(`
@@ -216,8 +220,36 @@ describe('Quotation Lifecycle & Workflow Integrity Suite', () => {
       db.prepare('DELETE FROM quotation_items WHERE quotation_id = ?').run(quoteId);
       db.prepare('DELETE FROM quotations WHERE id = ?').run(quoteId);
     } finally {
-      // Re-seed demo data if empty so other suites have products to match against
-      initSchema();
+      if (savedPriceLists.length > 0) {
+        db.prepare('DELETE FROM products').run();
+        db.prepare('DELETE FROM price_lists').run();
+
+        const insertPl = db.prepare(`
+          INSERT INTO price_lists (
+            id, filename, sheet_name, version, is_demo, is_active, imported_at,
+            total_rows, valid_products_count, warnings_count, column_mapping_json, metadata_json
+          ) VALUES (
+            @id, @filename, @sheet_name, @version, @is_demo, @is_active, @imported_at,
+            @total_rows, @valid_products_count, @warnings_count, @column_mapping_json, @metadata_json
+          )
+        `);
+        for (const pl of savedPriceLists) insertPl.run(pl);
+
+        const insertProd = db.prepare(`
+          INSERT INTO products (
+            id, price_list_id, item_code, product_name, normalized_name, specification,
+            brand, category, unit, sales_rate, purchase_rate, is_tax_inclusive,
+            gst_rate, hsn_code, price_status, source_data_json, created_at
+          ) VALUES (
+            @id, @price_list_id, @item_code, @product_name, @normalized_name, @specification,
+            @brand, @category, @unit, @sales_rate, @purchase_rate, @is_tax_inclusive,
+            @gst_rate, @hsn_code, @price_status, @source_data_json, @created_at
+          )
+        `);
+        for (const p of savedProducts) insertProd.run(p);
+      } else {
+        initSchema();
+      }
     }
   });
 });

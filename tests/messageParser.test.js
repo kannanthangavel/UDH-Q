@@ -60,4 +60,40 @@ describe('WhatsApp Message Parser & NLP Suite', () => {
     expect(result.items[0].isQuantityMissing).toBe(true);
     expect(result.items[0].quantity).toBe(null);
   });
+
+  it('correctly parses fractions, trade typos, and = separated paint and hardware requirements', () => {
+    const raw = `1.green paint=1/2 litre 
+2.block paint=1/2 litre 
+3.enamel thinner=1/2 litre 
+4.brush(2inch)=2 nos
+This metrial needed sir`;
+
+    const res = parseCustomerMessage(raw);
+    expect(res.success).toBe(true);
+    expect(res.items.length).toBe(4);
+
+    // 1. green paint
+    expect(res.items[0].productName).toBe('green paint');
+    expect(res.items[0].specification).toBe('500ML');
+    expect(res.items[0].quantity).toBe(1);
+    expect(res.items[0].unit).toBe('Nos');
+
+    // 2. block paint -> black paint
+    expect(res.items[1].productName).toBe('black paint');
+    expect(res.items[1].specification).toBe('500ML');
+    expect(res.items[1].quantity).toBe(1);
+    expect(res.items[1].unit).toBe('Nos');
+
+    // 3. enamel thinner
+    expect(res.items[2].productName).toBe('enamel thinner');
+    expect(res.items[2].specification).toBe('500ML');
+    expect(res.items[2].quantity).toBe(1);
+    expect(res.items[2].unit).toBe('Nos');
+
+    // 4. brush(2inch)=2 nos
+    expect(res.items[3].productName).toBe('brush');
+    expect(res.items[3].specification).toBe('2"');
+    expect(res.items[3].quantity).toBe(2);
+    expect(res.items[3].unit).toBe('nos');
+  });
 });

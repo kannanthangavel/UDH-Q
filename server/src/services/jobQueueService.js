@@ -162,13 +162,17 @@ async function handleIncomingMessageJob(job) {
       let rowOrder = db.prepare('SELECT MAX(row_order) as m FROM quotation_items WHERE quotation_id = ?').get(recentDraft.id)?.m || 0;
       for (const item of matchedItems) {
         rowOrder++;
+        const prod = item.matchedProduct;
+        const rate = prod && prod.sales_rate ? prod.sales_rate : (item.salesRate || 0);
+        const gst = prod && prod.gst_rate !== undefined ? prod.gst_rate : (item.gstRate || 18);
+        const itemUnit = item.unit || (prod ? prod.unit : 'Nos');
         const calcItem = calculateQuotationTotals(
           [{
             quantity: item.quantity || 1,
-            unitPrice: item.salesRate || 0,
+            unitPrice: rate,
             discountPercent: 0,
-            gstRate: item.gstRate || 18,
-            isTaxInclusive: item.isTaxInclusive !== 0
+            gstRate: gst,
+            isTaxInclusive: prod ? (prod.is_tax_inclusive !== 0) : true
           }],
           recentDraft.document_type || 'gst_quotation',
           0, 0
@@ -183,17 +187,17 @@ async function handleIncomingMessageJob(job) {
         `).run(
           recentDraft.id,
           rowOrder,
-          item.matchedProduct?.id || null,
-          item.itemCode || null,
-          item.productName || item.rawPhrase,
-          item.specification || '',
-          item.hsnCode || '',
+          prod?.id || null,
+          prod?.item_code || item.itemCode || null,
+          prod?.product_name || item.productName || item.rawPhrase,
+          prod?.specification || item.specification || '',
+          prod?.hsn_code || item.hsnCode || '',
           item.quantity || 1,
-          item.unit || 'nos',
-          item.salesRate || 0,
+          itemUnit,
+          rate,
           0,
           calcItem.items[0]?.taxableAmount || 0,
-          item.gstRate || 18,
+          gst,
           calcItem.items[0]?.gstAmount || 0,
           calcItem.items[0]?.lineTotal || 0,
           item.matchStatus || 'Needs Review',
@@ -266,13 +270,14 @@ async function handleIncomingMessageJob(job) {
 
   // 3. Normal Path: Automatic extraction, matching, and quotation drafting
   const parsed = parseCustomerMessage(rawContent);
+  const matchedItems = matchAllItems(parsed.items);
   const activePriceList = db.prepare('SELECT id FROM price_lists WHERE is_active = 1 LIMIT 1').get();
-  const matchedItems = matchAllItems(parsed.items, activePriceList?.id);
 
   let exactMatches = 0;
   let unresolvedMatches = 0;
   matchedItems.forEach(it => {
-    if (it.matchStatus === 'Exact Match' && it.salesRate > 0) {
+    const rate = it.matchedProduct?.sales_rate ?? (it.salesRate || 0);
+    if ((it.matchStatus === 'Exact Match' || it.confidence >= 80) && rate > 0) {
       exactMatches++;
     } else {
       unresolvedMatches++;
@@ -285,13 +290,16 @@ async function handleIncomingMessageJob(job) {
   const quoteNumber = getNextQuotationNumber();
 
   // Calculate provisional line items and totals
-  const calcItemsInput = matchedItems.map(item => ({
-    quantity: item.quantity || 1,
-    unitPrice: item.salesRate || 0,
-    discountPercent: 0,
-    gstRate: item.gstRate || 18,
-    isTaxInclusive: item.isTaxInclusive !== 0
-  }));
+  const calcItemsInput = matchedItems.map(item => {
+    const prod = item.matchedProduct;
+    return {
+      quantity: item.quantity || 1,
+      unitPrice: prod && prod.sales_rate ? prod.sales_rate : (item.salesRate || 0),
+      discountPercent: 0,
+      gstRate: prod && prod.gst_rate !== undefined ? prod.gst_rate : (item.gstRate || 18),
+      isTaxInclusive: prod ? (prod.is_tax_inclusive !== 0) : true
+    };
+  });
 
   const calcResult = calculateQuotationTotals(calcItemsInput, docType, 0, 0);
 
@@ -312,13 +320,15 @@ async function handleIncomingMessageJob(job) {
     )
   `);
 
+  const primaryPriceListId = matchedItems.find(it => it.matchedProduct?.price_list_id)?.matchedProduct?.price_list_id || activePriceList?.id || null;
+
   const quoteRes = insertQuote.run(
     quoteNumber,
     docType,
     paperSize,
     customerNameFinal,
     senderPhone,
-    activePriceList?.id || null,
+    primaryPriceListId,
     calcResult.subtotal,
     calcResult.taxable_amount,
     calcResult.tax_total,
@@ -342,20 +352,25 @@ async function handleIncomingMessageJob(job) {
 
   matchedItems.forEach((item, idx) => {
     const lineCalc = calcResult.items[idx] || {};
+    const prod = item.matchedProduct;
+    const rate = prod && prod.sales_rate ? prod.sales_rate : (item.salesRate || 0);
+    const gst = prod && prod.gst_rate !== undefined ? prod.gst_rate : (item.gstRate || 18);
+    const itemUnit = item.unit || (prod ? prod.unit : 'Nos');
+
     insertItem.run(
       quoteId,
       idx + 1,
-      item.matchedProduct?.id || null,
-      item.itemCode || null,
-      item.productName || item.rawPhrase,
-      item.specification || '',
-      item.hsnCode || '',
+      prod?.id || null,
+      prod?.item_code || item.itemCode || null,
+      prod?.product_name || item.productName || item.rawPhrase,
+      prod?.specification || item.specification || '',
+      prod?.hsn_code || item.hsnCode || '',
       item.quantity || 1,
-      item.unit || 'nos',
-      item.salesRate || 0,
+      itemUnit,
+      rate,
       0,
       lineCalc.taxableAmount || 0,
-      item.gstRate || 18,
+      gst,
       lineCalc.gstAmount || 0,
       lineCalc.lineTotal || 0,
       item.matchStatus || 'Needs Review',
