@@ -26,13 +26,14 @@ function pdfCurrency(amount) {
 
 /**
  * Generates Quotation PDF in A5 (default) or A4 with exact pixel-perfect layout
+ * Inspired by executive agency design with compulsory Udhayam logo, corner ribbon, and zero text overlap
  */
 function generateQuotationPDF(quotation, items, settings) {
   return new Promise((resolve, reject) => {
     try {
       const isA5 = (quotation.paper_size || 'A5').toUpperCase() === 'A5';
       const pageSize = isA5 ? 'A5' : 'A4';
-      const margin = isA5 ? 20 : 28;
+      const margin = isA5 ? 18 : 28;
 
       const filename = `${(quotation.quotation_number || 'QUOTE').replace(/[^\w\-]/g, '_')}_${Date.now()}.pdf`;
       const filePath = path.join(pdfsDir, filename);
@@ -55,199 +56,244 @@ function generateQuotationPDF(quotation, items, settings) {
       const pageHeight = doc.page.height;
       const contentWidth = pageWidth - (margin * 2);
 
-      // Design System Colors (Udhayam Brand Palette)
+      // Design System Colors (Official Udhayam Brand Palette)
       const primaryColor = '#044E54';      // Deep Udhayam Teal
       const primaryDark = '#023035';       // Dark Teal
       const accentGreen = '#72B01D';       // Udhayam Lime Green
+      const accentGold = '#F59E0B';        // Warm Gold / Amber Accent
       const darkColor = '#0F172A';         // Slate 900
       const mutedColor = '#475569';        // Slate 600
       const lightBg = '#F8FAFC';           // Slate 50
       const borderColor = '#CBD5E1';       // Slate 300
       const lightBorder = '#E2E8F0';       // Slate 200
 
-      // 1. --- TOP HEADER BOX ---
-      const headerTop = margin;
-      const headerHeight = isA5 ? 54 : 64;
-      doc.rect(margin, headerTop, contentWidth, headerHeight).fill(lightBg).stroke(borderColor);
-
-      // Top colored accent bar
-      doc.rect(margin, headerTop, contentWidth, 3).fill(primaryColor);
-
-      // Document Type Badge (Right) - calculate dimensions first for text bounds
-      const isGst = quotation.document_type === 'gst_quotation';
-      const docTypeTitle = isGst ? 'GST QUOTATION' : 'ESTIMATION';
-      const badgeWidth = isA5 ? 105 : 130;
-      const badgeHeight = isA5 ? 20 : 24;
-      const badgeX = pageWidth - margin - badgeWidth - 8;
-      const badgeY = headerTop + 8;
-
-      // Resolve Logo File
+      // Compulsory Logo Resolution
       let targetLogoPath = null;
-      if (quotation.status === 'finalized' && quotation.logo_snapshot_path) {
-        targetLogoPath = path.isAbsolute(quotation.logo_snapshot_path) 
-          ? quotation.logo_snapshot_path 
-          : path.join(snapshotsDir, quotation.logo_snapshot_path);
-      } else if (quotation.logo_source === 'custom' && quotation.custom_logo_path) {
-        targetLogoPath = path.isAbsolute(quotation.custom_logo_path)
-          ? quotation.custom_logo_path
-          : path.join(logosDir, quotation.custom_logo_path);
-      } else if (quotation.logo_source !== 'none' && settings.company_logo) {
-        targetLogoPath = path.isAbsolute(settings.company_logo)
-          ? settings.company_logo
-          : path.join(logosDir, settings.company_logo);
-      }
+      const candidateLogoPaths = [
+        quotation.logo_snapshot_path ? (path.isAbsolute(quotation.logo_snapshot_path) ? quotation.logo_snapshot_path : path.join(snapshotsDir, quotation.logo_snapshot_path)) : null,
+        quotation.custom_logo_path ? (path.isAbsolute(quotation.custom_logo_path) ? quotation.custom_logo_path : path.join(logosDir, quotation.custom_logo_path)) : null,
+        settings.company_logo ? (path.isAbsolute(settings.company_logo) ? settings.company_logo : path.join(logosDir, settings.company_logo)) : null,
+        path.join(logosDir, 'udhayam_logo.png'),
+        path.join(__dirname, '../../../client/src/assets/udhayam_logo.png'),
+        path.join(__dirname, '../../storage/uploads/logos/udhayam_logo.png')
+      ].filter(Boolean);
 
-      let hasRenderedLogo = false;
-      const logoBoxWidth = isA5 ? 52 : 68;
-      const logoBoxHeight = isA5 ? 38 : 48;
-
-      if (targetLogoPath && fs.existsSync(targetLogoPath)) {
-        try {
-          doc.image(targetLogoPath, margin + 6, headerTop + 7, {
-            fit: [logoBoxWidth, logoBoxHeight],
-            align: 'center',
-            valign: 'center'
-          });
-          hasRenderedLogo = true;
-        } catch (err) {
-          console.warn('[PDF] Could not embed company logo:', err.message);
+      for (const p of candidateLogoPaths) {
+        if (fs.existsSync(p)) {
+          targetLogoPath = p;
+          break;
         }
       }
 
-      // Dynamic text horizontal start based on whether logo was rendered
-      const companyTextX = hasRenderedLogo ? margin + logoBoxWidth + 12 : margin + 8;
-      const maxTextWidth = badgeX - companyTextX - 6;
+      // 1. --- TOP RIGHT CORNER BRAND ACCENT RIBBON ---
+      function drawCornerRibbon() {
+        doc.save();
+        const ribbonWidth = isA5 ? 80 : 110;
+        const ribbonHeight = isA5 ? 14 : 18;
+        const startX = pageWidth - ribbonWidth;
+        const sliceWidth = ribbonWidth / 3;
 
-      // Company Info (Left)
+        // 3 curved/modern geometric slices: Gold, Lime Green, Deep Teal
+        doc.rect(startX, 0, sliceWidth, ribbonHeight).fill(accentGold);
+        doc.rect(startX + sliceWidth, 0, sliceWidth, ribbonHeight).fill(accentGreen);
+        doc.rect(startX + (sliceWidth * 2), 0, sliceWidth, ribbonHeight).fill(primaryColor);
+        doc.restore();
+      }
+
+      // 2. --- BACKGROUND WATERMARK ---
+      function drawWatermark() {
+        if (targetLogoPath && fs.existsSync(targetLogoPath)) {
+          doc.save();
+          doc.opacity(0.04);
+          const wmSize = isA5 ? 160 : 230;
+          const wmX = (pageWidth - wmSize) / 2;
+          const wmY = (pageHeight - wmSize) / 2;
+          try {
+            doc.image(targetLogoPath, wmX, wmY, {
+              fit: [wmSize, wmSize],
+              align: 'center',
+              valign: 'center'
+            });
+          } catch (_) {}
+          doc.restore();
+        }
+      }
+
+      // Draw initial decorations
+      drawCornerRibbon();
+      drawWatermark();
+
+      // 3. --- HEADER: COMPULSORY LOGO & BRAND TITLE ---
+      let curY = margin;
+      const logoW = isA5 ? 115 : 145;
+      const logoH = isA5 ? 40 : 50;
+
+      if (targetLogoPath && fs.existsSync(targetLogoPath)) {
+        try {
+          doc.image(targetLogoPath, margin, curY, {
+            fit: [logoW, logoH],
+            align: 'left',
+            valign: 'top'
+          });
+        } catch (err) {
+          console.warn('[PDF] Logo render warning:', err.message);
+        }
+      }
+
+      curY += logoH + (isA5 ? 6 : 10);
+
+      // Document Main Title: QUOTATION (or GST QUOTATION / ESTIMATION)
+      const docTypeTitle = quotation.document_type === 'estimation'
+        ? 'COMMERCIAL ESTIMATION'
+        : (quotation.document_type === 'gst_quotation' ? 'GST QUOTATION' : 'QUOTATION');
+
       doc.fillColor(primaryDark)
         .font('Helvetica-Bold')
-        .fontSize(isA5 ? (hasRenderedLogo ? 11 : 13) : (hasRenderedLogo ? 14 : 16))
-        .text(settings.company_name || 'UDHAYAM AGENCIES', companyTextX, headerTop + 8, { width: maxTextWidth, ellipsis: true, lineBreak: false });
+        .fontSize(isA5 ? 14 : 19)
+        .text(docTypeTitle, margin, curY, { lineBreak: false });
 
-      doc.fillColor(mutedColor)
-        .font('Helvetica')
-        .fontSize(isA5 ? 6.8 : 8)
-        .text(settings.company_tagline || 'Building Materials & Hardware Supplies', companyTextX, headerTop + (isA5 ? 20 : 25), { width: maxTextWidth, ellipsis: true, lineBreak: false });
+      curY += isA5 ? 15 : 20;
 
-      doc.text(settings.company_address || '41/10, KMR Complex, Old Bus Stand Road, Perundurai - 638052', companyTextX, headerTop + (isA5 ? 29 : 36), { width: maxTextWidth, ellipsis: true, lineBreak: false });
+      // 4. --- 2-COLUMN METADATA & RECIPIENT ("TO") BLOCK ---
+      const metaBlockY = curY;
+      const leftColW = contentWidth * 0.46;
+      const rightColX = margin + leftColW + 10;
+      const rightColW = contentWidth - leftColW - 10;
 
-      doc.font('Helvetica-Bold').fillColor(darkColor)
-        .text(`GSTIN: ${settings.company_gstin || '33AADFU6496M1ZJ'}  |  Phone: ${settings.company_phone || '+91 97156 22499'}`, companyTextX, headerTop + (isA5 ? 38 : 47), { width: maxTextWidth, ellipsis: true, lineBreak: false });
+      // Left Column: Quotation Meta Details
+      let lY = metaBlockY;
+      const labelW = isA5 ? 68 : 84;
 
-      doc.rect(badgeX, badgeY, badgeWidth, badgeHeight).fill(primaryColor);
-      doc.fillColor('#FFFFFF')
-        .font('Helvetica-Bold')
-        .fontSize(isA5 ? 8.5 : 10)
-        .text(docTypeTitle, badgeX, badgeY + (isA5 ? 5.5 : 6.5), { width: badgeWidth, align: 'center', lineBreak: false });
-
-      doc.fillColor(mutedColor)
-        .font('Helvetica')
-        .fontSize(isA5 ? 6.5 : 7.5)
-        .text(`Size: ${pageSize}  |  Single Sheet Slip`, badgeX, badgeY + badgeHeight + 4, { width: badgeWidth, align: 'center', lineBreak: false });
-
-      // 2. --- CUSTOMER & QUOTATION DETAILS (2-Column Cards) ---
-      const metaTop = headerTop + headerHeight + 5;
-      const metaHeight = isA5 ? 48 : 58;
-      const colWidth = (contentWidth - 6) / 2;
-
-      // Left: Customer Box
-      doc.rect(margin, metaTop, colWidth, metaHeight).fill('#FFFFFF').stroke(borderColor);
-      // Small Header Ribbon for Customer
-      doc.rect(margin, metaTop, colWidth, 14).fill('#F1F5F9');
-      doc.fillColor(primaryDark).font('Helvetica-Bold').fontSize(isA5 ? 7 : 8)
-        .text('QUOTATION TO / CUSTOMER DETAILS:', margin + 6, metaTop + 3.5, { lineBreak: false });
-
-      doc.font('Helvetica').fontSize(isA5 ? 7 : 8).fillColor(darkColor);
-      let custY = metaTop + 17;
-      const customerDisplay = quotation.customer_name || 'Valued Customer';
-      doc.font('Helvetica-Bold').text(customerDisplay, margin + 6, custY, { width: colWidth - 12, ellipsis: true, lineBreak: false });
-      custY += isA5 ? 9 : 11;
-
-      if (quotation.customer_company) {
-        doc.font('Helvetica').fillColor(mutedColor).text(quotation.customer_company, margin + 6, custY, { width: colWidth - 12, ellipsis: true, lineBreak: false });
-        custY += isA5 ? 8.5 : 10.5;
-      }
-      if (quotation.customer_phone) {
-        doc.font('Helvetica').fillColor(darkColor).text(`Phone: ${quotation.customer_phone}`, margin + 6, custY, { width: colWidth - 12, ellipsis: true, lineBreak: false });
-        custY += isA5 ? 8.5 : 10.5;
-      } else if (quotation.customer_address) {
-        doc.font('Helvetica').fillColor(mutedColor).text(quotation.customer_address, margin + 6, custY, { width: colWidth - 12, ellipsis: true, lineBreak: false });
-      }
-
-      // Right: Quotation Metadata Box
-      const rightColX = margin + colWidth + 6;
-      doc.rect(rightColX, metaTop, colWidth, metaHeight).fill('#FFFFFF').stroke(borderColor);
-      doc.rect(rightColX, metaTop, colWidth, 14).fill('#F1F5F9');
-      doc.fillColor(primaryDark).font('Helvetica-Bold').fontSize(isA5 ? 7 : 8)
-        .text('QUOTATION REFERENCE:', rightColX + 6, metaTop + 3.5, { lineBreak: false });
+      const drawMetaRow = (label, val, isValBold = true) => {
+        doc.font('Helvetica-Bold').fontSize(isA5 ? 6.8 : 8.2).fillColor(darkColor)
+          .text(label, margin, lY, { width: labelW, lineBreak: false });
+        doc.font('Helvetica').text(':', margin + labelW, lY, { width: 8, lineBreak: false });
+        doc.font(isValBold ? 'Helvetica-Bold' : 'Helvetica')
+          .fillColor(isValBold ? primaryDark : darkColor)
+          .text(val, margin + labelW + 8, lY, { width: leftColW - labelW - 10, lineBreak: false });
+        lY += isA5 ? 9.5 : 12;
+      };
 
       const quoteDate = quotation.created_at ? new Date(quotation.created_at).toLocaleDateString('en-IN') : new Date().toLocaleDateString('en-IN');
-      const validityDays = quotation.validity_days || 7;
+      const validTillDate = new Date(Date.now() + ((quotation.validity_days || 7) * 86400000)).toLocaleDateString('en-IN');
 
-      doc.font('Helvetica').fontSize(isA5 ? 7 : 8).fillColor(darkColor);
-      let metaY = metaTop + 17;
-      doc.font('Helvetica-Bold').text(`Quote No: ${quotation.quotation_number}`, rightColX + 6, metaY, { width: colWidth - 12, lineBreak: false });
-      metaY += isA5 ? 9 : 11;
-      doc.font('Helvetica').text(`Date: ${quoteDate}   |   Valid For: ${validityDays} Days`, rightColX + 6, metaY, { width: colWidth - 12, lineBreak: false });
-      metaY += isA5 ? 8.5 : 10.5;
-      doc.text(`Payment: ${quotation.payment_terms || 'Immediate / Against Delivery'}`, rightColX + 6, metaY, { width: colWidth - 12, ellipsis: true, lineBreak: false });
+      drawMetaRow('Quotation No', quotation.quotation_number || 'UD-DRAFT');
+      drawMetaRow('Quotation Date', quoteDate, false);
+      drawMetaRow('Valid Till', validTillDate, false);
+      if (quotation.reference_no) {
+        drawMetaRow('Reference PO', quotation.reference_no, false);
+      }
 
-      // 3. --- PRODUCT ITEMS TABLE DEFINITIONS ---
-      // Perfectly calibrated column widths summing exactly to contentWidth
+      // Right Column: Recipient / Customer "To" Block
+      let rY = metaBlockY;
+      doc.font('Helvetica-Bold').fontSize(isA5 ? 7.5 : 9).fillColor(darkColor)
+        .text('To', rightColX, rY, { lineBreak: false });
+      rY += isA5 ? 10 : 12.5;
+
+      doc.font('Helvetica-Bold').fontSize(isA5 ? 7.2 : 8.8).fillColor(primaryDark)
+        .text(quotation.customer_name || 'Valued Customer', rightColX, rY, { width: rightColW, ellipsis: true, lineBreak: false });
+      rY += isA5 ? 9.5 : 11.5;
+
+      if (quotation.customer_company) {
+        doc.font('Helvetica').fontSize(isA5 ? 6.8 : 8).fillColor(darkColor)
+          .text(quotation.customer_company, rightColX, rY, { width: rightColW, ellipsis: true, lineBreak: false });
+        rY += isA5 ? 8.5 : 10.5;
+      }
+
+      if (quotation.customer_address) {
+        const cleanAddr = quotation.customer_address.replace(/\r?\n+/g, ', ');
+        doc.font('Helvetica').fontSize(isA5 ? 6.2 : 7.5).fillColor(mutedColor)
+          .text(cleanAddr, rightColX, rY, { width: rightColW, height: isA5 ? 16 : 20, ellipsis: true });
+        rY += isA5 ? 9 : 11;
+      }
+
+      if (quotation.customer_phone) {
+        doc.font('Helvetica').fontSize(isA5 ? 6.2 : 7.5).fillColor(mutedColor)
+          .text(`Phone: ${quotation.customer_phone}`, rightColX, rY, { width: rightColW, lineBreak: false });
+        rY += isA5 ? 8.5 : 10.5;
+      }
+
+      if (quotation.customer_gstin) {
+        doc.font('Helvetica-Bold').fontSize(isA5 ? 6.2 : 7.5).fillColor(primaryDark)
+          .text(`GSTIN: ${quotation.customer_gstin}`, rightColX, rY, { width: rightColW, lineBreak: false });
+        rY += isA5 ? 8.5 : 10.5;
+      }
+
+      curY = Math.max(lY, rY) + (isA5 ? 6 : 8);
+
+      // 5. --- SALUTATION & INTRODUCTION ---
+      doc.font('Helvetica-Bold').fontSize(isA5 ? 6.8 : 8).fillColor(darkColor)
+        .text('Dear Sir / Madam,', margin, curY, { lineBreak: false });
+      curY += isA5 ? 8.5 : 10.5;
+
+      doc.font('Helvetica').fontSize(isA5 ? 6.2 : 7.5).fillColor(mutedColor)
+        .text('Thank you for considering Udhayam Agencies. We are pleased to provide the following quotation for your requirement.', margin, curY, { width: contentWidth, lineBreak: false });
+      curY += isA5 ? 11 : 14;
+
+      // 6. --- LINE ITEMS TABLE WITH ZERO OVERLAPPING ---
+      // Calibrated column definitions summing exactly to contentWidth
       const colDefs = isA5 ? [
-        { key: 'sno', label: 'S.No', width: 20, align: 'center' },
-        { key: 'name', label: 'Item Name / Description', width: 105, align: 'left' },
-        { key: 'details', label: 'Details / Remarks', width: 62, align: 'left' },
-        { key: 'hsn', label: 'HSN', width: 36, align: 'center' },
-        { key: 'qty', label: 'Qty', width: 24, align: 'right' },
-        { key: 'unit', label: 'Unit', width: 24, align: 'center' },
-        { key: 'rate', label: 'Rate (₹)', width: 38, align: 'right' },
-        { key: 'gst', label: 'GST%', width: 24, align: 'center' },
-        { key: 'total', label: 'Total (₹)', width: 46.53, align: 'right' }
+        { key: 'sno', label: '#', width: 16, align: 'center' },
+        { key: 'name', label: 'Product Name / Description', width: 118, align: 'left' },
+        { key: 'details', label: 'Details / Remarks', width: 66, align: 'left' },
+        { key: 'hsn', label: 'HSN', width: 34, align: 'center' },
+        { key: 'qty', label: 'Qty', width: 23, align: 'right' },
+        { key: 'unit', label: 'Unit', width: 23, align: 'center' },
+        { key: 'rate', label: 'Rate (₹)', width: 36, align: 'right' },
+        { key: 'gst', label: 'GST%', width: 22, align: 'center' },
+        { key: 'total', label: 'Total (₹)', width: 41.53, align: 'right' }
       ] : [
-        { key: 'sno', label: 'S.No', width: 26, align: 'center' },
-        { key: 'name', label: 'Product Name & Description', width: 154, align: 'left' },
-        { key: 'details', label: 'Details / Specifications', width: 92, align: 'left' },
-        { key: 'hsn', label: 'HSN Code', width: 48, align: 'center' },
+        { key: 'sno', label: '#', width: 22, align: 'center' },
+        { key: 'name', label: 'Product Description & Specification', width: 168, align: 'left' },
+        { key: 'details', label: 'Details / Specifications', width: 94, align: 'left' },
+        { key: 'hsn', label: 'HSN Code', width: 46, align: 'center' },
         { key: 'qty', label: 'Qty', width: 30, align: 'right' },
         { key: 'unit', label: 'Unit', width: 30, align: 'center' },
-        { key: 'rate', label: 'Rate (Incl Tax)', width: 50, align: 'right' },
-        { key: 'gst', label: 'GST %', width: 36, align: 'center' },
-        { key: 'total', label: 'Total (INR)', width: 73.28, align: 'right' }
+        { key: 'rate', label: 'Rate (₹)', width: 48, align: 'right' },
+        { key: 'gst', label: 'GST %', width: 32, align: 'center' },
+        { key: 'total', label: 'Total (INR)', width: 69.28, align: 'right' }
       ];
 
-      const tableTop = metaTop + metaHeight + 6;
-      const tableHeaderHeight = isA5 ? 17 : 20;
+      const tableTop = curY;
+      const tableHeaderHeight = isA5 ? 16 : 19;
+      const footerBudget = isA5 ? 140 : 160;
 
       function drawTableHeader(yPos) {
         doc.rect(margin, yPos, contentWidth, tableHeaderHeight).fill(primaryColor);
-        let curX = margin;
-        doc.fillColor('#FFFFFF').font('Helvetica-Bold').fontSize(isA5 ? 7 : 8);
+        let cX = margin;
+        doc.fillColor('#FFFFFF').font('Helvetica-Bold').fontSize(isA5 ? 6.5 : 7.8);
 
         colDefs.forEach(col => {
-          const textX = col.align === 'left' ? curX + 4 : curX;
-          const textW = col.align === 'left' ? col.width - 6 : col.width;
-          doc.text(col.label, textX, yPos + (isA5 ? 4.5 : 5.5), {
-            width: textW,
+          const tX = col.align === 'left' ? cX + 4 : cX;
+          const tW = col.align === 'left' ? col.width - 6 : col.width;
+          doc.text(col.label, tX, yPos + (isA5 ? 4 : 5), {
+            width: tW,
             align: col.align,
             lineBreak: false
           });
-          curX += col.width;
+          cX += col.width;
         });
       }
 
       drawTableHeader(tableTop);
+      curY = tableTop + tableHeaderHeight;
 
-      // 4. --- PRODUCT ROWS & GRID LINES ---
-      let curY = tableTop + tableHeaderHeight;
-      const rowHeight = isA5 ? 16 : 19;
-      const bottomBudget = isA5 ? 142 : 160; // Space needed for totals, bank details, and footer
-
-      // Draw item rows
+      // Render Dynamic Line Items
       items.forEach((item, index) => {
-        // Page break check if items overflow available page space
-        if (curY + rowHeight + bottomBudget > pageHeight - margin) {
+        // Measure dynamic heights for multi-line safety
+        const fontSize = isA5 ? 6.2 : 7.5;
+        doc.fontSize(fontSize);
+
+        const nameHeight = doc.heightOfString(item.product_name, { width: colDefs[1].width - 6 });
+        const specHeight = item.specification ? doc.heightOfString(item.specification, { width: colDefs[2].width - 6 }) : 0;
+        const textH = Math.max(nameHeight, specHeight, isA5 ? 9 : 11);
+        const rowHeight = textH + (isA5 ? 6 : 7.5);
+
+        // Check if row exceeds printable budget
+        if (curY + rowHeight + footerBudget > pageHeight - margin) {
           doc.addPage({ size: pageSize, margin: margin });
+          drawCornerRibbon();
+          drawWatermark();
           curY = margin;
           drawTableHeader(curY);
           curY += tableHeaderHeight;
@@ -256,10 +302,10 @@ function generateQuotationPDF(quotation, items, settings) {
         const isEven = index % 2 === 0;
         const rowBg = isEven ? '#FFFFFF' : '#F8FAFC';
 
-        // Row background
+        // Row background & bottom border
         doc.rect(margin, curY, contentWidth, rowHeight).fill(rowBg).stroke(lightBorder);
 
-        // Vertical column dividers
+        // Vertical dividers
         let divX = margin;
         doc.strokeColor(lightBorder).lineWidth(0.5);
         for (let i = 0; i < colDefs.length - 1; i++) {
@@ -267,31 +313,21 @@ function generateQuotationPDF(quotation, items, settings) {
           doc.moveTo(divX, curY).lineTo(divX, curY + rowHeight).stroke();
         }
 
-        // Row text content
+        // Draw Row Text Content
         let colX = margin;
-        const textY = curY + (isA5 ? 4 : 5);
-        doc.font('Helvetica').fontSize(isA5 ? 6.8 : 7.8).fillColor(darkColor);
+        const textY = curY + ((rowHeight - textH) / 2);
+        doc.fillColor(darkColor).fontSize(fontSize);
 
         // 1. S.No
-        doc.text(String(index + 1), colX, textY, { width: colDefs[0].width, align: 'center', lineBreak: false });
+        doc.font('Helvetica').text(String(index + 1), colX, textY, { width: colDefs[0].width, align: 'center', lineBreak: false });
         colX += colDefs[0].width;
 
-        // 2. Product Name
-        doc.font('Helvetica-Bold').text(item.product_name, colX + 3, textY, {
-          width: colDefs[1].width - 6,
-          height: rowHeight - 2,
-          ellipsis: true,
-          lineBreak: false
-        });
+        // 2. Product Name (Clean word-wrap)
+        doc.font('Helvetica-Bold').text(item.product_name, colX + 3, textY, { width: colDefs[1].width - 6 });
         colX += colDefs[1].width;
 
-        // 3. Details / Remarks (New Column)
-        doc.font('Helvetica').fillColor(mutedColor).text(item.specification || '-', colX + 3, textY, {
-          width: colDefs[2].width - 6,
-          height: rowHeight - 2,
-          ellipsis: true,
-          lineBreak: false
-        });
+        // 3. Details / Remarks
+        doc.font('Helvetica').fillColor(mutedColor).text(item.specification || '-', colX + 3, textY, { width: colDefs[2].width - 6 });
         doc.fillColor(darkColor);
         colX += colDefs[2].width;
 
@@ -300,11 +336,11 @@ function generateQuotationPDF(quotation, items, settings) {
         colX += colDefs[3].width;
 
         // 5. Qty
-        doc.text(String(item.quantity), colX, textY, { width: colDefs[4].width - 3, align: 'right', lineBreak: false });
+        doc.font('Helvetica-Bold').text(String(item.quantity), colX, textY, { width: colDefs[4].width - 3, align: 'right', lineBreak: false });
         colX += colDefs[4].width;
 
         // 6. Unit
-        doc.text(item.unit || 'Nos', colX, textY, { width: colDefs[5].width, align: 'center', lineBreak: false });
+        doc.font('Helvetica').text(item.unit || 'Nos', colX, textY, { width: colDefs[5].width, align: 'center', lineBreak: false });
         colX += colDefs[5].width;
 
         // 7. Rate
@@ -315,142 +351,155 @@ function generateQuotationPDF(quotation, items, settings) {
         doc.text(`${item.gst_rate !== undefined ? item.gst_rate : 18}%`, colX, textY, { width: colDefs[7].width, align: 'center', lineBreak: false });
         colX += colDefs[7].width;
 
-        // 9. Total Rate
+        // 9. Total Line Amount
         doc.font('Helvetica-Bold').text(pdfCurrency(item.line_total).replace('Rs. ', ''), colX, textY, { width: colDefs[8].width - 3, align: 'right', lineBreak: false });
 
         curY += rowHeight;
       });
 
-      // Fill remaining space with clean blank ledger rows up to a minimum for visual balance (avoids gaping void)
-      const minRows = isA5 ? 5 : 6;
+      // Fill remaining space with clean blank ledger rows up to a minimum for balanced aesthetics
+      const minRows = isA5 ? 4 : 5;
       if (items.length < minRows) {
         const extraRows = minRows - items.length;
+        const fillerH = isA5 ? 14 : 17;
         for (let e = 0; e < extraRows; e++) {
           const rowBg = (items.length + e) % 2 === 0 ? '#FFFFFF' : '#F8FAFC';
-          doc.rect(margin, curY, contentWidth, rowHeight).fill(rowBg).stroke(lightBorder);
+          doc.rect(margin, curY, contentWidth, fillerH).fill(rowBg).stroke(lightBorder);
 
-          // Vertical column dividers
           let divX = margin;
           doc.strokeColor(lightBorder).lineWidth(0.5);
           for (let i = 0; i < colDefs.length - 1; i++) {
             divX += colDefs[i].width;
-            doc.moveTo(divX, curY).lineTo(divX, curY + rowHeight).stroke();
+            doc.moveTo(divX, curY).lineTo(divX, curY + fillerH).stroke();
           }
-          curY += rowHeight;
+          curY += fillerH;
         }
       }
 
       // Outer table border
       doc.rect(margin, tableTop, contentWidth, curY - tableTop).stroke(borderColor);
 
-      // 5. --- TOTALS & SUMMARY SECTION ---
+      // 7. --- TOTALS & SUMMARY SECTION ---
       curY += 5;
-      const summaryTop = curY;
-      const summaryLeftWidth = isA5 ? contentWidth * 0.54 : contentWidth * 0.56;
-      const summaryRightWidth = contentWidth - summaryLeftWidth - 6;
-      const summaryHeight = isA5 ? 54 : 64;
+      const sumTop = curY;
+      const sumLeftW = isA5 ? contentWidth * 0.52 : contentWidth * 0.55;
+      const sumRightW = contentWidth - sumLeftW - 8;
+      const sumH = isA5 ? 50 : 60;
 
-      // Left Box: Amount in words & Notes
-      doc.rect(margin, summaryTop, summaryLeftWidth, summaryHeight).fill('#FFFFFF').stroke(borderColor);
-      doc.fillColor(primaryDark).font('Helvetica-Bold').fontSize(isA5 ? 6.8 : 7.8)
-        .text('AMOUNT IN WORDS (INR):', margin + 6, summaryTop + 4, { lineBreak: false });
+      // Left Box: Amount in words
+      doc.rect(margin, sumTop, sumLeftW, sumH).fill('#FFFFFF').stroke(borderColor);
+      doc.fillColor(primaryDark).font('Helvetica-Bold').fontSize(isA5 ? 6.2 : 7.5)
+        .text('AMOUNT IN WORDS (INR):', margin + 6, sumTop + 4.5, { lineBreak: false });
 
-      doc.font('Helvetica-Oblique').fontSize(isA5 ? 6.5 : 7.5).fillColor(darkColor)
-        .text(quotation.amount_in_words || 'Rupees Zero Only', margin + 6, summaryTop + 14, { width: summaryLeftWidth - 12 });
-
-      if (quotation.notes) {
-        doc.font('Helvetica-Bold').fontSize(isA5 ? 6 : 7).fillColor(mutedColor)
-          .text('Terms / Remarks:', margin + 6, summaryTop + (isA5 ? 28 : 34), { lineBreak: false });
-        doc.font('Helvetica').fontSize(isA5 ? 5.8 : 6.8).fillColor(mutedColor)
-          .text(quotation.notes.replace(/\n+/g, ' | '), margin + 6, summaryTop + (isA5 ? 36 : 44), { width: summaryLeftWidth - 12, height: 16, ellipsis: true });
-      }
+      doc.font('Helvetica-Oblique').fontSize(isA5 ? 6.2 : 7.2).fillColor(darkColor)
+        .text(quotation.amount_in_words || 'Rupees Zero Only', margin + 6, sumTop + 15, { width: sumLeftW - 12 });
 
       // Right Box: Totals breakdown
-      const rightX = margin + summaryLeftWidth + 6;
-      doc.rect(rightX, summaryTop, summaryRightWidth, summaryHeight).fill(lightBg).stroke(borderColor);
+      const rBoxX = margin + sumLeftW + 8;
+      doc.rect(rBoxX, sumTop, sumRightW, sumH).fill(lightBg).stroke(borderColor);
 
-      let totRowY = summaryTop + 4;
-      const rowStep = isA5 ? 10.5 : 12;
-      const drawTotRow = (label, val, isBold = false) => {
+      let tY = sumTop + 3.5;
+      const tStep = isA5 ? 9.5 : 11.5;
+      const drawTotalLine = (label, val, isBold = false) => {
         doc.font(isBold ? 'Helvetica-Bold' : 'Helvetica')
-          .fontSize(isA5 ? 6.8 : 7.8)
+          .fontSize(isA5 ? 6.2 : 7.2)
           .fillColor(isBold ? primaryDark : darkColor);
-        doc.text(label, rightX + 6, totRowY, { width: summaryRightWidth * 0.5, lineBreak: false });
-        doc.text(val, rightX + summaryRightWidth * 0.5, totRowY, { width: summaryRightWidth * 0.5 - 6, align: 'right', lineBreak: false });
-        totRowY += rowStep;
+        doc.text(label, rBoxX + 6, tY, { width: sumRightW * 0.52, lineBreak: false });
+        doc.text(val, rBoxX + sumRightW * 0.52, tY, { width: sumRightW * 0.48 - 6, align: 'right', lineBreak: false });
+        tY += tStep;
       };
 
-      drawTotRow('Subtotal (Gross):', pdfCurrency(quotation.subtotal));
+      drawTotalLine('Subtotal (Gross):', pdfCurrency(quotation.subtotal));
       if (quotation.discount_total > 0) {
-        drawTotRow('Discount:', `-${pdfCurrency(quotation.discount_total)}`);
+        drawTotalLine('Discount:', `-${pdfCurrency(quotation.discount_total)}`);
       }
       if (quotation.document_type === 'gst_quotation' && quotation.tax_total > 0) {
-        drawTotRow('Total GST Tax:', pdfCurrency(quotation.tax_total));
+        drawTotalLine('Total GST Tax:', pdfCurrency(quotation.tax_total));
       }
       if (quotation.delivery_charges > 0) {
-        drawTotRow('Delivery Charges:', pdfCurrency(quotation.delivery_charges));
+        drawTotalLine('Delivery Charges:', pdfCurrency(quotation.delivery_charges));
       }
 
       // Grand Total Highlight Bar
-      const grandTotalHeight = isA5 ? 17 : 20;
-      const grandTotalY = summaryTop + summaryHeight - grandTotalHeight;
-      doc.rect(rightX, grandTotalY, summaryRightWidth, grandTotalHeight).fill(primaryColor);
-      doc.font('Helvetica-Bold').fontSize(isA5 ? 8 : 9.5).fillColor('#FFFFFF');
-      doc.text('GRAND TOTAL:', rightX + 6, grandTotalY + (isA5 ? 4 : 5), { width: summaryRightWidth * 0.45, lineBreak: false });
-      doc.text(pdfCurrency(quotation.grand_total), rightX + summaryRightWidth * 0.45, grandTotalY + (isA5 ? 4 : 5), { width: summaryRightWidth * 0.55 - 6, align: 'right', lineBreak: false });
+      const gtH = isA5 ? 16 : 19;
+      const gtY = sumTop + sumH - gtH;
+      doc.rect(rBoxX, gtY, sumRightW, gtH).fill(primaryColor);
+      doc.font('Helvetica-Bold').fontSize(isA5 ? 7.8 : 9).fillColor('#FFFFFF');
+      doc.text('GRAND TOTAL:', rBoxX + 6, gtY + (isA5 ? 4 : 5), { width: sumRightW * 0.45, lineBreak: false });
+      doc.text(pdfCurrency(quotation.grand_total), rBoxX + sumRightW * 0.45, gtY + (isA5 ? 4 : 5), { width: sumRightW * 0.55 - 6, align: 'right', lineBreak: false });
 
-      // 6. --- BANK & PAYMENT DETAILS (Ground-anchored to avoid floating gap) ---
-      const bankTop = summaryTop + summaryHeight + 5;
-      const bankHeight = isA5 ? 40 : 48;
-      doc.rect(margin, bankTop, contentWidth, bankHeight).fill('#F8FAFC').stroke(borderColor);
+      curY = sumTop + sumH + (isA5 ? 5 : 7);
 
-      // Subtle brand accent top border for payment section
-      doc.rect(margin, bankTop, contentWidth, 2).fill(accentGreen);
+      // 8. --- THANK YOU & TERMS & CONDITIONS ---
+      doc.font('Helvetica-Bold').fontSize(isA5 ? 6.8 : 8).fillColor(primaryDark);
+      doc.text('Thank you for considering UDHAYAM AGENCIES.', margin, curY, { lineBreak: false });
+      curY += isA5 ? 9 : 11;
 
-      doc.font('Helvetica-Bold').fontSize(isA5 ? 6.8 : 7.8).fillColor(primaryDark)
-        .text('BANK & GPAY DETAILS FOR DIRECT PAYMENT / ADVANCE TRANSFER:', margin + 8, bankTop + 4, { lineBreak: false });
+      doc.font('Helvetica-Bold').fontSize(isA5 ? 6.2 : 7.5).fillColor(darkColor);
+      doc.text('Terms & Conditions', margin, curY, { lineBreak: false });
+      curY += isA5 ? 7.5 : 9.5;
 
-      const bColW = (contentWidth - 16) / 2;
-      const bY1 = bankTop + (isA5 ? 14 : 17);
-      const bY2 = bankTop + (isA5 ? 24 : 29);
+      const termsList = [
+        `This quotation is valid for ${quotation.validity_days || 7} days from the date of issue.`,
+        'Goods once sold or dispatched cannot be taken back.',
+        `Payment terms: ${quotation.payment_terms || 'Immediate / Against Delivery'}.`,
+        'Subject to Perundurai jurisdiction only.'
+      ];
 
-      // Left Bank Column
-      doc.font('Helvetica').fontSize(isA5 ? 6.5 : 7.5).fillColor(darkColor);
-      doc.text(`Account Name: `, margin + 8, bY1, { lineBreak: false });
-      doc.font('Helvetica-Bold').text(`${settings.bank_account_name || 'Udhayam Agencies'}`, margin + 65, bY1, { lineBreak: false });
+      doc.font('Helvetica').fontSize(isA5 ? 5.6 : 6.8).fillColor(mutedColor);
+      termsList.forEach(t => {
+        doc.text(`•  ${t}`, margin + 3, curY, { width: contentWidth - 6, lineBreak: false });
+        curY += isA5 ? 6.8 : 8.5;
+      });
 
-      doc.font('Helvetica').text(`Bank: `, margin + 8, bY2, { lineBreak: false });
-      doc.font('Helvetica-Bold').text(`${settings.bank_name || 'Indian Bank'}  |  Acc: ${settings.bank_account_no || '6659330152'}`, margin + 35, bY2, { lineBreak: false });
+      curY += isA5 ? 3 : 5;
 
-      // Right Bank Column
-      const rightBankX = margin + bColW + 8;
-      doc.font('Helvetica').text(`IFSC: `, rightBankX, bY1, { lineBreak: false });
-      doc.font('Helvetica-Bold').text(`${settings.bank_ifsc || 'Perundurai'}`, rightBankX + 26, bY1, { lineBreak: false });
+      // 9. --- BANK & GPAY REMITTANCE CARD ---
+      const bH = isA5 ? 30 : 36;
+      doc.rect(margin, curY, contentWidth, bH).fill('#F8FAFC').stroke(borderColor);
+      doc.rect(margin, curY, contentWidth, 2).fill(accentGreen);
 
-      doc.fillColor('#059669').font('Helvetica-Bold');
-      doc.text(`GPay: ${settings.gpay_number || '+91 97156 22499 (MS Udhayam Agencies)'}`, rightBankX, bY2, { lineBreak: false });
+      doc.font('Helvetica-Bold').fontSize(isA5 ? 6 : 7).fillColor(primaryDark)
+        .text('BANK & GPAY DETAILS FOR DIRECT PAYMENT / ADVANCE TRANSFER:', margin + 6, curY + 3.5, { lineBreak: false });
 
-      // 7. --- SIGNATURE & COMPLIANCE FOOTER ---
-      const footerTop = bankTop + bankHeight + 5;
-      doc.font('Helvetica').fontSize(isA5 ? 5.8 : 6.8).fillColor(mutedColor);
-      doc.text('Standard terms apply. Computer generated quotation.', margin, footerTop + 2, { width: contentWidth * 0.6, lineBreak: false });
+      const halfW = (contentWidth - 12) / 2;
+      const bY = curY + (isA5 ? 12 : 15);
 
-      doc.font('Helvetica-Bold').fontSize(isA5 ? 6.5 : 7.5).fillColor(darkColor);
-      doc.text(`For ${settings.company_name || 'UDHAYAM AGENCIES'}`, pageWidth - margin - 140, footerTop + 2, { width: 140, align: 'right', lineBreak: false });
-      doc.font('Helvetica').fontSize(isA5 ? 5.8 : 6.8).fillColor(mutedColor);
-      doc.text('Authorized Signatory', pageWidth - margin - 140, footerTop + (isA5 ? 14 : 17), { width: 140, align: 'right', lineBreak: false });
+      doc.font('Helvetica').fontSize(isA5 ? 5.8 : 6.8).fillColor(darkColor);
+      doc.text(`Bank: `, margin + 6, bY, { lineBreak: false });
+      doc.font('Helvetica-Bold').text(`${settings.bank_name || 'Indian Bank'} (${settings.bank_branch || 'Perundurai'})  |  A/c: ${settings.bank_account_no || '6659330152'}`, margin + 28, bY, { lineBreak: false });
 
-      // 8. --- PAGE NUMBERING ---
+      const rightBx = margin + halfW + 6;
+      doc.font('Helvetica').text(`IFSC: `, rightBx, bY, { lineBreak: false });
+      doc.font('Helvetica-Bold').text(`${settings.bank_ifsc || 'IDIB000P034'}`, rightBx + 22, bY, { lineBreak: false });
+
+      doc.fillColor(accentGreen).font('Helvetica-Bold');
+      doc.text(`GPay: ${settings.gpay_number || '+91 97156 22499 (MS Udhayam Agencies)'}`, rightBx, bY + (isA5 ? 8 : 10), { lineBreak: false });
+
+      // 10. --- AUTHORIZED SIGNATORY ---
+      const signY = pageHeight - margin - (isA5 ? 34 : 42);
+      doc.font('Helvetica-Bold').fontSize(isA5 ? 6.2 : 7.5).fillColor(darkColor);
+      doc.text(`For ${settings.company_name || 'UDHAYAM AGENCIES'}`, pageWidth - margin - 150, signY, { width: 150, align: 'right', lineBreak: false });
+      doc.font('Helvetica').fontSize(isA5 ? 5.6 : 6.8).fillColor(mutedColor);
+      doc.text('Authorized Signatory', pageWidth - margin - 150, signY + (isA5 ? 11 : 14), { width: 150, align: 'right', lineBreak: false });
+
+      // 11. --- MODERN BOTTOM FOOTER BAR (Pinned across all pages) ---
       const totalPages = doc.bufferedPageRange().count;
       for (let i = 0; i < totalPages; i++) {
         doc.switchToPage(i);
-        doc.font('Helvetica').fontSize(isA5 ? 5.5 : 6.5).fillColor(mutedColor);
-        doc.text(
-          `Page ${i + 1} of ${totalPages}  •  Udhayam Quotation Automation System`,
-          margin,
-          pageHeight - (isA5 ? 12 : 16),
-          { width: contentWidth, align: 'center', lineBreak: false }
-        );
+
+        const footY = pageHeight - margin - 10;
+        // Subtle divider rule
+        doc.strokeColor(borderColor).lineWidth(0.5);
+        doc.moveTo(margin, footY - 4).lineTo(pageWidth - margin, footY - 4).stroke();
+
+        doc.font('Helvetica').fontSize(isA5 ? 5.2 : 6.2).fillColor(mutedColor);
+
+        // 3 Contact Columns (as in uploaded image)
+        const thirdW = contentWidth / 3;
+        doc.text(`Phone: ${settings.company_phone || '+91 97156 22499'}`, margin, footY, { width: thirdW, align: 'left', lineBreak: false });
+        doc.text(settings.company_address ? settings.company_address.replace(/\r?\n+/g, ', ') : 'Perundurai - 638052', margin + thirdW, footY, { width: thirdW, align: 'center', lineBreak: false, ellipsis: true });
+        doc.text(`GST: ${settings.company_gstin || '33AADFU6496M1ZJ'} | Page ${i + 1}/${totalPages}`, margin + (thirdW * 2), footY, { width: thirdW, align: 'right', lineBreak: false });
       }
 
       doc.end();
