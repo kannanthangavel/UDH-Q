@@ -266,51 +266,87 @@ function parseItemLine(rawPhrase) {
     if (!specification) {
       const specMatch = cleanLeft.match(/\b\d+(\.\d+)?\s*(mm|cm|inch|in|ft|meter|mtr|lt|ltr|litre|liter|l|ml|kg|gm|g)\b/i);
       if (specMatch) {
-        specification = specMatch[0].trim();
+        specification = specMatch[0].trim().toUpperCase();
       }
     }
 
     productName = cleanLeft;
 
-    // 2. Parse quantity and unit from right part (e.g. "1/2 litre", "2 nos", "5 bags")
+    // 2. Parse quantity, unit, and pack capacity from right part
+    // Check if right part has explicit count e.g. "2 nos", "3 buckets", "5 bags"
+    const countMatch = rightPart.match(/\b(\d+(?:\.\d+)?)\s*(bags?|nos?|numbers?|pieces?|pcs?|pc|buckets?|bkts?|bkt|boxes?|pkts?|packets?|bundles?|cans?|tins?|drums?)\b/i);
+    // Check if right part has pack capacity e.g. "20lt", "500ml", "1/2 litre", "4lt"
+    const packCapMatch = rightPart.match(/\b(\d+(?:\.\d+)?)\s*(lt|ltr|litres?|liters?|ml|kgs?|kilos?|gm|g)\b/i);
     const fracObj = parseFraction(rightPart);
-    if (fracObj) {
-      const afterFrac = rightPart.slice(fracObj.raw.length).trim();
-      const unitMatch = afterFrac.match(/^([a-zA-Z]+)/);
-      if (unitMatch) {
-        const rawU = unitMatch[1].toLowerCase();
-        if (UNIT_MAP[rawU]) {
-          unit = UNIT_MAP[rawU];
-        } else {
-          unit = rawU;
-        }
-      }
 
-      // If right part was a fraction of volume/weight like "1/2 litre"
-      if (fracObj.val < 1 && (unit === 'litres' || unit === 'kg')) {
-        if (unit === 'litres' && fracObj.val === 0.5) {
-          specification = specification ? `${specification}, 500ML` : '500ML';
-          quantity = 1;
-          unit = 'Nos';
-        } else if (unit === 'litres' && fracObj.val === 0.25) {
-          specification = specification ? `${specification}, 250ML` : '250ML';
-          quantity = 1;
-          unit = 'Nos';
-        } else {
-          quantity = fracObj.val;
-        }
+    if (countMatch) {
+      quantity = parseFloat(countMatch[1]);
+      const rawU = countMatch[2].toLowerCase();
+      unit = UNIT_MAP[rawU] || rawU;
+      if (packCapMatch) {
+        const packSpec = packCapMatch[0].trim().toUpperCase();
+        specification = specification ? `${specification}, ${packSpec}` : packSpec;
+      }
+    } else if (fracObj && (fracObj.raw.includes('/') || fracObj.raw === 'half' || fracObj.raw === 'quarter')) {
+      // Fraction volume like "1/2 litre"
+      const afterFrac = rightPart.slice(fracObj.raw.length).trim();
+      const uMatch = afterFrac.match(/^([a-zA-Z]+)/);
+      const rawU = uMatch ? uMatch[1].toLowerCase() : '';
+      const stdU = UNIT_MAP[rawU] || rawU;
+
+      if (fracObj.val === 0.5 && (stdU === 'litres' || rawU.startsWith('l'))) {
+        specification = specification ? `${specification}, 500ML` : '500ML';
+        quantity = 1;
+        unit = 'Nos';
+      } else if (fracObj.val === 0.25 && (stdU === 'litres' || rawU.startsWith('l'))) {
+        specification = specification ? `${specification}, 250ML` : '250ML';
+        quantity = 1;
+        unit = 'Nos';
       } else {
         quantity = fracObj.val;
+        unit = stdU || 'Nos';
+      }
+    } else if (packCapMatch) {
+      // Customer specified only a pack size on right side (e.g. "item = 20lt")
+      // Pack capacity: 20lt = 1 piece / bucket
+      const packSpec = packCapMatch[0].trim().toUpperCase();
+      specification = specification ? `${specification}, ${packSpec}` : packSpec;
+      quantity = 1;
+      unit = 'Nos';
+    } else if (fracObj) {
+      quantity = fracObj.val;
+      const afterFrac = rightPart.slice(fracObj.raw.length).trim();
+      const uMatch = afterFrac.match(/^([a-zA-Z]+)/);
+      if (uMatch) {
+        const rawU = uMatch[1].toLowerCase();
+        unit = UNIT_MAP[rawU] || rawU;
       }
     }
   } else {
-    // Non-delimited format: e.g. "20 bags OPC cement", "10 numbers of 12mm steel rods"
-    const specMatch = phrase.match(/\b\d+(\.\d+)?\s*(mm|cm|inch|in|ft|meter|mtr|lt|ltr|litre|liter|l|ml|kg|gm|g)\b/i);
-    if (specMatch) {
-      specification = specMatch[0].trim();
+    // Non-delimited format: e.g. "asian golden yellow 20lt", "20 bags OPC cement", "10 numbers of 12mm steel rods"
+    // 1. Check for dimension / pack specifications
+    const parenSpecMatch = phrase.match(/\((.*?)\)/);
+    if (parenSpecMatch) {
+      specification = parenSpecMatch[1].trim();
     }
 
+    const dimMatch = phrase.match(/\b\d+(\.\d+)?\s*(mm|cm|inch|in|ft|meter|mtr)\b/i);
+    if (dimMatch && !specification) {
+      specification = dimMatch[0].trim();
+    }
+
+    // Check for volume/weight pack capacity (e.g. "20lt", "10lt", "4lt", "1lt", "500ml", "50kg")
+    const packCapMatch = phrase.match(/\b(\d+(?:\.\d+)?)\s*(lt|ltr|litres?|liters?|ml|kgs?|kilos?|gm|g)\b/i);
+
+    // Check for explicit item count & count unit (e.g. "20 bags", "10 numbers", "2 nos", "3 buckets", "4 pieces")
+    const countMatch = phrase.match(/\b(\d+(?:\.\d+)?)\s*(bags?|nos?|numbers?|pieces?|pcs?|pc|buckets?|bkts?|bkt|boxes?|pkts?|packets?|bundles?|cans?|tins?|drums?)\b/i);
+
+    // Check for multiplier e.g. "20lt x 2" or "2 x 20lt"
+    const multMatch = phrase.match(/\b(?:x|\*)\s*(\d+(?:\.\d+)?)\b/i) || phrase.match(/\b(\d+(?:\.\d+)?)\s*(?:x|\*)\b/i);
+
+    // Check for fraction volume (e.g. "1/2 litre", "half litre")
     const fracVolMatch = phrase.match(/(?:(\d+\s*\/\s*\d+|half|quarter))\s*(litres?|liters?|ltrs?|lt|l|kg|kgs)\b/i);
+
     if (fracVolMatch) {
       const fracObj = parseFraction(fracVolMatch[1]);
       const rawU = (fracVolMatch[2] || '').toLowerCase();
@@ -320,14 +356,46 @@ function parseItemLine(rawPhrase) {
         specification = specification ? `${specification}, 500ML` : '500ML';
         quantity = 1;
         unit = 'Nos';
+      } else if (fracObj && fracObj.val === 0.25 && stdU === 'litres') {
+        specification = specification ? `${specification}, 250ML` : '250ML';
+        quantity = 1;
+        unit = 'Nos';
       } else if (fracObj) {
         quantity = fracObj.val;
         unit = stdU;
       }
-
       productName = phrase.replace(fracVolMatch[0], ' ');
+    } else if (countMatch) {
+      // Explicit count is present (e.g. "10 numbers of 12mm rods" or "asian golden yellow 20lt 2 nos" or "20 bags cement")
+      quantity = parseFloat(countMatch[1]);
+      const rawU = countMatch[2].toLowerCase();
+      unit = UNIT_MAP[rawU] || rawU;
+
+      if (packCapMatch) {
+        const packSpec = packCapMatch[0].trim().toUpperCase();
+        specification = specification ? `${specification}, ${packSpec}` : packSpec;
+      }
+      productName = phrase.replace(countMatch[0], ' ');
+    } else if (multMatch) {
+      quantity = parseFloat(multMatch[1]);
+      unit = 'Nos';
+      if (packCapMatch) {
+        const packSpec = packCapMatch[0].trim().toUpperCase();
+        specification = specification ? `${specification}, ${packSpec}` : packSpec;
+      }
+      productName = phrase.replace(multMatch[0], ' ');
+    } else if (packCapMatch) {
+      // CRITICAL PACK SIZE RULE:
+      // When a user specifies a pack capacity (e.g. "asian golden yellow 20lt", "primer 4lt", "putty 20kg")
+      // without an explicit count, the quantity is 1 piece / bucket / can (20lt = 1ps not 20ps)!
+      const packSpec = packCapMatch[0].trim().toUpperCase();
+      specification = specification ? `${specification}, ${packSpec}` : packSpec;
+      quantity = 1;
+      unit = 'Nos';
+      // Keep pack spec in product name for catalog matching query, but remove it from noisy prefix
     } else {
-      const qtyUnitRegex = /(\d+(?:\.\d+)?)\s*(bags?|nos?|numbers?|pieces?|pcs?|buckets?|bkts?|kgs?|kilos?|liters?|litres?|ltrs?|lt|l|boxes?|pkts?|bundles?|meters?|mtrs?|feet|ft)?\b/i;
+      // Generic quantity extraction
+      const qtyUnitRegex = /(\d+(?:\.\d+)?)\s*(bags?|nos?|numbers?|pieces?|pcs?|buckets?|bkts?|boxes?|pkts?|bundles?|meters?|mtrs?|feet|ft)?\b/i;
       const match = phrase.match(qtyUnitRegex);
       if (match) {
         quantity = parseFloat(match[1]);
@@ -355,7 +423,7 @@ function parseItemLine(rawPhrase) {
   }
 
   if (!unit) {
-    isUnitMissing = true;
+    unit = 'Nos';
   }
 
   // Clean product name
@@ -381,7 +449,7 @@ function parseItemLine(rawPhrase) {
     quantity,
     unit: unit || 'Nos',
     isQuantityMissing,
-    isUnitMissing
+    isUnitMissing: false
   };
 }
 

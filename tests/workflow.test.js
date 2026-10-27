@@ -252,4 +252,58 @@ describe('Quotation Lifecycle & Workflow Integrity Suite', () => {
       }
     }
   });
+
+  it('supports the new Details / Remarks specification column and generates branded Teal PDF', async () => {
+    const { generateQuotationPDF } = await import('../server/src/services/pdfService.js');
+    const fs = await import('fs');
+
+    const quoteNumber = `TEST-DETAILS-COL-${Date.now()}`;
+    const now = new Date().toISOString();
+
+    const insertQuote = db.prepare(`
+      INSERT INTO quotations (
+        quotation_number, revision, status, document_type, paper_size,
+        customer_name, customer_phone, subtotal, grand_total, amount_in_words,
+        created_at, updated_at
+      ) VALUES (?, 1, 'draft', 'gst_quotation', 'A5', 'Sathish Palanisamy', '9715622499', 580, 580, 'Rupees Five Hundred and Eighty Only', ?, ?)
+    `);
+
+    const result = insertQuote.run(quoteNumber, now, now);
+    const qId = result.lastInsertRowid;
+
+    // Line item with custom specification details
+    db.prepare(`
+      INSERT INTO quotation_items (
+        quotation_id, row_order, product_name, specification, quantity, unit, unit_price, line_total
+      ) VALUES (?, 1, 'Asian Paints Golden Yellow', '20LT Bucket, Glossy Finish', 1, 'Nos', 580, 580)
+    `).run(qId);
+
+    const quote = db.prepare('SELECT * FROM quotations WHERE id = ?').get(qId);
+    const items = db.prepare('SELECT * FROM quotation_items WHERE quotation_id = ?').all(qId);
+
+    expect(items.length).toBe(1);
+    expect(items[0].specification).toBe('20LT Bucket, Glossy Finish');
+
+    const settings = {
+      company_name: 'Udhayam Agencies',
+      company_tagline: 'Building Materials & Hardware Supplies',
+      company_address: '41/10, KMR Complex, Old Bus Stand Road, Perundurai - 638052',
+      company_gstin: '33AADFU6496M1ZJ',
+      company_phone: '+91 97156 22499',
+      bank_name: 'Indian Bank',
+      bank_account_no: '6659330152',
+      bank_ifsc: 'IDIB000P034',
+      gpay_number: '+91 97156 22499'
+    };
+
+    const pdfRes = await generateQuotationPDF(quote, items, settings);
+    expect(pdfRes.filePath).toBeDefined();
+    expect(fs.existsSync(pdfRes.filePath)).toBe(true);
+    expect(pdfRes.fileSize).toBeGreaterThan(1000);
+
+    // Clean up
+    fs.unlinkSync(pdfRes.filePath);
+    db.prepare('DELETE FROM quotation_items WHERE quotation_id = ?').run(qId);
+    db.prepare('DELETE FROM quotations WHERE id = ?').run(qId);
+  });
 });

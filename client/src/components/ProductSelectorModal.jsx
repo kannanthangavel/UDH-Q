@@ -48,12 +48,12 @@ export function ProductSelectorModal({ isOpen, onClose, onSelectProduct, current
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               placeholder="Search product name, specification, item code..."
-              className="w-full pl-9 pr-4 py-2 text-sm bg-white border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              className="w-full pl-9 pr-4 py-2 text-sm bg-white border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#044E54] focus:border-[#044E54]"
             />
           </div>
           <button
             type="submit"
-            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-md transition-colors shadow-xs"
+            className="px-4 py-2 bg-[#044E54] hover:bg-[#033B40] text-white text-sm font-medium rounded-md transition-colors shadow-xs"
           >
             Search
           </button>
@@ -82,14 +82,14 @@ export function ProductSelectorModal({ isOpen, onClose, onSelectProduct, current
                   onSelectProduct(p);
                   onClose();
                 }}
-                className="p-3 hover:bg-blue-50/50 cursor-pointer transition-colors flex items-center justify-between group"
+                className="p-3 hover:bg-teal-50/60 cursor-pointer transition-colors flex items-center justify-between group"
               >
                 <div className="space-y-0.5 max-w-[70%]">
                   <div className="flex items-center gap-2">
                     <span className="text-xs font-mono font-medium text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">
                       {p.item_code || 'NO-CODE'}
                     </span>
-                    <span className="text-sm font-medium text-slate-900 group-hover:text-blue-600">
+                    <span className="text-sm font-medium text-slate-900 group-hover:text-[#044E54]">
                       {p.product_name}
                     </span>
                     {p.category && <Badge variant="default">{p.category}</Badge>}

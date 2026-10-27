@@ -91,7 +91,7 @@ export function Navbar({
             className="cursor-pointer hidden md:flex items-center gap-1.5 px-2.5 py-1 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-md text-xs text-slate-600 transition-colors"
             title={`Active price list: ${activePriceList.filename}`}
           >
-            <Database className="w-3.5 h-3.5 text-blue-600" />
+            <Database className="w-3.5 h-3.5 text-[#044E54]" />
             <span className="max-w-[120px] truncate font-medium text-[11px]">{activePriceList.filename}</span>
             {activePriceList.is_demo ? (
               <Badge variant="warning">Demo</Badge>

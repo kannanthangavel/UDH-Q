@@ -26,7 +26,16 @@ import {
   Upload,
   X,
   ShieldCheck,
-  FileSpreadsheet
+  FileSpreadsheet,
+  Building,
+  User,
+  Phone,
+  MapPin,
+  CreditCard,
+  Calendar,
+  Layers,
+  HelpCircle,
+  Eye
 } from 'lucide-react';
 import { api } from '../../api/client';
 import { formatINR } from '../../utils/currency';
@@ -61,7 +70,7 @@ export function NewQuotation({
   const [customLogoPath, setCustomLogoPath] = useState(null);
   const [uploadingLogo, setUploadingLogo] = useState(false);
 
-  // Customer Details State
+  // Customer Details State (Hero Card at the Top)
   const [customerName, setCustomerName] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
   const [customerEmail, setCustomerEmail] = useState('');
@@ -71,7 +80,8 @@ export function NewQuotation({
   const [referenceNo, setReferenceNo] = useState('');
   const [deliveryLocation, setDeliveryLocation] = useState('');
 
-  // WhatsApp Message Input & Parsing State
+  // Collapsible WhatsApp Importer State
+  const [isImporterOpen, setIsImporterOpen] = useState(!quotationIdToLoad);
   const [rawMessage, setRawMessage] = useState('');
   const [parsing, setParsing] = useState(false);
   const [billWarning, setBillWarning] = useState(null);
@@ -126,8 +136,8 @@ export function NewQuotation({
       setQuotationNumber(q.quotation_number);
       setQuotationStatus(q.status);
       setApprovalStatus(q.approval_status || 'pending_review');
-      setApprovedBy(q.approved_by);
-      setApprovedAt(q.approved_at);
+      setApprovedBy(q.approved_by || null);
+      setApprovedAt(q.approved_at || null);
       setDocumentType(q.document_type || 'gst_quotation');
       setPaperSize(q.paper_size || 'A5');
       setLogoSource(q.logo_source || 'default');
@@ -146,53 +156,60 @@ export function NewQuotation({
       setDeliveryCharges(q.delivery_charges || 0);
       setOtherCharges(q.other_charges || 0);
       setNotes(q.notes || '');
-      setRawMessage(q.raw_whatsapp_message || '');
-      setPdfFilename(q.pdf_filename);
+      setPdfFilename(q.pdf_filename || null);
       setIsStalePdf(Boolean(q.is_stale_pdf));
 
       if (res.items && res.items.length > 0) {
-        setItems(res.items);
+        setItems(res.items.map(it => ({
+          id: it.id,
+          product_id: it.product_id,
+          item_code: it.item_code,
+          product_name: it.product_name,
+          specification: it.specification || '',
+          hsn_code: it.hsn_code,
+          quantity: it.quantity,
+          unit: it.unit,
+          unit_price: it.unit_price,
+          is_override_price: it.is_override_price,
+          override_reason: it.override_reason,
+          discount_percent: it.discount_percent || 0,
+          gst_rate: it.gst_rate !== undefined ? it.gst_rate : 18,
+          matchStatus: it.match_status || 'Exact Match',
+          rawPhrase: it.raw_query || ''
+        })));
       }
     } catch (err) {
-      setActionError(err.message || 'Failed to load quotation.');
+      setActionError(err.message || 'Failed to load quotation details.');
     } finally {
       setSaveLoading(false);
     }
   }
 
-  // Handle WhatsApp Message Parsing
+  // Parse natural language WhatsApp text
   async function handleParseMessage() {
-    if (!rawMessage || !rawMessage.trim()) {
-      setParseError('Please paste a WhatsApp message first.');
-      return;
-    }
+    if (!rawMessage.trim()) return;
 
     try {
       setParsing(true);
-      setParseError(null);
       setBillWarning(null);
+      setParseError(null);
 
-      const res = await api.parseMessage({
-        message: rawMessage,
-        priceListId: activePriceList?.id
-      });
+      const res = await api.parseWhatsAppMessage(rawMessage, activePriceList?.id);
 
       if (res.isBillLookup) {
-        setBillWarning(res.warning);
+        setBillWarning(res.billLookup.warning);
         return;
       }
 
-      // Populate extracted customer details if available and currently blank
       if (res.customerDetails) {
-        if (!customerName && res.customerDetails.customerName) {
+        if (res.customerDetails.customerName && !customerName) {
           setCustomerName(res.customerDetails.customerName);
         }
-        if (!customerPhone && res.customerDetails.customerPhone) {
+        if (res.customerDetails.customerPhone && !customerPhone) {
           setCustomerPhone(res.customerDetails.customerPhone);
         }
       }
 
-      // Pre-select document type if customer explicitly requested it
       if (res.documentType) {
         setDocumentType(res.documentType);
       }
@@ -200,80 +217,77 @@ export function NewQuotation({
         setPaperSize(res.paperSize);
       }
 
-      // Convert parsed matched items to quotation line items
-      const newLines = (res.items || []).map((m, idx) => {
-        const prod = m.matchedProduct;
-        return {
-          id: `tmp-${Date.now()}-${idx}`,
-          product_id: prod ? prod.id : null,
-          item_code: prod ? prod.item_code : '',
-          product_name: prod ? prod.product_name : (m.productName || m.rawPhrase),
-          specification: prod ? (prod.specification || m.specification) : (m.specification || ''),
-          hsn_code: prod ? prod.hsn_code : '',
-          quantity: m.quantity || 1,
-          isQuantityMissing: m.isQuantityMissing || false,
-          unit: m.unit || (prod ? prod.unit : 'Nos'),
-          isUnitMissing: m.isUnitMissing || false,
-          unit_price: prod && prod.sales_rate ? prod.sales_rate : 0,
-          discount_percent: 0,
-          gst_rate: prod ? prod.gst_rate : 18,
-          matchStatus: m.matchStatus,
-          confidence: m.confidence,
-          explanation: m.explanation,
-          candidates: m.candidates || [],
-          rawPhrase: m.rawPhrase
-        };
-      });
+      if (res.items && res.items.length > 0) {
+        const newItems = res.items.map(it => {
+          const matched = it.matchedProduct;
+          return {
+            product_id: matched ? matched.id : null,
+            item_code: matched ? matched.item_code : '',
+            product_name: matched ? matched.product_name : it.productName,
+            specification: it.specification || (matched ? matched.specification : ''),
+            hsn_code: matched ? matched.hsn_code : '',
+            quantity: it.quantity !== null ? it.quantity : 1,
+            unit: it.unit || (matched ? matched.unit : 'Nos'),
+            unit_price: matched ? (matched.sales_rate || 0) : 0,
+            discount_percent: 0,
+            gst_rate: matched ? (matched.gst_rate || 18) : 18,
+            isQuantityMissing: it.isQuantityMissing,
+            isUnitMissing: it.isUnitMissing,
+            matchStatus: it.matchStatus,
+            confidence: it.confidence,
+            candidates: it.candidates || [],
+            rawPhrase: it.rawPhrase
+          };
+        });
 
-      setItems(newLines);
-      setIsStalePdf(true);
+        setItems(newItems);
+        setIsStalePdf(true);
+        setActionMessage(`Successfully parsed ${newItems.length} requirement(s) from text!`);
+      } else {
+        setParseError('No products could be extracted. Please check the text format.');
+      }
     } catch (err) {
-      setParseError(err.message || 'Error parsing message.');
+      setParseError(err.message || 'Failed to parse message text.');
     } finally {
       setParsing(false);
     }
   }
 
-  // Quick preset sample message
-  function insertSampleMessage(text) {
-    setRawMessage(text);
+  function insertSampleMessage(msg) {
+    setRawMessage(msg);
   }
 
-  // Add blank item row or from price list
-  function handleAddBlankItem() {
-    setSelectorOpen(true);
-    setItemIndexToReplace(null);
-  }
-
-  // Add custom unlisted product directly without price list lookup
+  // Line item management
   function handleAddCustomItem() {
     const newItem = {
-      id: `custom-${Date.now()}`,
       product_id: null,
       item_code: '',
-      product_name: '',
+      product_name: 'New Custom Material',
       specification: '',
-      hsn_code: '',
+      hsn_code: '32089021',
       quantity: 1,
       unit: 'Nos',
       unit_price: 0,
       discount_percent: 0,
       gst_rate: 18,
-      matchStatus: 'Manual Entry',
+      matchStatus: 'Manual Adjustment',
       confidence: 100,
       candidates: []
     };
-    setItems(prev => [...prev, newItem]);
+    setItems([...items, newItem]);
     setIsStalePdf(true);
   }
 
-  // Open product selector for existing row
+  function handleAddBlankItem() {
+    setItemIndexToReplace(null);
+    setSelectorOpen(true);
+  }
+
   function handleOpenChangeProduct(index) {
     setItemIndexToReplace(index);
     setSelectorOpen(true);
   }
 
-  // Product selection callback
   function handleProductSelected(product) {
     if (itemIndexToReplace !== null && items[itemIndexToReplace]) {
       const updated = [...items];
@@ -282,9 +296,9 @@ export function NewQuotation({
         product_id: product.id,
         item_code: product.item_code,
         product_name: product.product_name,
-        specification: product.specification || '',
+        specification: product.specification || updated[itemIndexToReplace].specification || '',
         hsn_code: product.hsn_code,
-        unit: product.unit || 'Nos',
+        unit: product.unit || updated[itemIndexToReplace].unit || 'Nos',
         unit_price: product.sales_rate || 0,
         gst_rate: product.gst_rate || 18,
         matchStatus: 'Exact Match',
@@ -294,7 +308,6 @@ export function NewQuotation({
       setItems(updated);
     } else {
       const newItem = {
-        id: `manual-${Date.now()}`,
         product_id: product.id,
         item_code: product.item_code,
         product_name: product.product_name,
@@ -314,13 +327,11 @@ export function NewQuotation({
     setIsStalePdf(true);
   }
 
-  // Remove line item
   function handleRemoveItem(index) {
     setItems(items.filter((_, i) => i !== index));
     setIsStalePdf(true);
   }
 
-  // Update item field (quantity, price, unit, discount, gst)
   function handleItemChange(index, field, value) {
     const updated = [...items];
     updated[index] = {
@@ -332,6 +343,9 @@ export function NewQuotation({
     }
     if (field === 'unit') {
       updated[index].isUnitMissing = false;
+    }
+    if (field === 'unit_price') {
+      updated[index].is_override_price = true;
     }
     setItems(updated);
     setIsStalePdf(true);
@@ -374,7 +388,7 @@ export function NewQuotation({
     }
   }
 
-  // Calculations
+  // Financial Calculations
   const calculatedItems = items.map((item) => {
     const qty = Math.max(0, Number(item.quantity || 0));
     const rate = Math.max(0, Number(item.unit_price || 0));
@@ -407,7 +421,7 @@ export function NewQuotation({
   // Save as Draft
   async function handleSaveDraft() {
     if (items.length === 0) {
-      setActionError('Cannot save empty quotation. Please add at least one product.');
+      setActionError('Cannot save empty quotation. Please add at least one line item.');
       return;
     }
 
@@ -443,9 +457,11 @@ export function NewQuotation({
           product_name: it.product_name || 'Item',
           specification: it.specification || '',
           hsn_code: it.hsn_code || '',
-          quantity: Math.max(1, Number(it.quantity || 1)),
+          quantity: Math.max(0.01, Number(it.quantity || 1)),
           unit: it.unit || 'Nos',
           unit_price: Math.max(0, Number(it.unit_price || 0)),
+          is_override_price: Boolean(it.is_override_price),
+          override_reason: it.override_reason || '',
           discount_percent: Math.min(100, Math.max(0, Number(it.discount_percent || 0))),
           gst_rate: Number(it.gst_rate !== undefined ? it.gst_rate : 18),
           match_status: it.matchStatus || 'Exact Match',
@@ -462,7 +478,7 @@ export function NewQuotation({
         setQuotationNumber(res.quotationNumber);
         setPdfFilename(res.pdfFilename);
         setIsStalePdf(false);
-        setActionMessage(`Quotation draft ${res.quotationNumber} saved!`);
+        setActionMessage(`Quotation draft ${res.quotationNumber} created!`);
       }
 
       setPdfRefreshKey(Date.now());
@@ -501,7 +517,7 @@ export function NewQuotation({
     }
   }
 
-  // Finalize Quotation and Generate Official PDF
+  // Finalize Quotation and Generate Official PDF (Enterprise UX Writing)
   async function handleFinalizeQuotation() {
     if (items.length === 0) {
       setActionError('Cannot finalize empty quotation.');
@@ -510,7 +526,7 @@ export function NewQuotation({
 
     const unpriced = items.find(it => !it.unit_price || Number(it.unit_price) <= 0);
     if (unpriced) {
-      setActionError(`Item "${unpriced.product_name}" has zero price. Please manually adjust or select a priced product.`);
+      setActionError(`Item "${unpriced.product_name}" has zero price. Please manually adjust or select a priced catalog product.`);
       return;
     }
 
@@ -529,7 +545,7 @@ export function NewQuotation({
       setPdfFilename(finRes.pdfFilename);
       setIsStalePdf(false);
       setPdfRefreshKey(Date.now());
-      setActionMessage(`Quotation ${quotationNumber} finalized with immutable snapshot!`);
+      setActionMessage(`Quotation ${quotationNumber} approved and finalized with official PDF snapshot!`);
 
       if (onQuotationSaved) onQuotationSaved();
     } catch (err) {
@@ -557,7 +573,10 @@ export function NewQuotation({
 
   // Open Share Modal
   async function handleOpenWhatsAppShare() {
-    if (!quotationId) return;
+    if (!quotationId) {
+      setActionError('Please save the quotation first before sharing.');
+      return;
+    }
     try {
       setSaveLoading(true);
       const res = await api.getWhatsAppShare(quotationId);
@@ -568,6 +587,40 @@ export function NewQuotation({
       setActionError(err.message || 'Failed to prepare share message.');
     } finally {
       setSaveLoading(false);
+    }
+  }
+
+  // Native Web Share with attached PDF file
+  async function handleNativeShareWithFile() {
+    if (!quotationId) return;
+    try {
+      setIsSharingNative(true);
+      const pdfUrl = api.getPdfUrl(quotationId, false);
+      const res = await fetch(pdfUrl);
+      if (!res.ok) throw new Error('Could not fetch PDF file.');
+      const blob = await res.blob();
+      const fileName = `${quotationNumber || 'Quotation'}_Udhayam.pdf`;
+      const file = new File([blob], fileName, { type: 'application/pdf' });
+
+      if (typeof navigator !== 'undefined' && navigator.canShare && navigator.canShare({ files: [file] })) {
+        await navigator.share({
+          title: `Quotation ${quotationNumber} - Udhayam Agencies`,
+          text: whatsappShareData?.messageText || `Quotation ${quotationNumber} from Udhayam Agencies`,
+          files: [file]
+        });
+        api.updateWhatsAppStatus(quotationId, 'sent');
+        setActionMessage('Quotation PDF and welcome text shared successfully via native share!');
+        return;
+      } else {
+        // Fallback to desktop flow
+        triggerDesktopShareFlow();
+      }
+    } catch (err) {
+      if (err.name !== 'AbortError') {
+        triggerDesktopShareFlow();
+      }
+    } finally {
+      setIsSharingNative(false);
     }
   }
 
@@ -594,7 +647,6 @@ export function NewQuotation({
         setCloudWhatsAppSuccess(`Sent officially via WhatsApp Cloud API! Message ID: ${res.wamid}`);
         setActionMessage(`Quotation PDF officially delivered to ${recipient} via WhatsApp!`);
       } else {
-        // Fallback triggered
         triggerDesktopShareFlow();
         setCloudWhatsAppSuccess('Opened WhatsApp Web with pre-filled message and downloaded PDF.');
       }
@@ -605,12 +657,13 @@ export function NewQuotation({
     }
   }
 
-  // Desktop WhatsApp Web Fallback
+  // Desktop WhatsApp Web Flow (with auto PDF download & copy welcome text)
   function triggerDesktopShareFlow() {
     if (typeof navigator !== 'undefined' && navigator.clipboard && whatsappShareData?.messageText) {
       navigator.clipboard.writeText(whatsappShareData.messageText);
     }
 
+    // Trigger instant download of the PDF
     const link = document.createElement('a');
     link.href = api.getPdfUrl(quotationId, true) + `&t=${pdfRefreshKey}`;
     link.download = `${quotationNumber || 'Quotation'}_Udhayam.pdf`;
@@ -618,12 +671,13 @@ export function NewQuotation({
     link.click();
     document.body.removeChild(link);
 
+    // Open WhatsApp Web
     if (whatsappShareData?.shareLink) {
       window.open(whatsappShareData.shareLink, '_blank', 'noopener,noreferrer');
       api.updateWhatsAppStatus(quotationId, 'whatsapp_opened');
     }
 
-    setActionMessage('PDF downloaded and WhatsApp opened! Welcome text copied to clipboard. Drag or attach the PDF into WhatsApp.');
+    setActionMessage('Quotation PDF downloaded! Welcome message copied to clipboard. You can now paste and attach in WhatsApp.');
   }
 
   function handleCopyMessage() {
@@ -711,772 +765,982 @@ export function NewQuotation({
 
   return (
     <div className="max-w-[1600px] mx-auto px-4 sm:px-6 py-6 space-y-6">
-      {/* Top Workspace Header Bar */}
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 bg-white p-4 sm:p-5 rounded-lg border border-slate-200 shadow-2xs">
+      {/* ========================================================================= */}
+      {/* 1. TOP COMMAND & STATUS BAR (Inspired by Google Workspace & Zoho Books) */}
+      {/* ========================================================================= */}
+      <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 bg-white p-4 sm:p-5 rounded-xl border border-slate-200 shadow-xs">
         <div>
           <div className="flex flex-wrap items-center gap-2.5">
-            <h1 className="text-xl font-bold text-slate-900 tracking-tight">
-              {quotationNumber ? `Quotation: ${quotationNumber}` : 'New Quotation Workspace'}
+            <h1 className="text-xl font-bold text-slate-900 tracking-tight flex items-center gap-2">
+              <span className="text-[#044E54]">{quotationNumber || 'New Quotation'}</span>
             </h1>
+
             <Badge variant={quotationStatus === 'finalized' ? 'success' : 'warning'}>
               {quotationStatus === 'finalized' ? 'Finalized Snapshot' : 'Draft'}
             </Badge>
+
             {approvalStatus === 'approved' ? (
-              <span className="inline-flex items-center gap-1 text-[11px] bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded font-semibold border border-emerald-200">
-                <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+              <span className="inline-flex items-center gap-1 text-[11px] bg-emerald-50 text-emerald-800 px-2.5 py-0.5 rounded-full font-semibold border border-emerald-200">
+                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
                 Approved by {approvedBy || 'Operator'}
               </span>
             ) : (
-              <span className="inline-flex items-center gap-1 text-[11px] bg-amber-50 text-amber-700 px-2 py-0.5 rounded font-semibold border border-amber-200">
-                <AlertCircle className="w-3 h-3 text-amber-600" />
-                Awaiting Operator Approval
+              <span className="inline-flex items-center gap-1 text-[11px] bg-amber-50 text-amber-800 px-2.5 py-0.5 rounded-full font-semibold border border-amber-200">
+                <AlertCircle className="w-3.5 h-3.5 text-amber-600" />
+                Awaiting Operator Review
               </span>
             )}
+
             {isStalePdf && (
               <span className="text-[11px] bg-amber-50 text-amber-700 px-2 py-0.5 rounded border border-amber-200">
-                Pending PDF update
+                Pending PDF sync
               </span>
             )}
           </div>
           <p className="text-xs text-slate-500 mt-1">
-            Official A5/A4 quotation preparation with WhatsApp message parsing, catalog matching, and instant PDF generation.
+            Udhayam Precision Quotation System • 5,300+ Verified Catalog Items • GST & Commercial Estimation
           </p>
         </div>
 
-        {/* Global Header Actions */}
+        {/* Global Action Suite */}
         <div className="flex flex-wrap items-center gap-2">
           {quotationId && (
             <>
               <button
-                onClick={handleDuplicate}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 text-xs font-semibold rounded-md shadow-2xs transition-colors"
-                title="Duplicate into new draft"
+                type="button"
+                onClick={() => setPdfModalOpen(true)}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-lg border border-slate-200 shadow-2xs transition-colors"
+                title="Preview high-resolution PDF"
               >
-                <Copy className="w-3.5 h-3.5 text-slate-500" />
-                Duplicate
+                <Eye className="w-3.5 h-3.5 text-slate-600" />
+                <span>Preview PDF</span>
               </button>
 
               <button
+                type="button"
+                onClick={handleDuplicate}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 text-xs font-semibold rounded-lg shadow-2xs transition-colors"
+                title="Duplicate into new draft"
+              >
+                <Copy className="w-3.5 h-3.5 text-slate-500" />
+                <span>Duplicate</span>
+              </button>
+
+              <button
+                type="button"
                 onClick={handleOpenWhatsAppShare}
-                className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-md shadow-2xs transition-colors"
+                className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-[#72B01D] hover:bg-[#5F9418] text-white text-xs font-bold rounded-lg shadow-xs transition-colors"
               >
                 <Share2 className="w-3.5 h-3.5" />
-                Share (WhatsApp/Email)
+                <span>Share & Deliver</span>
               </button>
             </>
           )}
 
           <button
+            type="button"
             onClick={handleSaveDraft}
             disabled={saveLoading || finalizeLoading}
-            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 text-xs font-semibold rounded-md shadow-2xs transition-colors"
+            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-white border border-slate-300 hover:bg-slate-50 text-slate-800 text-xs font-semibold rounded-lg shadow-2xs transition-colors disabled:opacity-50"
           >
-            {saveLoading ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : null}
+            {saveLoading ? <RefreshCw className="w-3.5 h-3.5 animate-spin text-[#044E54]" /> : null}
             <span>Save Draft</span>
           </button>
 
           {approvalStatus !== 'approved' && quotationId && (
             <button
+              type="button"
               onClick={handleApproveQuotation}
               disabled={saveLoading || finalizeLoading}
-              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-indigo-50 border border-indigo-200 text-indigo-700 hover:bg-indigo-100 text-xs font-semibold rounded-md shadow-2xs transition-colors"
+              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-teal-50 border border-teal-200 text-[#044E54] hover:bg-teal-100 text-xs font-semibold rounded-lg shadow-2xs transition-colors disabled:opacity-50"
             >
-              <ShieldCheck className="w-3.5 h-3.5 text-indigo-600" />
+              <ShieldCheck className="w-3.5 h-3.5 text-[#044E54]" />
               <span>Approve Draft</span>
             </button>
           )}
 
           <button
+            type="button"
             onClick={handleFinalizeQuotation}
             disabled={saveLoading || finalizeLoading}
-            className="inline-flex items-center gap-1.5 px-4 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-md shadow-2xs transition-colors"
+            className="inline-flex items-center gap-1.5 px-4 py-1.5 bg-[#044E54] hover:bg-[#033B40] text-white text-xs font-bold rounded-lg shadow-xs transition-colors disabled:opacity-50"
           >
-            {finalizeLoading ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
-            <span>Finalize & Lock PDF</span>
+            {finalizeLoading ? (
+              <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+            ) : (
+              <CheckCircle2 className="w-3.5 h-3.5 text-[#72B01D]" />
+            )}
+            <span>Approve & Finalize Quotation</span>
           </button>
         </div>
       </div>
 
       {actionMessage && (
-        <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-md text-xs text-emerald-800 flex items-center justify-between">
+        <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-lg text-xs text-emerald-800 flex items-center justify-between shadow-2xs">
           <div className="flex items-center gap-2">
-            <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+            <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
             <span>{actionMessage}</span>
           </div>
-          <button onClick={() => setActionMessage(null)} className="text-emerald-700 font-bold">×</button>
+          <button onClick={() => setActionMessage(null)} className="text-emerald-700 font-bold px-1.5">×</button>
         </div>
       )}
 
       {actionError && (
-        <div className="p-3 bg-rose-50 border border-rose-200 rounded-md text-xs text-rose-800 flex items-center justify-between">
+        <div className="p-3 bg-rose-50 border border-rose-200 rounded-lg text-xs text-rose-800 flex items-center justify-between shadow-2xs">
           <div className="flex items-center gap-2">
-            <AlertCircle className="w-4 h-4 text-rose-600" />
+            <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
             <span>{actionError}</span>
           </div>
-          <button onClick={() => setActionError(null)} className="text-rose-700 font-bold">×</button>
+          <button onClick={() => setActionError(null)} className="text-rose-700 font-bold px-1.5">×</button>
         </div>
       )}
 
-      {/* 3-PANEL ZOHO-INSPIRED WORKSPACE */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-        {/* ========================================================= */}
-        {/* PANEL 1 (LEFT 3 COLS): WhatsApp Input & Customer Details */}
-        {/* ========================================================= */}
-        <div className="lg:col-span-3 space-y-5">
-          {/* WhatsApp Requirement Input */}
-          <div className="bg-white p-4 rounded-lg border border-slate-200 shadow-2xs space-y-3">
-            <div className="flex items-center justify-between">
-              <label className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
-                <MessageSquare className="w-3.5 h-3.5 text-blue-600" />
-                Customer WhatsApp Input
-              </label>
-              <span className="text-[10px] text-slate-400">Natural Text</span>
+      {/* ========================================================================= */}
+      {/* 2. FULL-WIDTH CLIENT & QUOTATION DETAILS CARD (TOP PRIORITY REQUEST)       */}
+      {/* ========================================================================= */}
+      <div className="bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden">
+        {/* Header Ribbon */}
+        <div className="px-5 py-3.5 bg-slate-50 border-b border-slate-200 flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <div className="w-7 h-7 rounded-lg bg-teal-50 border border-teal-200 flex items-center justify-center text-[#044E54]">
+              <User className="w-4 h-4" />
             </div>
+            <div>
+              <h2 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
+                Client & Quotation Information
+              </h2>
+              <p className="text-[11px] text-slate-500">
+                Primary recipient and commercial configuration for this document.
+              </p>
+            </div>
+          </div>
 
-            <textarea
-              rows={4}
-              value={rawMessage}
-              onChange={(e) => setRawMessage(e.target.value)}
-              placeholder="Paste raw WhatsApp text: e.g. 20 bags OPC cement, 10 rods 12mm, 5 paint buckets. Need quotation."
-              className="w-full text-xs bg-slate-50 border border-slate-200 rounded-md p-2.5 text-slate-900 focus:bg-white focus:outline-none focus:ring-1 focus:ring-blue-500 transition-colors"
-            />
-
-            {/* Quick Presets */}
-            <div className="space-y-1">
-              <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Example Presets:</span>
-              <div className="flex flex-col gap-1">
+          {/* Quick Segmented Document Controls */}
+          <div className="flex flex-wrap items-center gap-3 text-xs">
+            {/* Mode Switch: GST Quote vs Estimation */}
+            <div className="flex items-center gap-1.5">
+              <span className="text-[11px] font-bold text-slate-600">Mode:</span>
+              <div className="inline-flex rounded-lg border border-slate-200 p-0.5 bg-slate-100">
                 <button
                   type="button"
-                  onClick={() => insertSampleMessage('20 bags OPC cement, 10 numbers of 12mm steel rods, 5 paint buckets. Please prepare quotation.')}
-                  className="text-[11px] bg-slate-100 hover:bg-slate-200 text-slate-700 px-2 py-1 rounded transition-colors text-left truncate"
+                  onClick={() => { setDocumentType('gst_quotation'); setIsStalePdf(true); }}
+                  className={`px-3 py-1 text-xs font-semibold rounded-md transition-colors ${
+                    documentType === 'gst_quotation'
+                      ? 'bg-[#044E54] text-white shadow-xs'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
                 >
-                  "20 bags OPC, 12mm rods, paint"
+                  GST Quotation
                 </button>
                 <button
                   type="button"
-                  onClick={() => insertSampleMessage('1 As EN golden Brown 1lt 1Nos. Need quotation with GST')}
-                  className="text-[11px] bg-slate-100 hover:bg-slate-200 text-slate-700 px-2 py-1 rounded transition-colors text-left truncate"
+                  onClick={() => { setDocumentType('estimation'); setIsStalePdf(true); }}
+                  className={`px-3 py-1 text-xs font-semibold rounded-md transition-colors ${
+                    documentType === 'estimation'
+                      ? 'bg-[#044E54] text-white shadow-xs'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
                 >
-                  "As EN golden Brown 1lt 1Nos"
-                </button>
-                <button
-                  type="button"
-                  onClick={() => insertSampleMessage('UD12345 bill send pannunga.')}
-                  className="text-[11px] bg-amber-50 hover:bg-amber-100 text-amber-800 px-2 py-1 rounded border border-amber-200 text-left truncate"
-                >
-                  "UD12345 bill send pannunga" (Lookup)
+                  Estimation
                 </button>
               </div>
             </div>
 
+            {/* Paper Size Switch: A5 vs A4 */}
+            <div className="flex items-center gap-1.5">
+              <span className="text-[11px] font-bold text-slate-600">Format:</span>
+              <div className="inline-flex rounded-lg border border-slate-200 p-0.5 bg-slate-100">
+                <button
+                  type="button"
+                  onClick={() => { setPaperSize('A5'); setIsStalePdf(true); }}
+                  className={`px-3 py-1 text-xs font-semibold rounded-md transition-colors ${
+                    paperSize === 'A5'
+                      ? 'bg-[#044E54] text-white shadow-xs'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  A5 (Default)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setPaperSize('A4'); setIsStalePdf(true); }}
+                  className={`px-3 py-1 text-xs font-semibold rounded-md transition-colors ${
+                    paperSize === 'A4'
+                      ? 'bg-[#044E54] text-white shadow-xs'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  A4
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Client Fields Grid */}
+        <div className="p-5 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 text-xs">
+          {/* Customer / Client Name */}
+          <div>
+            <label className="block font-semibold text-slate-700 mb-1 text-[11px]">
+              Customer / Client Name <span className="text-rose-500">*</span>
+            </label>
+            <div className="relative">
+              <User className="absolute left-2.5 top-2.5 w-3.5 h-3.5 text-slate-400" />
+              <input
+                type="text"
+                value={customerName}
+                onChange={(e) => setCustomerName(e.target.value)}
+                placeholder="e.g. Ramesh Kumar / Sri Amman Traders"
+                className="w-full pl-8 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-slate-900 focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#044E54] font-medium"
+              />
+            </div>
+          </div>
+
+          {/* WhatsApp Phone */}
+          <div>
+            <label className="block font-semibold text-slate-700 mb-1 text-[11px] flex items-center justify-between">
+              <span>WhatsApp Phone</span>
+              {customerPhone && (
+                <span className="text-[10px] text-emerald-600 font-semibold flex items-center gap-0.5">
+                  <CheckCircle2 className="w-2.5 h-2.5" /> WhatsApp Active
+                </span>
+              )}
+            </label>
+            <div className="relative">
+              <Phone className="absolute left-2.5 top-2.5 w-3.5 h-3.5 text-slate-400" />
+              <input
+                type="text"
+                value={customerPhone}
+                onChange={(e) => setCustomerPhone(e.target.value)}
+                placeholder="+91 97156 22499"
+                className="w-full pl-8 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-slate-900 focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#044E54] font-mono"
+              />
+            </div>
+          </div>
+
+          {/* Email Address */}
+          <div>
+            <label className="block font-semibold text-slate-700 mb-1 text-[11px]">
+              Email Address (Optional)
+            </label>
+            <div className="relative">
+              <Mail className="absolute left-2.5 top-2.5 w-3.5 h-3.5 text-slate-400" />
+              <input
+                type="email"
+                value={customerEmail}
+                onChange={(e) => setCustomerEmail(e.target.value)}
+                placeholder="client@example.com"
+                className="w-full pl-8 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-slate-900 focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#044E54]"
+              />
+            </div>
+          </div>
+
+          {/* Company / Site Name */}
+          <div>
+            <label className="block font-semibold text-slate-700 mb-1 text-[11px]">
+              Company / Construction Site
+            </label>
+            <div className="relative">
+              <Building className="absolute left-2.5 top-2.5 w-3.5 h-3.5 text-slate-400" />
+              <input
+                type="text"
+                value={customerCompany}
+                onChange={(e) => setCustomerCompany(e.target.value)}
+                placeholder="e.g. Apex Builders, Perundurai Site"
+                className="w-full pl-8 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-slate-900 focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#044E54]"
+              />
+            </div>
+          </div>
+
+          {/* Billing & Site Address */}
+          <div className="md:col-span-2">
+            <label className="block font-semibold text-slate-700 mb-1 text-[11px]">
+              Billing & Site Delivery Address
+            </label>
+            <div className="relative">
+              <MapPin className="absolute left-2.5 top-2.5 w-3.5 h-3.5 text-slate-400" />
+              <textarea
+                rows={2}
+                value={customerAddress}
+                onChange={(e) => setCustomerAddress(e.target.value)}
+                placeholder="Site location or billing address..."
+                className="w-full pl-8 pr-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-slate-900 focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#044E54]"
+              />
+            </div>
+          </div>
+
+          {/* GSTIN */}
+          <div>
+            <label className="block font-semibold text-slate-700 mb-1 text-[11px]">
+              Customer GSTIN (Tax Invoices)
+            </label>
+            <input
+              type="text"
+              value={customerGstin}
+              onChange={(e) => setCustomerGstin(e.target.value)}
+              placeholder="33AAAAA0000A1Z5"
+              className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-slate-900 focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#044E54] font-mono uppercase"
+            />
+          </div>
+
+          {/* Reference # / PO Number */}
+          <div>
+            <label className="block font-semibold text-slate-700 mb-1 text-[11px]">
+              Customer PO / Ref Number
+            </label>
+            <input
+              type="text"
+              value={referenceNo}
+              onChange={(e) => setReferenceNo(e.target.value)}
+              placeholder="e.g. PO-8841 / SITE-A"
+              className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-slate-900 focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#044E54]"
+            />
+          </div>
+        </div>
+
+        {/* Secondary Meta Bar (Validity, Logo Mode, Delivery) */}
+        <div className="px-5 py-3 bg-slate-50/70 border-t border-slate-100 flex flex-wrap items-center justify-between gap-3 text-xs">
+          <div className="flex flex-wrap items-center gap-4 text-slate-600">
+            <div className="flex items-center gap-1.5">
+              <Calendar className="w-3.5 h-3.5 text-slate-400" />
+              <span>Validity:</span>
+              <select
+                value={validityDays}
+                onChange={(e) => setValidityDays(Number(e.target.value))}
+                className="bg-white border border-slate-200 rounded px-2 py-0.5 font-medium"
+              >
+                <option value={7}>7 Days (Standard)</option>
+                <option value={15}>15 Days</option>
+                <option value={30}>30 Days</option>
+              </select>
+            </div>
+
+            <div className="flex items-center gap-1.5">
+              <ImageIcon className="w-3.5 h-3.5 text-slate-400" />
+              <span>Logo:</span>
+              <select
+                value={logoSource}
+                onChange={(e) => handleLogoSourceChange(e.target.value)}
+                className="bg-white border border-slate-200 rounded px-2 py-0.5 font-medium"
+              >
+                <option value="default">Default Official Logo</option>
+                <option value="custom">Custom Logo (This Quote Only)</option>
+                <option value="none">No Logo (Text Only)</option>
+              </select>
+            </div>
+
+            {logoSource === 'custom' && (
+              <label className="cursor-pointer inline-flex items-center gap-1 px-2 py-0.5 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 rounded text-[11px] font-semibold transition-colors">
+                <Upload className="w-3 h-3 text-[#044E54]" />
+                <span>{uploadingLogo ? 'Uploading...' : customLogoPath ? 'Replace Logo' : 'Upload Logo'}</span>
+                <input
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp"
+                  onChange={handleCustomLogoUpload}
+                  disabled={uploadingLogo}
+                  className="hidden"
+                />
+              </label>
+            )}
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setIsImporterOpen(!isImporterOpen)}
+            className="text-xs font-semibold text-[#044E54] hover:text-[#033B40] flex items-center gap-1"
+          >
+            <Sparkles className="w-3.5 h-3.5 text-[#72B01D]" />
+            <span>{isImporterOpen ? 'Hide WhatsApp Importer' : 'Import from WhatsApp / Notes'}</span>
+            {isImporterOpen ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+          </button>
+        </div>
+      </div>
+
+      {/* ========================================================================= */}
+      {/* 3. COLLAPSIBLE SMART WHATSAPP REQUIREMENT IMPORTER                         */}
+      {/* ========================================================================= */}
+      {isImporterOpen && (
+        <div className="bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden transition-all">
+          <div className="p-4 bg-teal-50/40 border-b border-teal-100/60 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <MessageSquare className="w-4 h-4 text-[#044E54]" />
+              <span className="text-xs font-bold text-slate-900 uppercase tracking-wider">
+                Smart WhatsApp & Text Requirement Importer
+              </span>
+              <span className="text-[10px] bg-teal-100 text-[#044E54] px-2 py-0.5 rounded font-semibold">
+                AI NLP
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setIsImporterOpen(false)}
+              className="text-slate-400 hover:text-slate-600 p-1"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+
+          <div className="p-5 space-y-3">
+            <textarea
+              rows={3}
+              value={rawMessage}
+              onChange={(e) => setRawMessage(e.target.value)}
+              placeholder="Paste raw WhatsApp text e.g. 1.green paint=1/2 litre 2.block paint=1/2 litre 3.enamel thinner=1/2 litre 4.brush(2inch)=2 nos. Or: asian golden yellow 20lt, 20 bags cement."
+              className="w-full text-xs bg-slate-50 border border-slate-200 rounded-lg p-3 text-slate-900 focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#044E54] font-mono leading-relaxed"
+            />
+
+            {/* Quick Example Presets */}
+            <div className="flex flex-wrap items-center gap-2 pt-1">
+              <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Presets:</span>
+              <button
+                type="button"
+                onClick={() => insertSampleMessage(`1.green paint=1/2 litre\n2.block paint=1/2 litre\n3.enamel thinner=1/2 litre\n4.brush(2inch)=2 nos\nThis metrial needed sir`)}
+                className="text-[11px] bg-slate-100 hover:bg-slate-200 text-slate-700 px-2.5 py-1 rounded-md transition-colors"
+              >
+                Paint & Thinner Request
+              </button>
+              <button
+                type="button"
+                onClick={() => insertSampleMessage('asian golden yellow 20lt. Need estimation.')}
+                className="text-[11px] bg-slate-100 hover:bg-slate-200 text-slate-700 px-2.5 py-1 rounded-md transition-colors"
+              >
+                Asian Golden Yellow 20LT
+              </button>
+              <button
+                type="button"
+                onClick={() => insertSampleMessage('20 bags OPC cement, 10 numbers of 12mm steel rods, 5 paint buckets. Please prepare quotation.')}
+                className="text-[11px] bg-slate-100 hover:bg-slate-200 text-slate-700 px-2.5 py-1 rounded-md transition-colors"
+              >
+                Cement & Hardware
+              </button>
+              <button
+                type="button"
+                onClick={() => insertSampleMessage('UD12345 bill send pannunga.')}
+                className="text-[11px] bg-amber-50 hover:bg-amber-100 text-amber-800 px-2.5 py-1 rounded-md border border-amber-200"
+              >
+                Bill Lookup Test
+              </button>
+            </div>
+
             {billWarning && (
-              <div className="p-2.5 bg-amber-50 border border-amber-200 rounded-md text-xs text-amber-800 flex items-start gap-1.5">
+              <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-800 flex items-start gap-2">
                 <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5 text-amber-600" />
                 <div className="text-[11px]">{billWarning}</div>
               </div>
             )}
 
             {parseError && (
-              <div className="p-2 bg-rose-50 border border-rose-200 rounded text-xs text-rose-700">
+              <div className="p-3 bg-rose-50 border border-rose-200 rounded-lg text-xs text-rose-700">
                 {parseError}
               </div>
             )}
 
-            <button
-              onClick={handleParseMessage}
-              disabled={parsing || !rawMessage.trim()}
-              className="w-full py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-md shadow-2xs transition-colors flex items-center justify-center gap-1.5 disabled:opacity-50"
-            >
-              {parsing ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
-              <span>{parsing ? 'Parsing...' : 'Parse & Extract Items'}</span>
-            </button>
-          </div>
-
-          {/* Customer Details Form */}
-          <div className="bg-white p-4 rounded-lg border border-slate-200 shadow-2xs space-y-3">
-            <h2 className="text-xs font-bold text-slate-800 uppercase tracking-wider">
-              Customer Details
-            </h2>
-
-            <div className="space-y-2.5 text-xs">
-              <div>
-                <label className="block font-medium text-slate-700 mb-0.5 text-[11px]">Customer Name</label>
-                <input
-                  type="text"
-                  value={customerName}
-                  onChange={(e) => setCustomerName(e.target.value)}
-                  placeholder="e.g. Ramesh Kumar / Sri Amman"
-                  className="w-full p-2 bg-slate-50 border border-slate-200 rounded focus:bg-white focus:ring-1 focus:ring-blue-500"
-                />
-              </div>
-
-              <div>
-                <label className="block font-medium text-slate-700 mb-0.5 text-[11px]">WhatsApp Phone</label>
-                <input
-                  type="text"
-                  value={customerPhone}
-                  onChange={(e) => setCustomerPhone(e.target.value)}
-                  placeholder="e.g. +91 97156 22499"
-                  className="w-full p-2 bg-slate-50 border border-slate-200 rounded focus:bg-white focus:ring-1 focus:ring-blue-500 font-mono"
-                />
-              </div>
-
-              <div>
-                <label className="block font-medium text-slate-700 mb-0.5 text-[11px]">Email Address</label>
-                <input
-                  type="email"
-                  value={customerEmail}
-                  onChange={(e) => setCustomerEmail(e.target.value)}
-                  placeholder="customer@domain.com"
-                  className="w-full p-2 bg-slate-50 border border-slate-200 rounded focus:bg-white focus:ring-1 focus:ring-blue-500"
-                />
-              </div>
-
-              <div>
-                <label className="block font-medium text-slate-700 mb-0.5 text-[11px]">Company / Site</label>
-                <input
-                  type="text"
-                  value={customerCompany}
-                  onChange={(e) => setCustomerCompany(e.target.value)}
-                  placeholder="Company name..."
-                  className="w-full p-2 bg-slate-50 border border-slate-200 rounded focus:bg-white"
-                />
-              </div>
-
-              <div>
-                <label className="block font-medium text-slate-700 mb-0.5 text-[11px]">Address</label>
-                <textarea
-                  rows={2}
-                  value={customerAddress}
-                  onChange={(e) => setCustomerAddress(e.target.value)}
-                  placeholder="Site or billing address..."
-                  className="w-full p-2 bg-slate-50 border border-slate-200 rounded focus:bg-white"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="block font-medium text-slate-700 mb-0.5 text-[11px]">GSTIN</label>
-                  <input
-                    type="text"
-                    value={customerGstin}
-                    onChange={(e) => setCustomerGstin(e.target.value)}
-                    placeholder="33AAAAA..."
-                    className="w-full p-1.5 bg-slate-50 border border-slate-200 rounded font-mono text-[11px]"
-                  />
-                </div>
-                <div>
-                  <label className="block font-medium text-slate-700 mb-0.5 text-[11px]">Ref #</label>
-                  <input
-                    type="text"
-                    value={referenceNo}
-                    onChange={(e) => setReferenceNo(e.target.value)}
-                    placeholder="SITE-A"
-                    className="w-full p-1.5 bg-slate-50 border border-slate-200 rounded text-[11px]"
-                  />
-                </div>
-              </div>
+            <div className="flex justify-end pt-1">
+              <button
+                type="button"
+                onClick={handleParseMessage}
+                disabled={parsing || !rawMessage.trim()}
+                className="py-2 px-5 bg-[#044E54] hover:bg-[#033B40] text-white text-xs font-bold rounded-lg shadow-xs transition-colors flex items-center gap-2 disabled:opacity-50"
+              >
+                {parsing ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5 text-[#72B01D]" />}
+                <span>{parsing ? 'Parsing Requirements...' : 'Extract & Populate Line Items'}</span>
+              </button>
             </div>
           </div>
         </div>
+      )}
 
-        {/* ========================================================= */}
-        {/* PANEL 2 (CENTER 5 COLS): Line Items & Configuration Bar  */}
-        {/* ========================================================= */}
-        <div className="lg:col-span-5 space-y-5">
-          {/* Document Format & Logo Selector Bar */}
-          <div className="bg-white p-4 rounded-lg border border-slate-200 shadow-2xs space-y-3">
-            <div className="flex flex-wrap items-center justify-between gap-3 text-xs">
-              {/* Document Type Switch */}
-              <div className="flex items-center gap-2">
-                <span className="font-bold text-slate-700">Type:</span>
-                <div className="inline-flex rounded-md shadow-2xs">
-                  <button
-                    type="button"
-                    onClick={() => { setDocumentType('gst_quotation'); setIsStalePdf(true); }}
-                    className={`px-2.5 py-1 font-semibold rounded-l-md border transition-colors ${
-                      documentType === 'gst_quotation'
-                        ? 'bg-blue-600 text-white border-blue-600'
-                        : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
-                    }`}
-                  >
-                    GST Quote
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => { setDocumentType('estimation'); setIsStalePdf(true); }}
-                    className={`px-2.5 py-1 font-semibold rounded-r-md border-t border-b border-r transition-colors ${
-                      documentType === 'estimation'
-                        ? 'bg-blue-600 text-white border-blue-600'
-                        : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
-                    }`}
-                  >
-                    Estimation
-                  </button>
-                </div>
-              </div>
-
-              {/* Paper Size Switch */}
-              <div className="flex items-center gap-2">
-                <span className="font-bold text-slate-700">Paper:</span>
-                <div className="inline-flex rounded-md shadow-2xs">
-                  <button
-                    type="button"
-                    onClick={() => { setPaperSize('A5'); setIsStalePdf(true); }}
-                    className={`px-2.5 py-1 font-semibold rounded-l-md border transition-colors ${
-                      paperSize === 'A5'
-                        ? 'bg-blue-600 text-white border-blue-600'
-                        : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
-                    }`}
-                  >
-                    A5 (Default)
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => { setPaperSize('A4'); setIsStalePdf(true); }}
-                    className={`px-2.5 py-1 font-semibold rounded-r-md border-t border-b border-r transition-colors ${
-                      paperSize === 'A4'
-                        ? 'bg-blue-600 text-white border-blue-600'
-                        : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
-                    }`}
-                  >
-                    A4
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            {/* Company Logo Selector (Default / Custom / None) */}
-            <div className="pt-2 border-t border-slate-100 flex flex-wrap items-center justify-between gap-2 text-xs">
-              <div className="flex items-center gap-2">
-                <ImageIcon className="w-3.5 h-3.5 text-slate-500" />
-                <span className="font-bold text-slate-700">Quotation Logo:</span>
-                <select
-                  value={logoSource}
-                  onChange={(e) => handleLogoSourceChange(e.target.value)}
-                  className="p-1 bg-slate-50 border border-slate-200 rounded text-xs font-medium"
-                >
-                  <option value="default">Default Company Logo</option>
-                  <option value="custom">Custom Logo (This Quote Only)</option>
-                  <option value="none">No Logo (Text Only Header)</option>
-                </select>
-              </div>
-
-              {logoSource === 'custom' && (
-                <div className="flex items-center gap-2">
-                  <label className="cursor-pointer inline-flex items-center gap-1 px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded text-[11px] font-semibold transition-colors">
-                    <Upload className="w-3 h-3" />
-                    <span>{uploadingLogo ? 'Uploading...' : customLogoPath ? 'Replace Logo' : 'Upload Logo'}</span>
-                    <input
-                      type="file"
-                      accept="image/png,image/jpeg,image/webp"
-                      onChange={handleCustomLogoUpload}
-                      disabled={uploadingLogo}
-                      className="hidden"
-                    />
-                  </label>
-                  {customLogoPath && (
-                    <span className="text-[10px] text-emerald-600 font-semibold">✓ Attached</span>
-                  )}
-                </div>
+      {/* ========================================================================= */}
+      {/* 4. FULL-WIDTH HERO LINE ITEMS & SPECIFICATION TABLE (WITH NEW DETAILS COL) */}
+      {/* ========================================================================= */}
+      <div className="bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden">
+        {/* Table Action Header */}
+        <div className="px-5 py-3.5 bg-slate-50 border-b border-slate-200 flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <div className="flex items-center gap-2">
+              <h2 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
+                Line Items & Material Specifications ({items.length})
+              </h2>
+              {activePriceList && (
+                <span className="text-[10px] text-teal-800 bg-teal-50 px-2 py-0.5 rounded font-medium border border-teal-200">
+                  Catalog: {activePriceList.filename}
+                </span>
               )}
             </div>
+            <p className="text-[11px] text-slate-500 mt-0.5">
+              Live pricing linked to 5,300+ Udhayam items. Manual price adjustment and custom remarks supported.
+            </p>
           </div>
 
-          {/* Line Items Table */}
-          <div className="bg-white border border-slate-200 rounded-lg shadow-2xs overflow-hidden">
-            <div className="px-4 py-3 border-b border-slate-200 bg-slate-50/50 flex flex-wrap items-center justify-between gap-2">
-              <div>
-                <h2 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
-                  Line Items ({items.length})
-                </h2>
-                <p className="text-[11px] text-slate-500">
-                  Manual price adjustments and custom products supported.
-                </p>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handleAddCustomItem}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white text-slate-700 hover:bg-slate-50 border border-slate-200 text-xs font-semibold rounded-lg shadow-2xs transition-colors"
+            >
+              <Plus className="w-3.5 h-3.5 text-[#044E54]" />
+              <span>+ Custom Item</span>
+            </button>
+            <button
+              type="button"
+              onClick={handleAddBlankItem}
+              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-[#044E54] text-white hover:bg-[#033B40] text-xs font-bold rounded-lg shadow-xs transition-colors"
+            >
+              <Search className="w-3.5 h-3.5 text-[#72B01D]" />
+              <span>+ Browse Catalog</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Empty State */}
+        {items.length === 0 ? (
+          <div className="p-12 text-center text-slate-500 text-xs space-y-3">
+            <Layers className="w-10 h-10 text-slate-300 mx-auto" />
+            <div>
+              <p className="font-semibold text-slate-800 text-sm">No items in this quotation yet</p>
+              <p className="text-slate-400 text-xs mt-0.5">
+                Paste a customer WhatsApp requirement above or click "+ Browse Catalog" to add products.
+              </p>
+            </div>
+            <div className="flex justify-center gap-2 pt-2">
+              <button
+                type="button"
+                onClick={handleAddBlankItem}
+                className="px-4 py-2 bg-[#044E54] hover:bg-[#033B40] text-white text-xs font-bold rounded-lg shadow-xs transition-colors"
+              >
+                Open Product Catalog
+              </button>
+              <button
+                type="button"
+                onClick={handleAddCustomItem}
+                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-lg transition-colors"
+              >
+                Add Manual Item
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-slate-200 text-left text-xs">
+              <thead className="bg-[#F8FAFC] text-slate-700 font-bold uppercase tracking-wider text-[11px]">
+                <tr>
+                  <th className="px-3 py-3 w-8 text-center text-slate-400">#</th>
+                  <th className="px-3 py-3 min-w-[240px]">Product / Material Name</th>
+                  {/* USER REQUEST: Dedicated new column right after Item Name */}
+                  <th className="px-3 py-3 min-w-[160px] text-[#044E54]">Details / Remarks</th>
+                  <th className="px-2 py-3 w-20 text-center">HSN/SAC</th>
+                  <th className="px-2 py-3 w-16 text-center">Qty</th>
+                  <th className="px-2 py-3 w-16 text-center">Unit</th>
+                  <th className="px-3 py-3 w-28 text-right">Rate (₹)</th>
+                  <th className="px-2 py-3 w-14 text-center">Disc%</th>
+                  <th className="px-2 py-3 w-16 text-center">GST%</th>
+                  <th className="px-3 py-3 w-28 text-right">Amount (₹)</th>
+                  <th className="px-2 py-3 w-10 text-center"></th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 bg-white">
+                {calculatedItems.map((item, index) => (
+                  <tr key={item.id || index} className="hover:bg-teal-50/20 transition-colors group">
+                    {/* S.No */}
+                    <td className="px-3 py-3 text-slate-400 font-mono text-[10px] text-center">
+                      {index + 1}
+                    </td>
+
+                    {/* Column 2: Product Name */}
+                    <td className="px-3 py-3 space-y-1">
+                      {!item.product_id ? (
+                        <input
+                          type="text"
+                          value={item.product_name}
+                          onChange={(e) => handleItemChange(index, 'product_name', e.target.value)}
+                          placeholder="Product description..."
+                          className="w-full text-xs font-semibold p-1.5 bg-amber-50/60 border border-amber-300 rounded-md focus:bg-white text-slate-900"
+                        />
+                      ) : (
+                        <div className="flex items-center gap-1.5">
+                          <span className="font-semibold text-slate-900 leading-snug">
+                            {item.product_name}
+                          </span>
+                          {item.matchStatus && (
+                            <MatchStatusBadge status={item.matchStatus} />
+                          )}
+                        </div>
+                      )}
+
+                      {/* Candidates dropdown if multiple matches */}
+                      {item.candidates && item.candidates.length > 0 && item.matchStatus === 'Multiple Possible Matches' && (
+                        <div className="mt-1 p-2 bg-amber-50 border border-amber-200 rounded-md text-[10px] space-y-1">
+                          <span className="font-semibold text-amber-900 block">Multiple matches found. Select correct pack:</span>
+                          {item.candidates.map(cand => (
+                            <button
+                              key={cand.id}
+                              type="button"
+                              onClick={() => handleProductSelected(cand)}
+                              className="block text-left text-[#044E54] hover:underline font-medium"
+                            >
+                              • {cand.product_name} ({cand.unit} @ {formatINR(cand.sales_rate)})
+                            </button>
+                          ))}
+                        </div>
+                      )}
+
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => handleOpenChangeProduct(index)}
+                          className="text-[10px] text-[#044E54] hover:text-[#033B40] font-semibold hover:underline"
+                        >
+                          {item.product_id ? 'Change catalog item...' : 'Link to price list catalog...'}
+                        </button>
+                        {item.is_override_price && (
+                          <span className="text-[9px] bg-amber-100 text-amber-800 font-semibold px-1.5 py-0.2 rounded">
+                            Adjusted Price
+                          </span>
+                        )}
+                      </div>
+                    </td>
+
+                    {/* Column 3 (NEW COLUMN): Details / Remarks / Specifications */}
+                    <td className="px-3 py-3">
+                      <input
+                        type="text"
+                        value={item.specification || ''}
+                        onChange={(e) => handleItemChange(index, 'specification', e.target.value)}
+                        placeholder="e.g. 20LT Pack, Glossy, Batch A"
+                        className="w-full text-xs p-1.5 bg-slate-50 border border-slate-200 rounded-md text-slate-700 focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#044E54]"
+                      />
+                    </td>
+
+                    {/* Column 4: HSN/SAC */}
+                    <td className="px-2 py-3 text-center">
+                      <input
+                        type="text"
+                        value={item.hsn_code || ''}
+                        onChange={(e) => handleItemChange(index, 'hsn_code', e.target.value)}
+                        placeholder="HSN"
+                        className="w-16 text-center text-xs p-1 rounded-md border border-slate-200 bg-slate-50 font-mono text-slate-600"
+                      />
+                    </td>
+
+                    {/* Column 5: Qty */}
+                    <td className="px-2 py-3 text-center">
+                      <input
+                        type="number"
+                        min="0.01"
+                        step="any"
+                        value={item.quantity}
+                        onChange={(e) => handleItemChange(index, 'quantity', parseFloat(e.target.value) || 0)}
+                        className={`w-14 text-center text-xs p-1.5 rounded-md border font-bold ${
+                          item.isQuantityMissing
+                            ? 'border-amber-400 bg-amber-50 text-amber-900'
+                            : 'border-slate-200 bg-slate-50 focus:bg-white text-slate-900'
+                        }`}
+                      />
+                    </td>
+
+                    {/* Column 6: Unit */}
+                    <td className="px-2 py-3 text-center">
+                      <input
+                        type="text"
+                        value={item.unit || 'Nos'}
+                        onChange={(e) => handleItemChange(index, 'unit', e.target.value)}
+                        className="w-14 text-center text-xs p-1.5 rounded-md border border-slate-200 bg-slate-50 focus:bg-white text-slate-700 font-medium"
+                      />
+                    </td>
+
+                    {/* Column 7: Unit Price (Manual adjustment enabled) */}
+                    <td className="px-3 py-3 text-right">
+                      <input
+                        type="number"
+                        min="0"
+                        step="any"
+                        value={item.unit_price}
+                        onChange={(e) => handleItemChange(index, 'unit_price', parseFloat(e.target.value) || 0)}
+                        placeholder="0.00"
+                        className={`w-24 text-right text-xs p-1.5 rounded-md border font-mono font-bold ${
+                          !item.unit_price || item.unit_price <= 0
+                            ? 'border-rose-300 bg-rose-50 text-rose-700'
+                            : 'border-slate-200 bg-slate-50 text-slate-900 focus:bg-white'
+                        }`}
+                        title="Manual rate adjustment allowed"
+                      />
+                    </td>
+
+                    {/* Column 8: Discount % */}
+                    <td className="px-2 py-3 text-center">
+                      <input
+                        type="number"
+                        min="0"
+                        max="100"
+                        value={item.discount_percent || 0}
+                        onChange={(e) => handleItemChange(index, 'discount_percent', parseFloat(e.target.value) || 0)}
+                        className="w-12 text-center text-xs p-1.5 rounded-md border border-slate-200 bg-slate-50 focus:bg-white"
+                      />
+                    </td>
+
+                    {/* Column 9: GST % */}
+                    <td className="px-2 py-3 text-center">
+                      <select
+                        value={item.gst_rate !== undefined ? item.gst_rate : 18}
+                        onChange={(e) => handleItemChange(index, 'gst_rate', parseFloat(e.target.value))}
+                        className="text-xs p-1 rounded-md border border-slate-200 bg-slate-50 focus:bg-white font-medium"
+                      >
+                        <option value={0}>0%</option>
+                        <option value={5}>5%</option>
+                        <option value={12}>12%</option>
+                        <option value={18}>18%</option>
+                        <option value={28}>28%</option>
+                      </select>
+                    </td>
+
+                    {/* Column 10: Total Line Amount */}
+                    <td className="px-3 py-3 text-right font-bold text-slate-900 font-mono text-xs">
+                      {formatINR(item.lineTotal)}
+                    </td>
+
+                    {/* Column 11: Remove action */}
+                    <td className="px-2 py-3 text-center">
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveItem(index)}
+                        className="text-slate-400 hover:text-rose-600 p-1 rounded transition-colors"
+                        title="Remove Item"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {/* Bottom Table Utility Bar */}
+        {items.length > 0 && (
+          <div className="px-5 py-3 bg-slate-50 border-t border-slate-200 flex flex-wrap items-center justify-between gap-3 text-xs">
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={handleAddBlankItem}
+                className="text-xs font-semibold text-[#044E54] hover:underline flex items-center gap-1"
+              >
+                <Plus className="w-3 h-3" />
+                Add More Items
+              </button>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                if (window.confirm('Are you sure you want to clear all line items?')) {
+                  setItems([]);
+                  setIsStalePdf(true);
+                }
+              }}
+              className="text-xs text-rose-600 hover:text-rose-800 font-medium"
+            >
+              Clear All Items
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* ========================================================================= */}
+      {/* 5. COMMERCIAL TERMS & FINANCIAL SUMMARY (2-COLUMN ZOHO-INSPIRED LAYOUT)    */}
+      {/* ========================================================================= */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+        {/* Left (6 Cols): Terms, Bank Details & Notes */}
+        <div className="lg:col-span-6 space-y-5">
+          {/* Official Bank Account & GPay Card */}
+          <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-xs space-y-3">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+              <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-2">
+                <CreditCard className="w-4 h-4 text-[#044E54]" />
+                Official Bank & Payment Information
+              </h3>
+              <span className="text-[10px] text-emerald-700 font-semibold bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                Verified Bank Profile
+              </span>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3 text-xs">
+              <div className="p-2.5 bg-slate-50 rounded-lg border border-slate-200/80 space-y-0.5">
+                <span className="text-[10px] text-slate-400 uppercase font-bold block">Account Holder</span>
+                <span className="font-bold text-slate-900 block">Udhayam Agencies</span>
+                <span className="text-[11px] text-slate-600 block">Indian Bank • Perundurai</span>
               </div>
-              <div className="flex items-center gap-1.5">
-                <button
-                  type="button"
-                  onClick={handleAddCustomItem}
-                  className="inline-flex items-center gap-1 px-2.5 py-1 bg-white text-slate-700 hover:bg-slate-50 border border-slate-200 text-[11px] font-semibold rounded shadow-2xs transition-colors"
-                >
-                  <Plus className="w-3 h-3 text-blue-600" />
-                  + Custom Item
-                </button>
-                <button
-                  type="button"
-                  onClick={handleAddBlankItem}
-                  className="inline-flex items-center gap-1 px-2.5 py-1 bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 text-[11px] font-semibold rounded transition-colors"
-                >
-                  <Plus className="w-3 h-3" />
-                  + From Catalog
-                </button>
+
+              <div className="p-2.5 bg-slate-50 rounded-lg border border-slate-200/80 space-y-0.5">
+                <span className="text-[10px] text-slate-400 uppercase font-bold block">Account Number & IFSC</span>
+                <span className="font-mono font-bold text-slate-900 block">6659330152</span>
+                <span className="text-[11px] font-mono text-slate-600 block">IFSC: IDIB000P034</span>
               </div>
             </div>
 
-            {items.length === 0 ? (
-              <div className="p-8 text-center text-slate-500 text-xs space-y-2">
-                <p className="font-medium text-slate-700">No items in quotation</p>
-                <p className="text-slate-400 text-[11px]">
-                  Parse a WhatsApp message on the left or click "+ From Catalog" to add products.
-                </p>
+            <div className="p-2.5 bg-emerald-50/60 rounded-lg border border-emerald-200/80 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Smartphone className="w-4 h-4 text-emerald-700" />
+                <span className="font-bold text-emerald-900 text-xs">GPay / PhonePe:</span>
+                <span className="font-mono font-bold text-emerald-950 text-xs">+91 97156 22499</span>
               </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-slate-200 text-left text-xs">
-                  <thead className="bg-slate-50 text-slate-600 font-semibold uppercase tracking-wider">
-                    <tr>
-                      <th className="px-2.5 py-2 w-6">#</th>
-                      <th className="px-2.5 py-2">Product Description</th>
-                      <th className="px-2 py-2 w-14 text-center">Qty</th>
-                      <th className="px-2 py-2 w-14 text-center">Unit</th>
-                      <th className="px-2 py-2 w-24 text-right">Rate (₹)</th>
-                      <th className="px-2 py-2 w-12 text-center">Disc%</th>
-                      <th className="px-2 py-2 w-12 text-center">GST%</th>
-                      <th className="px-2.5 py-2 w-20 text-right">Total</th>
-                      <th className="px-2 py-2 w-8 text-center"></th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-200 bg-white">
-                    {calculatedItems.map((item, index) => (
-                      <tr key={item.id || index} className="hover:bg-slate-50/60 transition-colors">
-                        <td className="px-2.5 py-2 text-slate-400 font-mono text-[10px]">
-                          {index + 1}
-                        </td>
-
-                        <td className="px-2.5 py-2 space-y-1">
-                          {!item.product_id ? (
-                            <div className="space-y-1">
-                              <input
-                                type="text"
-                                value={item.product_name}
-                                onChange={(e) => handleItemChange(index, 'product_name', e.target.value)}
-                                placeholder="Custom product name..."
-                                className="w-full text-xs font-semibold p-1 bg-amber-50/50 border border-amber-300 rounded focus:bg-white text-slate-900"
-                              />
-                              <input
-                                type="text"
-                                value={item.specification || ''}
-                                onChange={(e) => handleItemChange(index, 'specification', e.target.value)}
-                                placeholder="Specification..."
-                                className="w-full text-[10px] p-0.5 bg-slate-50 border border-slate-200 rounded text-slate-600 focus:bg-white"
-                              />
-                            </div>
-                          ) : (
-                            <>
-                              <div className="flex items-center gap-1.5">
-                                <span className="font-semibold text-slate-900 leading-tight">
-                                  {item.product_name}
-                                </span>
-                                {item.matchStatus && (
-                                  <MatchStatusBadge status={item.matchStatus} />
-                                )}
-                              </div>
-                              {item.specification && (
-                                <div className="text-[10px] text-slate-500 leading-tight">
-                                  {item.specification}
-                                </div>
-                              )}
-                              {item.hsn_code && (
-                                <div className="text-[9px] text-slate-400 font-mono">
-                                  HSN: {item.hsn_code}
-                                </div>
-                              )}
-                            </>
-                          )}
-
-                          {item.candidates && item.candidates.length > 0 && item.matchStatus === 'Multiple Possible Matches' && (
-                            <div className="mt-1 p-1.5 bg-amber-50 border border-amber-200 rounded text-[10px] space-y-0.5">
-                              <span className="font-semibold text-amber-900 block">Choose intended match:</span>
-                              {item.candidates.map(cand => (
-                                <button
-                                  key={cand.id}
-                                  type="button"
-                                  onClick={() => handleProductSelected(cand)}
-                                  className="block text-left text-blue-700 hover:underline"
-                                >
-                                  • {cand.product_name} ({cand.unit} @ {formatINR(cand.sales_rate)})
-                                </button>
-                              ))}
-                            </div>
-                          )}
-
-                          <button
-                            type="button"
-                            onClick={() => handleOpenChangeProduct(index)}
-                            className="text-[10px] text-blue-600 hover:text-blue-800 font-medium block"
-                          >
-                            {item.product_id ? 'Change catalog product...' : 'Link to catalog...'}
-                          </button>
-                        </td>
-
-                        {/* Qty */}
-                        <td className="px-2 py-2 text-center">
-                          <input
-                            type="number"
-                            min="0.01"
-                            step="any"
-                            value={item.quantity}
-                            onChange={(e) => handleItemChange(index, 'quantity', parseFloat(e.target.value) || 0)}
-                            className={`w-12 text-center text-xs p-1 rounded border ${
-                              item.isQuantityMissing
-                                ? 'border-amber-400 bg-amber-50 text-amber-900 font-bold'
-                                : 'border-slate-200 bg-slate-50 focus:bg-white'
-                            }`}
-                          />
-                        </td>
-
-                        {/* Unit */}
-                        <td className="px-2 py-2 text-center">
-                          <input
-                            type="text"
-                            value={item.unit || 'Nos'}
-                            onChange={(e) => handleItemChange(index, 'unit', e.target.value)}
-                            className="w-12 text-center text-xs p-1 rounded border border-slate-200 bg-slate-50 focus:bg-white"
-                          />
-                        </td>
-
-                        {/* Unit Price (Editable with manual adjustment support) */}
-                        <td className="px-2 py-2 text-right">
-                          <input
-                            type="number"
-                            min="0"
-                            step="any"
-                            value={item.unit_price}
-                            onChange={(e) => handleItemChange(index, 'unit_price', parseFloat(e.target.value) || 0)}
-                            placeholder="0.00"
-                            className={`w-20 text-right text-xs p-1 rounded border font-mono font-medium ${
-                              !item.unit_price || item.unit_price <= 0
-                                ? 'border-rose-300 bg-rose-50 text-rose-700'
-                                : 'border-slate-200 bg-slate-50 text-slate-900'
-                            }`}
-                            title="Edit price (manual adjustment allowed)"
-                          />
-                        </td>
-
-                        {/* Disc% */}
-                        <td className="px-2 py-2 text-center">
-                          <input
-                            type="number"
-                            min="0"
-                            max="100"
-                            value={item.discount_percent || 0}
-                            onChange={(e) => handleItemChange(index, 'discount_percent', parseFloat(e.target.value) || 0)}
-                            className="w-10 text-center text-xs p-1 rounded border border-slate-200 bg-slate-50 focus:bg-white"
-                          />
-                        </td>
-
-                        {/* GST% */}
-                        <td className="px-2 py-2 text-center">
-                          <select
-                            value={item.gst_rate !== undefined ? item.gst_rate : 18}
-                            onChange={(e) => handleItemChange(index, 'gst_rate', parseFloat(e.target.value))}
-                            className="text-[11px] p-1 rounded border border-slate-200 bg-slate-50 focus:bg-white"
-                          >
-                            <option value={0}>0%</option>
-                            <option value={5}>5%</option>
-                            <option value={12}>12%</option>
-                            <option value={18}>18%</option>
-                            <option value={28}>28%</option>
-                          </select>
-                        </td>
-
-                        {/* Total */}
-                        <td className="px-2.5 py-2 text-right font-bold text-slate-900 font-mono text-xs">
-                          {formatINR(item.lineTotal)}
-                        </td>
-
-                        {/* Trash */}
-                        <td className="px-2 py-2 text-center">
-                          <button
-                            type="button"
-                            onClick={() => handleRemoveItem(index)}
-                            className="text-slate-400 hover:text-rose-600 p-0.5 transition-colors"
-                            title="Remove"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
+              <span className="text-[10px] text-emerald-700 font-semibold">MS Udhayam Agencies</span>
+            </div>
           </div>
 
-          {/* Quotation Notes & Validity */}
-          <div className="bg-white p-4 rounded-lg border border-slate-200 shadow-2xs space-y-3">
-            <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
-              Terms & Notes
-            </label>
+          {/* Terms & Conditions Box */}
+          <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-xs space-y-3">
+            <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider">
+              Commercial Terms & Notes
+            </h3>
             <textarea
-              rows={3}
+              rows={4}
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
-              className="w-full text-xs bg-slate-50 border border-slate-200 rounded p-2 text-slate-800 focus:bg-white"
+              className="w-full text-xs bg-slate-50 border border-slate-200 rounded-lg p-3 text-slate-800 focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#044E54] leading-relaxed"
             />
             <div className="grid grid-cols-2 gap-3 text-xs">
               <div>
-                <span className="text-slate-500 block mb-0.5 text-[11px]">Validity (Days)</span>
-                <input
-                  type="number"
-                  value={validityDays}
-                  onChange={(e) => setValidityDays(Number(e.target.value))}
-                  className="w-full p-1.5 border border-slate-200 rounded text-xs"
-                />
-              </div>
-              <div>
-                <span className="text-slate-500 block mb-0.5 text-[11px]">Payment Terms</span>
+                <span className="text-slate-500 block mb-1 text-[11px] font-medium">Payment Terms</span>
                 <input
                   type="text"
                   value={paymentTerms}
                   onChange={(e) => setPaymentTerms(e.target.value)}
-                  className="w-full p-1.5 border border-slate-200 rounded text-xs"
+                  className="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg text-xs"
+                />
+              </div>
+              <div>
+                <span className="text-slate-500 block mb-1 text-[11px] font-medium">Delivery Terms</span>
+                <input
+                  type="text"
+                  value={deliveryTerms}
+                  onChange={(e) => setDeliveryTerms(e.target.value)}
+                  className="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg text-xs"
                 />
               </div>
             </div>
           </div>
         </div>
 
-        {/* ========================================================= */}
-        {/* PANEL 3 (RIGHT 4 COLS): Financials & Live PDF Preview     */}
-        {/* ========================================================= */}
-        <div className="lg:col-span-4 space-y-5">
-          {/* Financial Totals Card */}
-          <div className="bg-white p-4 rounded-lg border border-slate-200 shadow-2xs space-y-2 text-xs">
-            <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider border-b border-slate-100 pb-2">
-              Financial Summary
-            </h3>
-
-            <div className="flex justify-between py-1 text-slate-600">
-              <span>Subtotal (Gross):</span>
-              <span className="font-medium text-slate-900">{formatINR(subtotal)}</span>
-            </div>
-
-            {discountTotal > 0 && (
-              <div className="flex justify-between py-1 text-emerald-700">
-                <span>Total Discount:</span>
-                <span className="font-medium">-{formatINR(discountTotal)}</span>
-              </div>
-            )}
-
-            {documentType === 'gst_quotation' && (
-              <>
-                <div className="flex justify-between py-1 text-slate-600">
-                  <span>Taxable Value:</span>
-                  <span className="font-medium">{formatINR(taxableAmount)}</span>
-                </div>
-                <div className="flex justify-between py-1 text-slate-600">
-                  <span>GST Tax (CGST + SGST):</span>
-                  <span className="font-medium">{formatINR(taxTotal)}</span>
-                </div>
-              </>
-            )}
-
-            <div className="flex items-center justify-between py-1 text-slate-600">
-              <span>Delivery Charges:</span>
-              <input
-                type="number"
-                min="0"
-                step="any"
-                value={deliveryCharges}
-                onChange={(e) => setDeliveryCharges(parseFloat(e.target.value) || 0)}
-                className="w-20 text-right p-1 border border-slate-200 rounded text-xs font-mono"
-              />
-            </div>
-
-            <div className="flex items-center justify-between py-1 text-slate-600">
-              <span>Other Charges:</span>
-              <input
-                type="number"
-                min="0"
-                step="any"
-                value={otherCharges}
-                onChange={(e) => setOtherCharges(parseFloat(e.target.value) || 0)}
-                className="w-20 text-right p-1 border border-slate-200 rounded text-xs font-mono"
-              />
-            </div>
-
-            {/* Grand Total */}
-            <div className="pt-2 border-t border-slate-200 flex justify-between items-center">
-              <span className="text-sm font-bold text-slate-900">Grand Total:</span>
-              <span className="text-xl font-bold text-blue-600 font-mono">
-                {formatINR(grandTotal)}
+        {/* Right (6 Cols): Zoho-Style Financial Summary Card */}
+        <div className="lg:col-span-6 space-y-5">
+          <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-xs space-y-3 text-xs">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
+                Financial Summary & Tax Computation
+              </h3>
+              <span className="text-[11px] font-bold text-[#044E54]">
+                {documentType === 'gst_quotation' ? 'Tax Invoice Model' : 'Commercial Estimate Model'}
               </span>
             </div>
-          </div>
 
-          {/* Embedded Live PDF Preview Iframe */}
-          <div className="bg-white border border-slate-200 rounded-lg shadow-2xs overflow-hidden space-y-2">
-            <div className="px-4 py-2.5 bg-slate-50 border-b border-slate-200 flex items-center justify-between text-xs">
-              <span className="font-bold text-slate-800 flex items-center gap-1.5">
-                <FileText className="w-3.5 h-3.5 text-blue-600" />
-                Live PDF Document ({paperSize})
-              </span>
-              <div className="flex items-center gap-1.5">
-                <button
-                  type="button"
-                  onClick={handleRegeneratePdf}
-                  className="p-1 hover:bg-slate-200 rounded text-slate-600 transition-colors"
-                  title="Regenerate PDF"
-                >
-                  <RefreshCw className="w-3.5 h-3.5" />
-                </button>
-                {quotationId && (
-                  <a
-                    href={api.getPdfUrl(quotationId, false) + `&refresh=true&t=${pdfRefreshKey}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="p-1 hover:bg-slate-200 rounded text-slate-600 transition-colors"
-                    title="Open Full Window"
-                  >
-                    <ExternalLink className="w-3.5 h-3.5" />
-                  </a>
-                )}
+            <div className="space-y-2.5 text-xs text-slate-600">
+              {/* Gross Subtotal */}
+              <div className="flex justify-between py-1 border-b border-slate-100">
+                <span>Subtotal (Gross Item Value):</span>
+                <span className="font-mono font-semibold text-slate-800">{formatINR(subtotal)}</span>
               </div>
-            </div>
 
-            <div className="bg-slate-100 p-2 min-h-[460px] flex items-center justify-center">
-              {quotationId ? (
-                <iframe
-                  key={pdfRefreshKey}
-                  src={api.getPdfUrl(quotationId, false) + `&refresh=true&t=${pdfRefreshKey}`}
-                  title="Quotation PDF Live Preview"
-                  className="w-full h-[480px] bg-white rounded border border-slate-200 shadow-inner"
-                />
-              ) : (
-                <div className="text-center p-6 text-xs text-slate-500 space-y-2">
-                  <FileText className="w-8 h-8 text-slate-300 mx-auto" />
-                  <p>Save draft to generate live PDF preview</p>
+              {/* Discount */}
+              {discountTotal > 0 && (
+                <div className="flex justify-between py-1 border-b border-slate-100 text-emerald-700">
+                  <span>Total Discount:</span>
+                  <span className="font-mono font-semibold">-{formatINR(discountTotal)}</span>
                 </div>
               )}
+
+              {/* Taxable Amount */}
+              {documentType === 'gst_quotation' && (
+                <>
+                  <div className="flex justify-between py-1 border-b border-slate-100">
+                    <span>Taxable Amount (Net of GST):</span>
+                    <span className="font-mono font-semibold text-slate-800">{formatINR(taxableAmount)}</span>
+                  </div>
+
+                  <div className="flex justify-between py-1 border-b border-slate-100">
+                    <span>Total GST Tax Component:</span>
+                    <span className="font-mono font-semibold text-slate-800">{formatINR(taxTotal)}</span>
+                  </div>
+                </>
+              )}
+
+              {/* Delivery / Freight Charges */}
+              <div className="flex justify-between items-center py-1 border-b border-slate-100">
+                <span>Delivery / Freight Charges (+):</span>
+                <input
+                  type="number"
+                  min="0"
+                  step="any"
+                  value={deliveryCharges}
+                  onChange={(e) => {
+                    setDeliveryCharges(parseFloat(e.target.value) || 0);
+                    setIsStalePdf(true);
+                  }}
+                  className="w-24 text-right text-xs p-1 border border-slate-200 rounded font-mono"
+                />
+              </div>
+
+              {/* Other Charges */}
+              <div className="flex justify-between items-center py-1 border-b border-slate-100">
+                <span>Other / Loading Charges (+):</span>
+                <input
+                  type="number"
+                  min="0"
+                  step="any"
+                  value={otherCharges}
+                  onChange={(e) => {
+                    setOtherCharges(parseFloat(e.target.value) || 0);
+                    setIsStalePdf(true);
+                  }}
+                  className="w-24 text-right text-xs p-1 border border-slate-200 rounded font-mono"
+                />
+              </div>
+
+              {/* Grand Total */}
+              <div className="pt-3 border-t-2 border-slate-200 flex justify-between items-center">
+                <div>
+                  <span className="text-sm font-bold text-slate-900 block">Grand Total</span>
+                  <span className="text-[10px] text-slate-400 font-medium">All taxes & charges inclusive</span>
+                </div>
+                <div className="text-right">
+                  <span className="text-2xl font-black text-[#044E54] font-mono tracking-tight block">
+                    {formatINR(grandTotal)}
+                  </span>
+                </div>
+              </div>
             </div>
 
-            {/* Quick PDF Actions Bar */}
-            {quotationId && (
-              <div className="p-3 bg-white border-t border-slate-100 flex items-center justify-between gap-2 text-xs">
-                <a
-                  href={api.getPdfUrl(quotationId, true) + `&t=${pdfRefreshKey}`}
-                  download={`${quotationNumber || 'Quotation'}.pdf`}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded transition-colors text-[11px]"
-                >
-                  <Download className="w-3 h-3" />
-                  Download PDF
-                </a>
-                <button
-                  type="button"
-                  onClick={handleOpenWhatsAppShare}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded transition-colors text-[11px] shadow-2xs"
-                >
-                  <Send className="w-3 h-3" />
-                  Share PDF
-                </button>
-              </div>
-            )}
+            {/* Quick Actions inside Summary */}
+            <div className="pt-4 grid grid-cols-2 gap-3 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setPdfModalOpen(true)}
+                className="py-2.5 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-bold transition-colors flex items-center justify-center gap-1.5"
+              >
+                <Eye className="w-3.5 h-3.5" />
+                <span>View PDF Document</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={handleFinalizeQuotation}
+                disabled={finalizeLoading || saveLoading}
+                className="py-2.5 px-3 bg-[#044E54] hover:bg-[#033B40] text-white rounded-lg text-xs font-bold transition-colors flex items-center justify-center gap-1.5 shadow-xs disabled:opacity-50"
+              >
+                {finalizeLoading ? (
+                  <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <CheckCircle2 className="w-3.5 h-3.5 text-[#72B01D]" />
+                )}
+                <span>Approve & Finalize</span>
+              </button>
+            </div>
           </div>
         </div>
       </div>
+
+      {/* ========================================================================= */}
+      {/* 6. MODALS: PRODUCT SELECTOR, PDF PREVIEW, WHATSAPP/EMAIL SHARE            */}
+      {/* ========================================================================= */}
 
       {/* Product Selector Modal */}
       <ProductSelectorModal
@@ -1485,155 +1749,267 @@ export function NewQuotation({
         onSelectProduct={handleProductSelected}
       />
 
-      {/* Share Modal (Official WhatsApp Cloud API, Desktop Web & Email) */}
+      {/* High-Resolution Live PDF Preview Modal */}
       <Modal
-        isOpen={whatsappModalOpen}
-        onClose={() => setWhatsappModalOpen(false)}
-        title="Share Quotation (Official WhatsApp & Email)"
-        maxWidth="max-w-xl"
+        isOpen={pdfModalOpen}
+        onClose={() => setPdfModalOpen(false)}
+        title={`Live Document Preview • ${quotationNumber || 'Draft'} (${paperSize})`}
+        maxWidth="max-w-4xl"
       >
-        <div className="space-y-4 text-xs">
-          {/* Quick Header */}
-          <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg flex flex-wrap items-center justify-between gap-2">
-            <div>
-              <span className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider">Quote #</span>
-              <span className="font-bold text-slate-800 text-sm">{quotationNumber || 'New Quote'}</span>
+        <div className="space-y-4">
+          <div className="flex items-center justify-between bg-slate-50 p-2.5 rounded-lg border border-slate-200 text-xs">
+            <div className="flex items-center gap-2">
+              <FileText className="w-4 h-4 text-[#044E54]" />
+              <span className="font-semibold text-slate-800">
+                {quotationNumber || 'Quotation Draft'} • {paperSize} Layout
+              </span>
             </div>
-            <div>
-              <span className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider">Customer</span>
-              <span className="font-semibold text-slate-700">{customerName || 'Customer'} {customerPhone ? `(${customerPhone})` : ''}</span>
-            </div>
-            <div className="text-right">
-              <span className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider">Total</span>
-              <span className="font-bold text-emerald-700 text-sm">{formatINR(grandTotal)}</span>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={handleRegeneratePdf}
+                className="p-1.5 bg-white border border-slate-200 rounded text-slate-700 hover:bg-slate-50 transition-colors flex items-center gap-1 font-medium"
+                title="Regenerate PDF"
+              >
+                <RefreshCw className="w-3.5 h-3.5" />
+                <span>Sync Layout</span>
+              </button>
+              {quotationId && (
+                <>
+                  <a
+                    href={api.getPdfUrl(quotationId, true) + `&t=${pdfRefreshKey}`}
+                    download={`${quotationNumber || 'Quotation'}_Udhayam.pdf`}
+                    className="p-1.5 bg-white border border-slate-200 rounded text-slate-700 hover:bg-slate-50 transition-colors flex items-center gap-1 font-medium"
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                    <span>Download</span>
+                  </a>
+                  <a
+                    href={api.getPdfUrl(quotationId, false) + `&refresh=true&t=${pdfRefreshKey}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="p-1.5 bg-[#044E54] text-white rounded hover:bg-[#033B40] transition-colors flex items-center gap-1 font-medium"
+                  >
+                    <ExternalLink className="w-3.5 h-3.5" />
+                    <span>Open in New Tab</span>
+                  </a>
+                </>
+              )}
             </div>
           </div>
 
-          {/* Share Method Switcher */}
+          <div className="bg-slate-200/70 p-2 rounded-xl flex items-center justify-center min-h-[520px]">
+            {quotationId ? (
+              <iframe
+                key={pdfRefreshKey}
+                src={api.getPdfUrl(quotationId, false) + `&refresh=true&t=${pdfRefreshKey}`}
+                title="Quotation PDF Live Preview"
+                className="w-full h-[600px] bg-white rounded-lg shadow-md border border-slate-300"
+              />
+            ) : (
+              <div className="text-center p-8 text-xs text-slate-500 space-y-2">
+                <FileText className="w-10 h-10 text-slate-300 mx-auto" />
+                <p>Save draft to generate live PDF preview.</p>
+              </div>
+            )}
+          </div>
+        </div>
+      </Modal>
+
+      {/* Complete WhatsApp & Email Delivery Modal */}
+      <Modal
+        isOpen={whatsappModalOpen}
+        onClose={() => setWhatsappModalOpen(false)}
+        title="Share Quotation (WhatsApp & Email Delivery)"
+        maxWidth="max-w-xl"
+      >
+        <div className="space-y-4 text-xs">
+          {/* Header Summary Box */}
+          <div className="p-3.5 bg-teal-50/50 border border-teal-100 rounded-xl flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <span className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider">Quotation Ref</span>
+              <span className="font-bold text-[#044E54] text-sm">{quotationNumber || 'New Quote'}</span>
+            </div>
+            <div>
+              <span className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider">Recipient</span>
+              <span className="font-semibold text-slate-800">{customerName || 'Valued Customer'} {customerPhone ? `(${customerPhone})` : ''}</span>
+            </div>
+            <div className="text-right">
+              <span className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider">Grand Total</span>
+              <span className="font-bold text-[#72B01D] text-sm">{formatINR(grandTotal)}</span>
+            </div>
+          </div>
+
+          {/* Delivery Channel Switcher */}
           <div className="flex border-b border-slate-200">
             <button
               type="button"
               onClick={() => setShareTab('whatsapp')}
-              className={`flex-1 py-2 text-center font-bold border-b-2 transition-colors flex items-center justify-center gap-2 ${
+              className={`flex-1 py-2.5 text-center font-bold border-b-2 transition-colors flex items-center justify-center gap-2 ${
                 shareTab === 'whatsapp'
-                  ? 'border-emerald-600 text-emerald-700'
+                  ? 'border-[#044E54] text-[#044E54]'
                   : 'border-transparent text-slate-500 hover:text-slate-800'
               }`}
             >
-              <Smartphone className="w-4 h-4 text-emerald-600" />
-              WhatsApp Share
+              <Smartphone className="w-4 h-4 text-[#72B01D]" />
+              <span>WhatsApp Delivery</span>
             </button>
             <button
               type="button"
               onClick={() => setShareTab('email')}
-              className={`flex-1 py-2 text-center font-bold border-b-2 transition-colors flex items-center justify-center gap-2 ${
+              className={`flex-1 py-2.5 text-center font-bold border-b-2 transition-colors flex items-center justify-center gap-2 ${
                 shareTab === 'email'
-                  ? 'border-blue-600 text-blue-700'
+                  ? 'border-[#044E54] text-[#044E54]'
                   : 'border-transparent text-slate-500 hover:text-slate-800'
               }`}
             >
-              <Mail className="w-4 h-4 text-blue-600" />
-              Email PDF
+              <Mail className="w-4 h-4 text-teal-600" />
+              <span>Email PDF</span>
             </button>
           </div>
 
+          {/* WhatsApp Share Flow */}
           {shareTab === 'whatsapp' && (
             <div className="space-y-4">
               {cloudWhatsAppSuccess && (
-                <div className="p-3 bg-emerald-50 border border-emerald-200 rounded text-xs text-emerald-800 flex items-center gap-2">
+                <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-lg text-xs text-emerald-800 flex items-center gap-2">
                   <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
                   <span>{cloudWhatsAppSuccess}</span>
                 </div>
               )}
 
               {cloudWhatsAppError && (
-                <div className="p-3 bg-rose-50 border border-rose-200 rounded text-xs text-rose-800 flex items-center gap-2">
+                <div className="p-3 bg-rose-50 border border-rose-200 rounded-lg text-xs text-rose-800 flex items-center gap-2">
                   <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
                   <span>{cloudWhatsAppError}</span>
                 </div>
               )}
 
-              {/* Message Preview */}
+              {/* 3-Step Guided Delivery Experience */}
+              <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200 space-y-2">
+                <span className="text-[11px] uppercase font-bold text-slate-700 tracking-wider block">
+                  How WhatsApp Sharing Works:
+                </span>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-[11px]">
+                  <div className="p-2 bg-white rounded-lg border border-slate-200/80">
+                    <span className="font-bold text-[#044E54] block">1. PDF Download</span>
+                    <span className="text-slate-500 text-[10px]">Auto-downloaded to your computer</span>
+                  </div>
+                  <div className="p-2 bg-white rounded-lg border border-slate-200/80">
+                    <span className="font-bold text-[#044E54] block">2. Text Copied</span>
+                    <span className="text-slate-500 text-[10px]">Welcome message copied to clipboard</span>
+                  </div>
+                  <div className="p-2 bg-white rounded-lg border border-slate-200/80">
+                    <span className="font-bold text-[#044E54] block">3. Drag & Send</span>
+                    <span className="text-slate-500 text-[10px]">Paste text and drag PDF into chat</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Message Content Preview */}
               <div>
-                <div className="flex items-center justify-between mb-1">
-                  <span className="font-semibold text-slate-700">Message Text:</span>
+                <div className="flex items-center justify-between mb-1.5">
+                  <span className="font-bold text-slate-700 text-[11px]">Welcome & Quotation Message:</span>
                   <button
                     type="button"
                     onClick={handleCopyMessage}
-                    className="text-blue-600 hover:text-blue-800 font-medium flex items-center gap-1"
+                    className="text-[#044E54] hover:text-[#033B40] font-semibold flex items-center gap-1"
                   >
-                    {copiedMessage ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3" />}
-                    <span>{copiedMessage ? 'Copied!' : 'Copy Text'}</span>
+                    {copiedMessage ? <Check className="w-3.5 h-3.5 text-[#72B01D]" /> : <Copy className="w-3.5 h-3.5" />}
+                    <span>{copiedMessage ? 'Copied to Clipboard!' : 'Copy Message'}</span>
                   </button>
                 </div>
-                <pre className="p-3 bg-slate-50 border border-slate-200 rounded-md text-[11px] font-sans whitespace-pre-wrap text-slate-800 max-h-48 overflow-y-auto leading-relaxed">
+                <pre className="p-3 bg-slate-50 border border-slate-200 rounded-lg text-[11px] font-sans whitespace-pre-wrap text-slate-800 max-h-40 overflow-y-auto leading-relaxed">
                   {whatsappShareData?.messageText}
                 </pre>
               </div>
 
               {/* Action Buttons */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
                 <button
                   type="button"
-                  onClick={handleSendOfficialCloudWhatsApp}
-                  disabled={sendingCloudWhatsApp}
-                  className="w-full py-2.5 px-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-md font-bold text-xs shadow-2xs transition-colors flex items-center justify-center gap-2"
+                  onClick={handleNativeShareWithFile}
+                  disabled={isSharingNative}
+                  className="w-full py-2.5 px-3 bg-[#72B01D] hover:bg-[#5F9418] text-white rounded-lg font-bold text-xs shadow-xs transition-colors flex items-center justify-center gap-2"
                 >
-                  {sendingCloudWhatsApp ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
-                  <span>Official Cloud API Send</span>
+                  {isSharingNative ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Smartphone className="w-3.5 h-3.5" />}
+                  <span>Share PDF & Message</span>
                 </button>
 
                 <button
                   type="button"
                   onClick={triggerDesktopShareFlow}
-                  className="w-full py-2.5 px-3 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 rounded-md font-bold text-xs shadow-2xs transition-colors flex items-center justify-center gap-2"
+                  className="w-full py-2.5 px-3 bg-[#044E54] hover:bg-[#033B40] text-white rounded-lg font-bold text-xs shadow-xs transition-colors flex items-center justify-center gap-2"
                 >
-                  <Laptop className="w-3.5 h-3.5 text-slate-500" />
+                  <Laptop className="w-3.5 h-3.5 text-[#72B01D]" />
                   <span>Open WhatsApp Web</span>
+                </button>
+              </div>
+
+              {/* Optional Cloud API Direct Dispatch */}
+              <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-500">
+                <span>Official Meta Cloud API sending:</span>
+                <button
+                  type="button"
+                  onClick={handleSendOfficialCloudWhatsApp}
+                  disabled={sendingCloudWhatsApp}
+                  className="text-[#044E54] hover:underline font-semibold flex items-center gap-1"
+                >
+                  {sendingCloudWhatsApp ? <RefreshCw className="w-3 h-3 animate-spin" /> : <Send className="w-3 h-3" />}
+                  <span>Direct Cloud API Dispatch</span>
                 </button>
               </div>
             </div>
           )}
 
+          {/* Email Share Flow */}
           {shareTab === 'email' && (
             <div className="space-y-4">
               {emailSuccessMessage && (
-                <div className="p-3 bg-emerald-50 border border-emerald-200 rounded text-xs text-emerald-800 flex items-center gap-2">
+                <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-lg text-xs text-emerald-800 flex items-center gap-2">
                   <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
                   <span>{emailSuccessMessage}</span>
                 </div>
               )}
 
               {emailErrorMessage && (
-                <div className="p-3 bg-rose-50 border border-rose-200 rounded text-xs text-rose-800 flex items-center gap-2">
+                <div className="p-3 bg-rose-50 border border-rose-200 rounded-lg text-xs text-rose-800 flex items-center gap-2">
                   <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
                   <span>{emailErrorMessage}</span>
                 </div>
               )}
 
               <div>
-                <label className="block font-semibold text-slate-700 mb-1">Recipient Email Address</label>
+                <label className="block font-semibold text-slate-700 mb-1 text-[11px]">
+                  Recipient Email Address
+                </label>
                 <input
                   type="email"
                   value={emailRecipient}
                   onChange={(e) => setEmailRecipient(e.target.value)}
-                  placeholder="e.g. customer@example.com"
-                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded text-xs focus:bg-white"
+                  placeholder="client@company.com"
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#044E54]"
                 />
               </div>
 
-              <div className="p-3 bg-blue-50 border border-blue-200 rounded text-[11px] text-blue-800">
-                📎 The generated official PDF ({paperSize}) will be attached automatically.
+              <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg text-[11px] space-y-1">
+                <span className="font-semibold text-slate-700 block">Attachment:</span>
+                <span className="font-mono text-[#044E54] block">
+                  📄 {quotationNumber || 'Quotation'}_Udhayam.pdf (A5/A4 Single Sheet)
+                </span>
+                <span className="text-slate-400 block text-[10px]">
+                  Includes full price computation, company GSTIN, and Indian Bank remittance details.
+                </span>
               </div>
 
               <button
                 type="button"
                 onClick={handleSendEmail}
-                disabled={sendingEmail}
-                className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded text-xs shadow-2xs flex items-center justify-center gap-2 transition-colors disabled:opacity-50"
+                disabled={sendingEmail || !emailRecipient.trim()}
+                className="w-full py-2.5 px-3 bg-[#044E54] hover:bg-[#033B40] text-white rounded-lg font-bold text-xs shadow-xs transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
               >
-                {sendingEmail ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
-                <span>Send Email with Quotation PDF</span>
+                {sendingEmail ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5 text-[#72B01D]" />}
+                <span>{sendingEmail ? 'Dispatching Email...' : 'Send Quotation Email'}</span>
               </button>
             </div>
           )}

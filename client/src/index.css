@@ -2,9 +2,14 @@
 
 @layer base {
   :root {
-    --primary: #1E5BFF;
-    --primary-hover: #0D47E8;
-    --bg-main: #F7F8FA;
+    --primary: #044E54;
+    --primary-hover: #033B40;
+    --primary-light: #E6F4F5;
+    --primary-ring: rgba(4, 78, 84, 0.25);
+    --accent: #72B01D;
+    --accent-hover: #5F9418;
+    --accent-light: #F0FDF4;
+    --bg-main: #F8FAFC;
     --surface: #FFFFFF;
     --text-main: #0F172A;
     --text-muted: #64748B;

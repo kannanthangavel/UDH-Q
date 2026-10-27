@@ -96,4 +96,29 @@ This metrial needed sir`;
     expect(res.items[3].quantity).toBe(2);
     expect(res.items[3].unit).toBe('nos');
   });
+
+  it('correctly treats pack size (e.g. 20lt) as 1 piece / bucket when no explicit count is given, and supports count multipliers', () => {
+    // 1. Single 20lt pack (20lt = 1ps not 20ps)
+    const singlePack = parseCustomerMessage('asian golden yellow 20lt');
+    expect(singlePack.success).toBe(true);
+    expect(singlePack.items.length).toBe(1);
+    expect(singlePack.items[0].quantity).toBe(1);
+    expect(singlePack.items[0].unit).toBe('Nos');
+    expect(singlePack.items[0].specification).toBe('20LT');
+
+    // 2. Explicit count: 2 nos 20lt pack
+    const multiplePacks = parseCustomerMessage('asian golden yellow 20lt 2 nos');
+    expect(multiplePacks.success).toBe(true);
+    expect(multiplePacks.items.length).toBe(1);
+    expect(multiplePacks.items[0].quantity).toBe(2);
+    expect(multiplePacks.items[0].unit).toBe('nos');
+    expect(multiplePacks.items[0].specification).toBe('20LT');
+
+    // 3. Multiplier: 20lt x 3
+    const multPack = parseCustomerMessage('asian apex white 20lt x 3');
+    expect(multPack.success).toBe(true);
+    expect(multPack.items.length).toBe(1);
+    expect(multPack.items[0].quantity).toBe(3);
+    expect(multPack.items[0].specification).toBe('20LT');
+  });
 });

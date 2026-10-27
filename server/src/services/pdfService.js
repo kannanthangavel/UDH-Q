@@ -55,9 +55,10 @@ function generateQuotationPDF(quotation, items, settings) {
       const pageHeight = doc.page.height;
       const contentWidth = pageWidth - (margin * 2);
 
-      // Design System Colors
-      const primaryColor = '#1E40AF';      // Deep Corporate Blue
-      const primaryDark = '#1E3A8A';       // Navy Dark
+      // Design System Colors (Udhayam Brand Palette)
+      const primaryColor = '#044E54';      // Deep Udhayam Teal
+      const primaryDark = '#023035';       // Dark Teal
+      const accentGreen = '#72B01D';       // Udhayam Lime Green
       const darkColor = '#0F172A';         // Slate 900
       const mutedColor = '#475569';        // Slate 600
       const lightBg = '#F8FAFC';           // Slate 50
@@ -194,23 +195,25 @@ function generateQuotationPDF(quotation, items, settings) {
       // 3. --- PRODUCT ITEMS TABLE DEFINITIONS ---
       // Perfectly calibrated column widths summing exactly to contentWidth
       const colDefs = isA5 ? [
-        { key: 'sno', label: 'S.No', width: 22, align: 'center' },
-        { key: 'name', label: 'Product Name / Description', width: 136.53, align: 'left' },
-        { key: 'hsn', label: 'HSN', width: 42, align: 'center' },
-        { key: 'qty', label: 'Qty', width: 26, align: 'right' },
-        { key: 'unit', label: 'Unit', width: 28, align: 'center' },
-        { key: 'rate', label: 'Rate (₹)', width: 46, align: 'right' },
-        { key: 'gst', label: 'GST%', width: 28, align: 'center' },
-        { key: 'total', label: 'Total (₹)', width: 51, align: 'right' }
+        { key: 'sno', label: 'S.No', width: 20, align: 'center' },
+        { key: 'name', label: 'Item Name / Description', width: 105, align: 'left' },
+        { key: 'details', label: 'Details / Remarks', width: 62, align: 'left' },
+        { key: 'hsn', label: 'HSN', width: 36, align: 'center' },
+        { key: 'qty', label: 'Qty', width: 24, align: 'right' },
+        { key: 'unit', label: 'Unit', width: 24, align: 'center' },
+        { key: 'rate', label: 'Rate (₹)', width: 38, align: 'right' },
+        { key: 'gst', label: 'GST%', width: 24, align: 'center' },
+        { key: 'total', label: 'Total (₹)', width: 46.53, align: 'right' }
       ] : [
-        { key: 'sno', label: 'S.No', width: 30, align: 'center' },
-        { key: 'name', label: 'Product Name & Specifications', width: 195.28, align: 'left' },
-        { key: 'hsn', label: 'HSN Code', width: 60, align: 'center' },
-        { key: 'qty', label: 'Qty', width: 36, align: 'right' },
-        { key: 'unit', label: 'Unit', width: 36, align: 'center' },
-        { key: 'rate', label: 'Rate (Incl Tax)', width: 62, align: 'right' },
-        { key: 'gst', label: 'GST %', width: 44, align: 'center' },
-        { key: 'total', label: 'Total (INR)', width: 72, align: 'right' }
+        { key: 'sno', label: 'S.No', width: 26, align: 'center' },
+        { key: 'name', label: 'Product Name & Description', width: 154, align: 'left' },
+        { key: 'details', label: 'Details / Specifications', width: 92, align: 'left' },
+        { key: 'hsn', label: 'HSN Code', width: 48, align: 'center' },
+        { key: 'qty', label: 'Qty', width: 30, align: 'right' },
+        { key: 'unit', label: 'Unit', width: 30, align: 'center' },
+        { key: 'rate', label: 'Rate (Incl Tax)', width: 50, align: 'right' },
+        { key: 'gst', label: 'GST %', width: 36, align: 'center' },
+        { key: 'total', label: 'Total (INR)', width: 73.28, align: 'right' }
       ];
 
       const tableTop = metaTop + metaHeight + 6;
@@ -273,38 +276,47 @@ function generateQuotationPDF(quotation, items, settings) {
         doc.text(String(index + 1), colX, textY, { width: colDefs[0].width, align: 'center', lineBreak: false });
         colX += colDefs[0].width;
 
-        // 2. Product Name & Spec
-        const fullDesc = item.specification ? `${item.product_name} - ${item.specification}` : item.product_name;
-        doc.font('Helvetica-Bold').text(fullDesc, colX + 4, textY, {
-          width: colDefs[1].width - 8,
+        // 2. Product Name
+        doc.font('Helvetica-Bold').text(item.product_name, colX + 3, textY, {
+          width: colDefs[1].width - 6,
           height: rowHeight - 2,
           ellipsis: true,
           lineBreak: false
         });
         colX += colDefs[1].width;
 
-        // 3. HSN
-        doc.font('Helvetica').text(item.hsn_code || '-', colX, textY, { width: colDefs[2].width, align: 'center', lineBreak: false });
+        // 3. Details / Remarks (New Column)
+        doc.font('Helvetica').fillColor(mutedColor).text(item.specification || '-', colX + 3, textY, {
+          width: colDefs[2].width - 6,
+          height: rowHeight - 2,
+          ellipsis: true,
+          lineBreak: false
+        });
+        doc.fillColor(darkColor);
         colX += colDefs[2].width;
 
-        // 4. Qty
-        doc.text(String(item.quantity), colX, textY, { width: colDefs[3].width - 4, align: 'right', lineBreak: false });
+        // 4. HSN
+        doc.font('Helvetica').text(item.hsn_code || '-', colX, textY, { width: colDefs[3].width, align: 'center', lineBreak: false });
         colX += colDefs[3].width;
 
-        // 5. Unit
-        doc.text(item.unit || 'Nos', colX, textY, { width: colDefs[4].width, align: 'center', lineBreak: false });
+        // 5. Qty
+        doc.text(String(item.quantity), colX, textY, { width: colDefs[4].width - 3, align: 'right', lineBreak: false });
         colX += colDefs[4].width;
 
-        // 6. Rate
-        doc.text(pdfCurrency(item.unit_price).replace('Rs. ', ''), colX, textY, { width: colDefs[5].width - 4, align: 'right', lineBreak: false });
+        // 6. Unit
+        doc.text(item.unit || 'Nos', colX, textY, { width: colDefs[5].width, align: 'center', lineBreak: false });
         colX += colDefs[5].width;
 
-        // 7. GST%
-        doc.text(`${item.gst_rate !== undefined ? item.gst_rate : 18}%`, colX, textY, { width: colDefs[6].width, align: 'center', lineBreak: false });
+        // 7. Rate
+        doc.text(pdfCurrency(item.unit_price).replace('Rs. ', ''), colX, textY, { width: colDefs[6].width - 3, align: 'right', lineBreak: false });
         colX += colDefs[6].width;
 
-        // 8. Total Rate
-        doc.font('Helvetica-Bold').text(pdfCurrency(item.line_total).replace('Rs. ', ''), colX, textY, { width: colDefs[7].width - 4, align: 'right', lineBreak: false });
+        // 8. GST%
+        doc.text(`${item.gst_rate !== undefined ? item.gst_rate : 18}%`, colX, textY, { width: colDefs[7].width, align: 'center', lineBreak: false });
+        colX += colDefs[7].width;
+
+        // 9. Total Rate
+        doc.font('Helvetica-Bold').text(pdfCurrency(item.line_total).replace('Rs. ', ''), colX, textY, { width: colDefs[8].width - 3, align: 'right', lineBreak: false });
 
         curY += rowHeight;
       });
@@ -392,8 +404,8 @@ function generateQuotationPDF(quotation, items, settings) {
       const bankHeight = isA5 ? 40 : 48;
       doc.rect(margin, bankTop, contentWidth, bankHeight).fill('#F8FAFC').stroke(borderColor);
 
-      // Subtle green top border for payment section
-      doc.rect(margin, bankTop, contentWidth, 2).fill('#059669');
+      // Subtle brand accent top border for payment section
+      doc.rect(margin, bankTop, contentWidth, 2).fill(accentGreen);
 
       doc.font('Helvetica-Bold').fontSize(isA5 ? 6.8 : 7.8).fillColor(primaryDark)
         .text('BANK & GPAY DETAILS FOR DIRECT PAYMENT / ADVANCE TRANSFER:', margin + 8, bankTop + 4, { lineBreak: false });
