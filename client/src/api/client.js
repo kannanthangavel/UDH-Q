@@ -54,7 +54,14 @@ export const api = {
   overrideProductPrice: (id, payload) => request(`/pricelists/products/${id}/override-price`, { method: 'POST', body: JSON.stringify(payload) }),
 
   // Message Parsing
-  parseMessage: (payload) => request('/parse-message/parse-message', { method: 'POST', body: JSON.stringify(payload) }),
+  parseMessage: (messageOrPayload, priceListId) => {
+    const body = typeof messageOrPayload === 'string' ? { message: messageOrPayload, priceListId } : messageOrPayload;
+    return request('/parse-message', { method: 'POST', body: JSON.stringify(body) });
+  },
+  parseWhatsAppMessage: (messageOrPayload, priceListId) => {
+    const body = typeof messageOrPayload === 'string' ? { message: messageOrPayload, priceListId } : messageOrPayload;
+    return request('/parse-message', { method: 'POST', body: JSON.stringify(body) });
+  },
 
   // Quotations & Queue
   getQuotations: (params = {}) => {
