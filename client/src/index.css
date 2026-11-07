@@ -1,0 +1,115 @@
+@import "tailwindcss";
+
+@theme {
+  --color-ud-teal: #00545C;
+  --color-ud-teal-dark: #003B40;
+  --color-ud-teal-light: #0A6D77;
+  --color-ud-lime: #7DBA00;
+  --color-ud-lime-dark: #639400;
+  --color-ud-lime-light: #96DF00;
+  --color-ud-bg: #F5F8F5;
+  --color-ud-surface: #FFFFFF;
+  --color-ud-border: #E2E8F0;
+  --font-sans: 'Plus Jakarta Sans', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+}
+
+:root {
+  --ud-teal: #00545C;
+  --ud-lime: #7DBA00;
+  --ud-bg: #F5F8F5;
+}
+
+body {
+  font-family: var(--font-sans);
+  background-color: var(--color-ud-bg);
+  color: #1E293B;
+  overflow-x: hidden;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #F1F5F9;
+}
+::-webkit-scrollbar-thumb {
+  background: #CBD5E1;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #94A3B8;
+}
+
+/* Print styling: Isolates #printable-quotation as the SOLE full-page printed document */
+@media print {
+  html, body {
+    height: 100% !important;
+    width: 100% !important;
+    min-height: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: #FFFFFF !important;
+    color: #000000 !important;
+    overflow: visible !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* Hide entire application shell and modal chrome */
+  body * {
+    visibility: hidden !important;
+  }
+
+  .no-print,
+  aside,
+  header,
+  footer,
+  nav {
+    display: none !important;
+  }
+
+  /* Only #printable-quotation and its descendants are visible and printed */
+  #printable-quotation,
+  #printable-quotation * {
+    visibility: visible !important;
+  }
+
+  #printable-quotation {
+    position: absolute !important;
+    left: 0 !important;
+    top: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    min-height: 100% !important;
+    height: auto !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: none !important;
+    box-shadow: none !important;
+    border-radius: 0 !important;
+    background: #FFFFFF !important;
+    display: flex !important;
+    flex-direction: column !important;
+    justify-content: space-between !important;
+    page-break-after: auto !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+
+  .print-page {
+    box-shadow: none !important;
+    border: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    width: 100% !important;
+    height: auto !important;
+  }
+
+  @page {
+    size: A4 portrait;
+    margin: 8mm 10mm;
+  }
+}

@@ -1,0 +1,9 @@
+.env
+node_modules/
+client/node_modules/
+client/dist/
+server/storage/*.sqlite-shm
+server/storage/*.sqlite-wal
+.DS_Store
+*.log
+.vercel/
