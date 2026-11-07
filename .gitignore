@@ -7,3 +7,5 @@ server/storage/*.sqlite-wal
 .DS_Store
 *.log
 .vercel/
+
+.vercel
