@@ -126,6 +126,9 @@ test('Create Quotation issues unique UDQ-YYYY-000001 number and validates calcul
   assert.equal(pdfRes.headers.get('content-type'), 'application/pdf');
   const pdfBuffer = await pdfRes.arrayBuffer();
   assert.ok(pdfBuffer.byteLength > 1000, 'PDF should have valid binary content');
+
+  // Clean up created quotation so DB remains fresh and clean
+  await fetch(`${baseUrl}/api/quotations/${data.id}`, { method: 'DELETE' });
 });
 
 test('Price List PDF streams valid PDF with exact 7 columns', async () => {
@@ -144,4 +147,34 @@ test('Settings endpoint returns company credentials and Indian Bank details', as
   assert.equal(settings.bank_name, 'Indian Bank');
   assert.equal(settings.bank_account_no, '6659330152');
   assert.equal(settings.bank_ifsc, 'IDIB000P034');
+});
+
+test('Customer deletion endpoint DELETE /api/customers/:id removes customer cleanly', async () => {
+  // 1. Create a customer to test deletion
+  const createRes = await fetch(`${baseUrl}/api/customers`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      name: 'Temp Delete Customer',
+      phone: '+91 99999 88888',
+      email: 'tempdelete@example.com',
+      address: 'Perundurai Test Site'
+    })
+  });
+  assert.equal(createRes.status, 200);
+  const { customer } = await createRes.json();
+  assert.ok(customer.id);
+
+  // 2. Delete customer via DELETE /api/customers/:id
+  const deleteRes = await fetch(`${baseUrl}/api/customers/${customer.id}`, {
+    method: 'DELETE'
+  });
+  assert.equal(deleteRes.status, 200);
+  const deleteBody = await deleteRes.json();
+  assert.equal(deleteBody.success, true);
+
+  // 3. Verify customer is no longer found in list
+  const listRes = await fetch(`${baseUrl}/api/customers?search=9999988888`);
+  const { customers } = await listRes.json();
+  assert.equal(customers.length, 0);
 });

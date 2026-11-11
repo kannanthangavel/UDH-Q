@@ -53,18 +53,19 @@ const UNIT_MAP = {
 };
 
 const TRADE_PHRASE_NORMALIZATION = [
-  // Brand & Model expansions for exact catalog hit
-  { pattern: /\b(asian\s*paints?|ap)\s+(apex|ace|tractor|royale|apcolite|dampproof|smartcare)\b/gi, replacement: 'AS $2' },
-  { pattern: /\b(apex|ace|tractor|royale|apcolite)\b/gi, replacement: 'AS $1' },
-  { pattern: /\b(berger|bp)\s+(bison|walmasta|weathercoat|luxol)\b/gi, replacement: 'BR $2' },
-  { pattern: /\b(dr\s*fixit|dr\.fixit|pidilite)\s*(302|101|urp|lw\+?|fastflex|primecoat)\b/gi, replacement: 'DR FIXIT $2' },
-  { pattern: /\b(fixit|pidilite)\b/gi, replacement: 'DR FIXIT' },
+  // Brand & Model expansions for exact catalog hit (prevent double-prefixing)
+  { pattern: /\b(?:asian\s*paints?|ap)\s+(apex|ace|tractor|royale|apcolite|dampproof|smartcare)\b/gi, replacement: 'AS $1' },
+  { pattern: /(?<!AS\s+)\b(apex|ace|tractor|royale|apcolite)\b/gi, replacement: 'AS $1' },
+  { pattern: /\b(?:berger|bp)\s+(bison|walmasta|weathercoat|luxol)\b/gi, replacement: 'BR $1' },
+  { pattern: /(?<!BR\s+)\b(bison|walmasta|weathercoat|luxol)\b/gi, replacement: 'BR $1' },
+  { pattern: /\b(?:dr\s*fixit|dr\.fixit|pidilite)\s*(302|101|urp|lw\+?|fastflex|primecoat)\b/gi, replacement: 'DR FIXIT $1' },
+  { pattern: /(?<!DR\s+)\b(fixit|pidilite)\b/gi, replacement: 'DR FIXIT' },
   { pattern: /\b(birla\s*white|birla)\s*(putty|wall\s*care)?\b/gi, replacement: 'BIRLA WHITE WALL CARE PUTTY' },
   { pattern: /\b(jk\s*cement|jk)\s*(putty|shield\s*max)?\b/gi, replacement: 'JK PUTTY SHIELD MAX' },
   { pattern: /\b(touch\s*wood|touchwood)\b/gi, replacement: 'TOUCH WOOD' },
   { pattern: /\b(putty\s*powder|wall\s*putty|patty\s*powder|patti)\b/gi, replacement: 'PUTTY' },
-  { pattern: /\b(red\s*oxide|yellow\s*primer|metal\s*primer)\b/gi, replacement: '$1 PRIMER' },
-  { pattern: /\b(foam\s*roller|cotton\s*roller)\b/gi, replacement: '$1 ROLLER' },
+  { pattern: /\b(red\s*oxide|yellow\s*primer|metal\s*primer)(?!\s+primer)\b/gi, replacement: '$1 PRIMER' },
+  { pattern: /\b(foam\s*roller|cotton\s*roller|roller\s*brush)\b/gi, replacement: 'ROLLER' },
   { pattern: /\b(tiger\s*brush|mayil\s*brush|paint\s*brush)\b/gi, replacement: 'BRUSH' },
   { pattern: /\bthiner\b|\btinner\b/gi, replacement: 'thinner' },
   { pattern: /\benamal\b|\benaml\b/gi, replacement: 'enamel' },

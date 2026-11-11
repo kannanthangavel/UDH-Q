@@ -110,4 +110,34 @@ router.get('/:id/quotations', (req, res) => {
   res.json({ quotations });
 });
 
+// DELETE /api/customers/:id - Delete customer
+router.delete('/:id', (req, res) => {
+  const customerId = req.params.id;
+  const customer = db.prepare('SELECT * FROM customers WHERE id = ?').get(customerId);
+  if (!customer) {
+    return res.status(404).json({ error: 'Customer not found' });
+  }
+
+  // Count linked quotations (these have ON DELETE SET NULL on customer_id)
+  const quoteCount = db.prepare('SELECT COUNT(*) as count FROM quotations WHERE customer_id = ?').get(customerId).count;
+
+  db.prepare('DELETE FROM customers WHERE id = ?').run(customerId);
+
+  logAudit(
+    req.user?.id || 1,
+    req.user?.email || 'admin@udhayam.com',
+    req.user?.role || 'admin',
+    'DELETE_CUSTOMER',
+    'CUSTOMER',
+    customerId,
+    `Deleted customer ${customer.name} (${customer.phone}). Had ${quoteCount} linked quotations.`
+  );
+
+  res.json({
+    success: true,
+    message: `Customer ${customer.name} deleted successfully`,
+    linkedQuotations: quoteCount
+  });
+});
+
 module.exports = router;

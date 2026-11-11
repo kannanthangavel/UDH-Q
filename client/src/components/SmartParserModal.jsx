@@ -1,12 +1,10 @@
 import React, { useState } from 'react';
 import { 
   Sparkles, MessageSquare, ArrowRight, Check, X, AlertCircle,
-  Copy, RefreshCw, ChevronDown, ChevronUp, CheckCircle2, ShoppingCart, Send,
-  Printer, FileText, Loader2, ArrowUpRight, Search, Plus, Trash2, Tag, Layers
+  Copy, RefreshCw, ChevronDown, ChevronUp, CheckCircle2,
+  FileText, Loader2, Search, Plus, Trash2, Tag, Layers
 } from 'lucide-react';
 import { api } from '../api/client';
-import QuotationPdfModal from './QuotationPdfModal';
-import WhatsAppShareModal from './WhatsAppShareModal';
 
 export default function SmartParserModal({ onClose, onApplyToQuotation, onTransferToQuotation }) {
   // Start with completely clean, empty message - no pre-filled text!
@@ -29,12 +27,6 @@ export default function SmartParserModal({ onClose, onApplyToQuotation, onTransf
   const [rowSearchQueries, setRowSearchQueries] = useState({});
   const [rowSearchResults, setRowSearchResults] = useState({});
   const [isRowSearching, setIsRowSearching] = useState({});
-
-  // Direct Creation State
-  const [isDirectCreating, setIsDirectCreating] = useState(false);
-  const [createdQuotation, setCreatedQuotation] = useState(null);
-  const [showPdfModal, setShowPdfModal] = useState(false);
-  const [showWaModal, setShowWaModal] = useState(false);
 
   const transferCallback = onTransferToQuotation || onApplyToQuotation;
 
@@ -198,143 +190,35 @@ Red Oxide Primer 4lt`);
     onClose();
   }
 
-  // 2. Directly Save and Create Quotation Now
-  async function handleDirectSaveAndCreate() {
-    const validItems = items.filter(it => it.selectedProduct);
-    if (validItems.length === 0) {
-      alert('Please match at least one product before creating a quotation.');
-      return;
-    }
-
-    const finalName = customerName.trim() || 'WhatsApp Customer';
-    const finalPhone = customerPhone.trim() || '9842711223';
-
-    try {
-      setIsDirectCreating(true);
-      const payload = {
-        customer_name: finalName,
-        customer_phone: finalPhone,
-        customer_email: '',
-        customer_address: '',
-        items: validItems.map(it => {
-          const officialDetails = it.selectedProduct.details || it.selectedProduct.structuredDetails?.summary || '';
-          const reqString = it.originalLine ? `Req: ${it.originalLine}` : '';
-          const combinedDetails = officialDetails ? `${officialDetails} • ${reqString}` : reqString;
-
-          return {
-            product_id: it.selectedProduct.id,
-            item_name: it.selectedProduct.item_name,
-            details: combinedDetails,
-            hsn_sac: it.selectedProduct.hsn_sac || '',
-            unit: it.unit || it.selectedProduct.main_unit || 'Nos',
-            quantity: it.quantity,
-            sale_rate: it.sale_rate,
-            line_total: Math.round(it.quantity * it.sale_rate * 100) / 100
-          };
-        }),
-        discount_percent: 0,
-        gst_rate: 18,
-        is_tax_inclusive: true,
-        delivery_charges: 0,
-        paper_format: 'A4',
-        notes: 'Generated via Smart WhatsApp Message Parser'
-      };
-
-      const res = await api.createQuotation(payload);
-      if (res && (res.quotation || res.id)) {
-        if (res.quotation) {
-          setCreatedQuotation(res.quotation);
-        } else {
-          const full = await api.getQuotation(res.id);
-          setCreatedQuotation(full.quotation);
-        }
-      } else {
-        throw new Error(res?.error || 'Failed to save quotation');
-      }
-    } catch (err) {
-      alert('Error creating quotation: ' + (err.message || 'Server error'));
-    } finally {
-      setIsDirectCreating(false);
-    }
-  }
-
   return (
-    <>
-      <div className="fixed inset-0 z-50 overflow-y-auto bg-black/60 backdrop-blur-sm flex items-center justify-center p-3 sm:p-5">
-        <div className="bg-white rounded-2xl max-w-4xl w-full shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[92vh] animate-in fade-in zoom-in-95">
-          
-          {/* Header */}
-          <div className="bg-[#00545C] text-white px-6 py-4 flex items-center justify-between">
-            <div className="flex items-center space-x-3">
-              <div className="w-9 h-9 rounded-xl bg-white/10 text-white flex items-center justify-center border border-white/20">
-                <Sparkles className="w-5 h-5 text-emerald-300" />
-              </div>
-              <div>
-                <h3 className="font-extrabold text-base leading-tight">
-                  WhatsApp Order Parser & Catalog Matcher
-                </h3>
-                <p className="text-xs text-slate-200">
-                  Real-time multi-candidate matching across all 5,300+ inventory items with live feedback & replacement
-                </p>
-              </div>
+    <div className="fixed inset-0 z-50 overflow-y-auto bg-black/60 backdrop-blur-sm flex items-center justify-center p-3 sm:p-5">
+      <div className="bg-white rounded-2xl max-w-4xl w-full shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[92vh] animate-in fade-in zoom-in-95">
+        
+        {/* Header */}
+        <div className="bg-[#00545C] text-white px-6 py-4 flex items-center justify-between">
+          <div className="flex items-center space-x-3">
+            <div className="w-9 h-9 rounded-xl bg-white/10 text-white flex items-center justify-center border border-white/20">
+              <Sparkles className="w-5 h-5 text-emerald-300" />
             </div>
-            <button 
-              onClick={onClose} 
-              className="p-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
-            >
-              <X className="w-5 h-5" />
-            </button>
+            <div>
+              <h3 className="font-extrabold text-base leading-tight">
+                WhatsApp Order Parser & Catalog Matcher
+              </h3>
+              <p className="text-xs text-slate-200">
+                Real-time multi-candidate matching across all 5,300+ inventory items with live feedback & replacement
+              </p>
+            </div>
           </div>
+          <button 
+            onClick={onClose} 
+            className="p-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
 
-          {/* Success Screen if Quote was directly created */}
-          {createdQuotation ? (
-            <div className="p-8 text-center space-y-5 my-auto">
-              <div className="w-16 h-16 bg-emerald-50 text-emerald-600 rounded-full flex items-center justify-center mx-auto border border-emerald-200">
-                <CheckCircle2 className="w-10 h-10" />
-              </div>
-
-              <div>
-                <span className="text-xs font-bold text-slate-500 uppercase tracking-wider block">Official Quotation Generated</span>
-                <h2 className="text-2xl font-black text-[#00545C] mt-1 font-mono">
-                  {createdQuotation.quotation_number}
-                </h2>
-                <p className="text-sm text-slate-600 mt-1">
-                  Billed to <strong className="text-slate-900">{createdQuotation.customer_name}</strong> • Grand Total: <strong className="text-[#00545C] font-mono">₹{Number(createdQuotation.grand_total).toFixed(2)}</strong>
-                </p>
-              </div>
-
-              <div className="flex flex-wrap items-center justify-center gap-3 pt-3">
-                <button
-                  type="button"
-                  onClick={() => setShowPdfModal(true)}
-                  className="flex items-center space-x-2 px-5 py-2.5 rounded-xl bg-[#00545C] hover:bg-[#003B40] text-white font-bold text-xs shadow-sm transition-all cursor-pointer"
-                >
-                  <Printer className="w-4 h-4" />
-                  <span>View & Print PDF</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setShowWaModal(true)}
-                  className="flex items-center space-x-2 px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-sm transition-all cursor-pointer"
-                >
-                  <Send className="w-4 h-4" />
-                  <span>Share via WhatsApp</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={onClose}
-                  className="px-5 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs transition-all cursor-pointer"
-                >
-                  Done
-                </button>
-              </div>
-            </div>
-          ) : (
-            <>
-              {/* Modal Body */}
-              <div className="p-6 overflow-y-auto space-y-5 flex-1">
+        {/* Modal Body */}
+        <div className="p-6 overflow-y-auto space-y-5 flex-1">
                 
                 {/* Input Area */}
                 <div>
@@ -733,78 +617,32 @@ Red Oxide Primer 4lt`);
 
               </div>
 
-              {/* Modal Footer Actions */}
-              <div className="bg-slate-50 px-6 py-4 border-t border-slate-200 flex flex-wrap items-center justify-between gap-3">
-                <button
-                  type="button"
-                  onClick={onClose}
-                  className="px-4 py-2 text-xs font-bold text-slate-600 hover:text-slate-900 rounded-lg cursor-pointer"
-                >
-                  Cancel
-                </button>
+        {/* Modal Footer Actions */}
+        <div className="bg-slate-50 px-6 py-4 border-t border-slate-200 flex flex-wrap items-center justify-between gap-3">
+          <button
+            type="button"
+            onClick={onClose}
+            className="px-4 py-2 text-xs font-bold text-slate-600 hover:text-slate-900 rounded-lg cursor-pointer"
+          >
+            Cancel
+          </button>
 
-                <div className="flex items-center space-x-2 sm:space-x-3">
-                  {/* Button 1: Transfer to Form Editor */}
-                  <button
-                    type="button"
-                    onClick={handleTransferToQuote}
-                    disabled={items.length === 0}
-                    className={`flex items-center space-x-1.5 px-4 py-2.5 rounded-xl text-xs font-bold border transition-all cursor-pointer ${
-                      items.length > 0
-                        ? 'bg-white border-[#00545C] text-[#00545C] hover:bg-slate-100 shadow-2xs'
-                        : 'bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed'
-                    }`}
-                  >
-                    <span>Edit in Quotation Form</span>
-                    <ArrowUpRight className="w-3.5 h-3.5" />
-                  </button>
-
-                  {/* Button 2: Direct 1-Click Quotation Creation */}
-                  <button
-                    type="button"
-                    onClick={handleDirectSaveAndCreate}
-                    disabled={items.length === 0 || isDirectCreating}
-                    className={`flex items-center space-x-2 px-5 py-2.5 rounded-xl text-xs font-black shadow-sm transition-all active:scale-95 cursor-pointer ${
-                      items.length > 0 && !isDirectCreating
-                        ? 'bg-[#00545C] hover:bg-[#003B40] text-white shadow-md shadow-[#00545C]/20'
-                        : 'bg-slate-200 text-slate-400 cursor-not-allowed'
-                    }`}
-                  >
-                    {isDirectCreating ? (
-                      <>
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                        <span>Saving Official Quotation...</span>
-                      </>
-                    ) : (
-                      <>
-                        <ShoppingCart className="w-4 h-4" />
-                        <span>Save & Create Quote ({items.length})</span>
-                        <ArrowRight className="w-3.5 h-3.5" />
-                      </>
-                    )}
-                  </button>
-                </div>
-              </div>
-            </>
-          )}
-
+          <button
+            type="button"
+            onClick={handleTransferToQuote}
+            disabled={items.length === 0}
+            className={`flex items-center space-x-2 px-6 py-2.5 rounded-xl text-xs font-black shadow-md transition-all active:scale-95 cursor-pointer ${
+              items.length > 0
+                ? 'bg-[#00545C] hover:bg-[#003B40] text-white shadow-[#00545C]/20'
+                : 'bg-slate-200 text-slate-400 cursor-not-allowed'
+            }`}
+          >
+            <span>Transfer to Quotation Form (Review & Confirm)</span>
+            <ArrowRight className="w-4 h-4" />
+          </button>
         </div>
+
       </div>
-
-      {/* Sub-modals if quote was directly created */}
-      {showPdfModal && createdQuotation && (
-        <QuotationPdfModal
-          quotation={createdQuotation}
-          onClose={() => setShowPdfModal(false)}
-        />
-      )}
-
-      {showWaModal && createdQuotation && (
-        <WhatsAppShareModal
-          quotation={createdQuotation}
-          onClose={() => setShowWaModal(false)}
-        />
-      )}
-    </>
+    </div>
   );
 }

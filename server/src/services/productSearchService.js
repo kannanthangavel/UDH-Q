@@ -35,13 +35,13 @@ const SPEC_SYNONYMS = {
 
 // Common Trade Synonyms & Abbreviations
 const TRADE_DICTIONARY = {
-  'paint': ['paint', 'enamel', 'emulsion', 'primer', 'distemper', 'spray paint'],
+  'paint': ['paint', 'paints', 'enamel', 'emulsion', 'primer', 'distemper', 'spray paint'],
   'enamel': ['enamel', ' en ', 'en ', 'enemel', 'glsy', 'glossy', 'satin'],
-  'emulsion': ['emulsion', 'emul', 'tractor', 'apex', 'ace', 'royale', 'walmasta', 'weathercoat', 'silk'],
-  'primer': ['primer', 'primer ', 'pr ', 'prim', 'ps ', 'bp ', 'wood primer', 'metal primer'],
-  'putty': ['putty', 'putti', 'puty', 'walcare', 'level plast', 'knife putty', 'paste putty', 'tex putty', 'stucco'],
+  'emulsion': ['emulsion', 'emul', 'eml', 'tractor', 'apex', 'ace', 'royale', 'apcolite', 'dampproof', 'walmasta', 'weathercoat', 'silk'],
+  'primer': ['primer', 'primer ', 'pr ', 'prim', 'ps ', 'bp ', 'wood primer', 'metal primer', 'red oxide'],
+  'putty': ['putty', 'putti', 'puty', 'walcare', 'wall care', 'level plast', 'knife putty', 'paste putty', 'tex putty', 'stucco', 'shield max', 'birla'],
   'brush': ['brush', 'br '],
-  'roller': ['roller'],
+  'roller': ['roller', 'ro '],
   'thinner': ['thinner', 'thiner', 'tinner'],
   'cement': ['cement', 'white cement', 'brilla'],
   'touchwood': ['touchwood', 'touch wood', 'tw '],
@@ -81,6 +81,15 @@ const TYPO_MAP = {
   'putty powder': 'putty',
   'wall putty': 'putty'
 };
+
+const DISCRIMINATIVE_KEYWORDS = [
+  'apex', 'ace', 'tractor', 'royale', 'apcolite', 'dampproof', 'smartcare',
+  'touchwood', 'birla', 'jk', 'bison', 'walmasta', 'weathercoat', 'luxol',
+  'urp', 'fastflex', 'primecoat', 'redoxide', 'epoxy', 'melamine',
+  'enamel', 'emulsion', 'primer', 'putty', 'brush', 'roller', 'thinner',
+  'abro', '3m', 'addition', 'sheenlac', 'nerolac', 'berger', 'dulux',
+  'goldenbrown', 'glossy', 'satin', 'matt'
+];
 
 function cleanNorm(str) {
   if (!str) return '';
@@ -311,6 +320,36 @@ function getIndexedProducts() {
       const structuredDetails = extractStructuredDetails(rawName, rawDetails, specs, colours, types, p.section);
       const effectiveDetails = rawDetails || structuredDetails.summary;
 
+      // Populate types from structured category and trade synonyms
+      const catLower = (structuredDetails.category || '').toLowerCase();
+      if (catLower.includes('emulsion') || rawName.toUpperCase().includes('EML') || rawName.toUpperCase().includes('APEX') || rawName.toUpperCase().includes('ACE') || rawName.toUpperCase().includes('TRACTOR') || rawName.toUpperCase().includes('ROYALE')) {
+        types.push('emulsion', 'paint');
+      }
+      if (catLower.includes('enamel') || rawName.toUpperCase().includes('ENAMEL') || rawName.toUpperCase().includes(' EN ')) {
+        types.push('enamel', 'paint');
+      }
+      if (catLower.includes('primer') || rawName.toUpperCase().includes('PRIMER') || rawName.toUpperCase().includes('PR ') || rawName.toUpperCase().includes('PS ')) {
+        types.push('primer', 'paint');
+      }
+      if (catLower.includes('putty') || rawName.toUpperCase().includes('PUTTY') || rawName.toUpperCase().includes('PATTI')) {
+        types.push('putty');
+      }
+      if (catLower.includes('brush') || rawName.toUpperCase().includes('BRUSH') || rawName.toUpperCase().startsWith('BR ')) {
+        types.push('brush');
+      }
+      if (catLower.includes('roller') || rawName.toUpperCase().includes('ROLLER') || rawName.toUpperCase().startsWith('RO ')) {
+        types.push('roller');
+      }
+      if (catLower.includes('thinner') || rawName.toUpperCase().includes('THINNER')) {
+        types.push('thinner');
+      }
+      if (catLower.includes('wood') || rawName.toUpperCase().includes('TOUCH WOOD') || rawName.toUpperCase().includes('TOUCHWOOD') || rawName.toUpperCase().includes('VARNISH')) {
+        types.push('touchwood', 'varnish');
+      }
+      if (p.section === 'PAINTS') {
+        types.push('paint');
+      }
+
       const normName = cleanNorm(rawName);
       const normDetails = cleanNorm(effectiveDetails);
 
@@ -427,9 +466,28 @@ function parseSearchQuery(query) {
     }
   }
 
+  // Trade model type associations
+  if (/\b(apex|ace|tractor|royale|apcolite|dampproof|walmasta|weathercoat)\b/i.test(normalized)) {
+    extractedTypes.push('emulsion', 'paint');
+  }
+  if (/\b(birla|wall\s*care|shield\s*max|putty)\b/i.test(normalized)) {
+    extractedTypes.push('putty');
+  }
+  if (/\b(red\s*oxide|metal\s*primer|wood\s*primer)\b/i.test(normalized)) {
+    extractedTypes.push('primer', 'paint');
+  }
+
   // Tokens separated by spaces, hyphens, slashes, dots
   const tokens = normalized.split(/[\s\-\.\/\"\'\(\)\[\]\_\+\,]+/).filter(Boolean);
-  const normTokens = tokens.map(cleanNorm).filter(t => t.length > 0 && !['of', 'need', 'req', 'pcs', 'nos', 'for', 'a'].includes(t));
+  const normTokens = tokens.map(t => {
+    let clean = cleanNorm(t);
+    clean = clean.replace(/^(\d+)ltr$/, '$1lt');
+    clean = clean.replace(/^(\d+)liters?$/, '$1lt');
+    clean = clean.replace(/^(\d+)litres?$/, '$1lt');
+    clean = clean.replace(/^(\d+)kgs?$/, '$1kg');
+    clean = clean.replace(/^(\d+)kilos?$/, '$1kg');
+    return clean;
+  }).filter(t => t.length > 0 && !['of', 'need', 'req', 'pcs', 'nos', 'for', 'a', 'to', 'send'].includes(t));
 
   return {
     rawQuery: raw,
@@ -530,9 +588,12 @@ function searchProductsSmart({ search = '', section, limit = null, page = 1, isA
     // 3. Token-by-token scoring
     let matchedTokenCount = 0;
     for (const t of normTokens) {
-      if (p.normName.includes(t) || p.normDetails.includes(t)) {
+      if (p.normName.includes(t)) {
         matchedTokenCount++;
-        score += t.length >= 3 ? 35 : 15;
+        score += t.length >= 3 ? 45 : 20;
+      } else if (p.normDetails.includes(t)) {
+        matchedTokenCount++;
+        score += t.length >= 3 ? 20 : 10;
       } else if (t.length >= 4) {
         // Fuzzy check for typos
         if (p.words.some(w => levenshteinDistance(w, t) <= 1)) {
@@ -584,7 +645,58 @@ function searchProductsSmart({ search = '', section, limit = null, page = 1, isA
       }
     }
 
-    // 7. Section boost
+    // 7. Discriminative Keyword Match & Penalty
+    const queryDiscrim = DISCRIMINATIVE_KEYWORDS.filter(k => cleanNormQuery.includes(k) || normTokens.some(t => t.includes(k)));
+    if (queryDiscrim.length > 0) {
+      let matchedDiscrimCount = 0;
+      for (const dk of queryDiscrim) {
+        if (p.normName.includes(dk)) {
+          matchedDiscrimCount++;
+          score += 180;
+          matchReasons.push(`Key Match: ${dk}`);
+        } else if (p.normDetails.includes(dk) || p.types.includes(dk)) {
+          matchedDiscrimCount++;
+          score += 80;
+          matchReasons.push(`Key Match (Details): ${dk}`);
+        }
+      }
+      if (matchedDiscrimCount === 0) {
+        // Candidate missing critical product line requested by user
+        score -= 150;
+      }
+    }
+
+    // 8. Brand Matching Boost
+    const isAsianPaintsQuery = normTokens.some(t => ['asian', 'asianpaints', 'as'].includes(t)) || normalized.includes('asian');
+    if (isAsianPaintsQuery) {
+      if (p.normName.startsWith('as') || p.normName.includes('asian')) {
+        score += 85;
+        matchReasons.push('Brand: Asian Paints');
+      }
+    }
+    const isDuluxQuery = normTokens.some(t => ['dulux', 'du'].includes(t)) || normalized.includes('dulux');
+    if (isDuluxQuery) {
+      if (p.normName.startsWith('du') || p.normName.includes('dulux')) {
+        score += 85;
+        matchReasons.push('Brand: Dulux');
+      }
+    }
+    const isBergerQuery = normTokens.some(t => ['berger', 'bp', 'br'].includes(t)) || normalized.includes('berger');
+    if (isBergerQuery) {
+      if (p.normName.startsWith('br') || p.normName.includes('berger')) {
+        score += 85;
+        matchReasons.push('Brand: Berger');
+      }
+    }
+    const isFixitQuery = normTokens.some(t => ['fixit', 'pidilite'].includes(t)) || normalized.includes('fixit');
+    if (isFixitQuery) {
+      if (p.normName.includes('fixit') || p.normName.includes('drfixit')) {
+        score += 85;
+        matchReasons.push('Brand: Dr. Fixit');
+      }
+    }
+
+    // 9. Section boost
     if (extractedTypes.includes('brush') || extractedTypes.includes('roller')) {
       if (p.section === 'ACCESS') score += 35;
     } else if (extractedTypes.includes('enamel') || extractedTypes.includes('emulsion') || extractedTypes.includes('primer')) {
