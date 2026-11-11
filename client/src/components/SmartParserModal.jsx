@@ -1,20 +1,16 @@
 import React, { useState } from 'react';
 import { 
   Sparkles, MessageSquare, ArrowRight, Check, X, AlertCircle,
-  Copy, RefreshCw, ChevronDown, CheckCircle2, ShoppingCart, Send,
-  Printer, FileText, Loader2, ArrowUpRight
+  Copy, RefreshCw, ChevronDown, ChevronUp, CheckCircle2, ShoppingCart, Send,
+  Printer, FileText, Loader2, ArrowUpRight, Search, Plus, Trash2, Tag, Layers
 } from 'lucide-react';
 import { api } from '../api/client';
 import QuotationPdfModal from './QuotationPdfModal';
 import WhatsAppShareModal from './WhatsAppShareModal';
 
 export default function SmartParserModal({ onClose, onApplyToQuotation, onTransferToQuotation }) {
-  const sampleMessage = `Customer: Ramesh +91 98427 11223
-golden brown 1ltr 5ps
-putty powder 40kg
-brush 2" 1ps`;
-
-  const [message, setMessage] = useState(sampleMessage);
+  // Start with completely clean, empty message - no pre-filled text!
+  const [message, setMessage] = useState('');
   const [isParsing, setIsParsing] = useState(false);
   const [parseResult, setParseResult] = useState(null);
   const [parseError, setParseError] = useState('');
@@ -26,6 +22,14 @@ brush 2" 1ps`;
   // Editable matched items list
   const [items, setItems] = useState([]);
 
+  // Expanded suggestions toggle per item index
+  const [expandedRowSuggestions, setExpandedRowSuggestions] = useState({});
+
+  // In-row live catalog search state
+  const [rowSearchQueries, setRowSearchQueries] = useState({});
+  const [rowSearchResults, setRowSearchResults] = useState({});
+  const [isRowSearching, setIsRowSearching] = useState({});
+
   // Direct Creation State
   const [isDirectCreating, setIsDirectCreating] = useState(false);
   const [createdQuotation, setCreatedQuotation] = useState(null);
@@ -34,9 +38,20 @@ brush 2" 1ps`;
 
   const transferCallback = onTransferToQuotation || onApplyToQuotation;
 
+  function handleLoadSample() {
+    setMessage(`Customer: Ramesh Kumar +91 98427 11223
+Asian Paints Apex 20lt - 2 cans
+Birla Putty 40kg 5 bags
+Brush 2 inch 3 nos
+Dr Fixit 302 1lt 2
+Golden Brown 1lt 5ps
+Red Oxide Primer 4lt`);
+    setParseError('');
+  }
+
   async function handleParse() {
     if (!message.trim()) {
-      setParseError('Please paste a WhatsApp message first.');
+      setParseError('Please paste customer order text into the message box.');
       return;
     }
 
@@ -45,10 +60,9 @@ brush 2" 1ps`;
       setParseError('');
       const res = await api.parseWhatsAppMessage(message);
       
-      setCustomerName(res.customerName || 'Customer');
+      setCustomerName(res.customerName || '');
       setCustomerPhone(res.customerPhone || '');
       
-      // Map items with selected product
       const mapped = (res.items || []).map((it, idx) => ({
         id: idx,
         originalLine: it.originalLine,
@@ -60,21 +74,64 @@ brush 2" 1ps`;
         confidence: it.confidence || 'Medium'
       }));
 
+      // Automatically open suggestions for medium or low confidence items
+      const initialExpanded = {};
+      mapped.forEach((it, idx) => {
+        if (it.confidence !== 'High' || !it.selectedProduct) {
+          initialExpanded[idx] = true;
+        }
+      });
+      setExpandedRowSuggestions(initialExpanded);
+
       setItems(mapped);
       setParseResult(res);
     } catch (err) {
-      setParseError(err.message || 'Failed to parse message');
+      setParseError(err.message || 'Failed to parse message. Please check the text format.');
     } finally {
       setIsParsing(false);
     }
   }
 
+  function toggleSuggestions(idx) {
+    setExpandedRowSuggestions(prev => ({
+      ...prev,
+      [idx]: !prev[idx]
+    }));
+  }
+
   function handleProductSelect(itemIdx, product) {
-    const updated = [...items];
-    updated[itemIdx].selectedProduct = product;
-    updated[itemIdx].sale_rate = product.sale_rate;
-    updated[itemIdx].unit = product.main_unit || updated[itemIdx].unit;
-    setItems(updated);
+    setItems(prev => {
+      const updated = [...prev];
+      updated[itemIdx] = {
+        ...updated[itemIdx],
+        selectedProduct: product,
+        sale_rate: product.sale_rate || 0,
+        unit: product.main_unit || updated[itemIdx].unit || 'Nos',
+        confidence: 'High'
+      };
+      return updated;
+    });
+
+    // Close the suggestion drawer after selection
+    setExpandedRowSuggestions(prev => ({ ...prev, [itemIdx]: false }));
+  }
+
+  async function handleRowLiveSearch(itemIdx, query) {
+    setRowSearchQueries(prev => ({ ...prev, [itemIdx]: query }));
+    if (!query.trim()) {
+      setRowSearchResults(prev => ({ ...prev, [itemIdx]: [] }));
+      return;
+    }
+
+    try {
+      setIsRowSearching(prev => ({ ...prev, [itemIdx]: true }));
+      const res = await api.getProducts({ search: query.trim(), limit: 8, all: 'true' });
+      setRowSearchResults(prev => ({ ...prev, [itemIdx]: res.products || [] }));
+    } catch (err) {
+      console.warn('Row search error:', err);
+    } finally {
+      setIsRowSearching(prev => ({ ...prev, [itemIdx]: false }));
+    }
   }
 
   function handleQtyChange(itemIdx, newQty) {
@@ -112,10 +169,10 @@ brush 2" 1ps`;
 
     const quotationData = {
       customer: {
-        name: customerName || 'Customer',
+        name: customerName || '',
         phone: customerPhone || ''
       },
-      customer_name: customerName || 'Customer',
+      customer_name: customerName || '',
       customer_phone: customerPhone || '',
       items: validItems.map(it => ({
         product_id: it.selectedProduct.id,
@@ -123,7 +180,8 @@ brush 2" 1ps`;
         id: it.selectedProduct.id,
         item_name: it.selectedProduct.item_name,
         itemName: it.selectedProduct.item_name,
-        details: `Requested: ${it.originalLine}`,
+        details: it.selectedProduct.details || it.selectedProduct.structuredDetails?.summary || '',
+        customer_req: it.originalLine || '',
         hsn_sac: it.selectedProduct.hsn_sac || '',
         unit: it.unit || it.selectedProduct.main_unit || 'Nos',
         main_unit: it.unit || it.selectedProduct.main_unit || 'Nos',
@@ -158,16 +216,22 @@ brush 2" 1ps`;
         customer_phone: finalPhone,
         customer_email: '',
         customer_address: '',
-        items: validItems.map(it => ({
-          product_id: it.selectedProduct.id,
-          item_name: it.selectedProduct.item_name,
-          details: `Requested: ${it.originalLine}`,
-          hsn_sac: it.selectedProduct.hsn_sac || '',
-          unit: it.unit || it.selectedProduct.main_unit || 'Nos',
-          quantity: it.quantity,
-          sale_rate: it.sale_rate,
-          line_total: Math.round(it.quantity * it.sale_rate * 100) / 100
-        })),
+        items: validItems.map(it => {
+          const officialDetails = it.selectedProduct.details || it.selectedProduct.structuredDetails?.summary || '';
+          const reqString = it.originalLine ? `Req: ${it.originalLine}` : '';
+          const combinedDetails = officialDetails ? `${officialDetails} • ${reqString}` : reqString;
+
+          return {
+            product_id: it.selectedProduct.id,
+            item_name: it.selectedProduct.item_name,
+            details: combinedDetails,
+            hsn_sac: it.selectedProduct.hsn_sac || '',
+            unit: it.unit || it.selectedProduct.main_unit || 'Nos',
+            quantity: it.quantity,
+            sale_rate: it.sale_rate,
+            line_total: Math.round(it.quantity * it.sale_rate * 100) / 100
+          };
+        }),
         discount_percent: 0,
         gst_rate: 18,
         is_tax_inclusive: true,
@@ -202,19 +266,22 @@ brush 2" 1ps`;
           {/* Header */}
           <div className="bg-[#00545C] text-white px-6 py-4 flex items-center justify-between">
             <div className="flex items-center space-x-3">
-              <div className="w-9 h-9 rounded-xl bg-emerald-500/20 text-[#7DBA00] flex items-center justify-center">
-                <Sparkles className="w-5 h-5 text-[#7DBA00]" />
+              <div className="w-9 h-9 rounded-xl bg-white/10 text-white flex items-center justify-center border border-white/20">
+                <Sparkles className="w-5 h-5 text-emerald-300" />
               </div>
               <div>
                 <h3 className="font-extrabold text-base leading-tight">
-                  Smart WhatsApp Message Automation
+                  WhatsApp Order Parser & Catalog Matcher
                 </h3>
-                <p className="text-xs text-emerald-200">
-                  Parse informal customer messages • Auto-matches 8,000+ catalog products with live rates
+                <p className="text-xs text-slate-200">
+                  Real-time multi-candidate matching across all 5,300+ inventory items with live feedback & replacement
                 </p>
               </div>
             </div>
-            <button onClick={onClose} className="p-1 rounded-lg text-slate-300 hover:text-white hover:bg-white/10 cursor-pointer">
+            <button 
+              onClick={onClose} 
+              className="p-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
+            >
               <X className="w-5 h-5" />
             </button>
           </div>
@@ -222,13 +289,13 @@ brush 2" 1ps`;
           {/* Success Screen if Quote was directly created */}
           {createdQuotation ? (
             <div className="p-8 text-center space-y-5 my-auto">
-              <div className="w-16 h-16 bg-emerald-100 text-[#00545C] rounded-full flex items-center justify-center mx-auto shadow-inner">
-                <CheckCircle2 className="w-10 h-10 text-[#7DBA00]" />
+              <div className="w-16 h-16 bg-emerald-50 text-emerald-600 rounded-full flex items-center justify-center mx-auto border border-emerald-200">
+                <CheckCircle2 className="w-10 h-10" />
               </div>
 
               <div>
                 <span className="text-xs font-bold text-slate-500 uppercase tracking-wider block">Official Quotation Generated</span>
-                <h2 className="text-2xl font-black text-[#00545C] mt-1">
+                <h2 className="text-2xl font-black text-[#00545C] mt-1 font-mono">
                   {createdQuotation.quotation_number}
                 </h2>
                 <p className="text-sm text-slate-600 mt-1">
@@ -240,16 +307,16 @@ brush 2" 1ps`;
                 <button
                   type="button"
                   onClick={() => setShowPdfModal(true)}
-                  className="flex items-center space-x-2 px-5 py-2.5 rounded-xl bg-[#00545C] hover:bg-[#0A6D77] text-white font-bold text-xs shadow transition-all cursor-pointer"
+                  className="flex items-center space-x-2 px-5 py-2.5 rounded-xl bg-[#00545C] hover:bg-[#003B40] text-white font-bold text-xs shadow-sm transition-all cursor-pointer"
                 >
-                  <Printer className="w-4 h-4 text-[#7DBA00]" />
-                  <span>View & Print Full Page PDF</span>
+                  <Printer className="w-4 h-4" />
+                  <span>View & Print PDF</span>
                 </button>
 
                 <button
                   type="button"
                   onClick={() => setShowWaModal(true)}
-                  className="flex items-center space-x-2 px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow transition-all cursor-pointer"
+                  className="flex items-center space-x-2 px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-sm transition-all cursor-pointer"
                 >
                   <Send className="w-4 h-4" />
                   <span>Share via WhatsApp</span>
@@ -267,31 +334,42 @@ brush 2" 1ps`;
           ) : (
             <>
               {/* Modal Body */}
-              <div className="p-6 overflow-y-auto space-y-6 flex-1">
+              <div className="p-6 overflow-y-auto space-y-5 flex-1">
                 
                 {/* Input Area */}
                 <div>
                   <div className="flex items-center justify-between mb-2">
                     <label className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center space-x-1.5">
                       <MessageSquare className="w-3.5 h-3.5 text-[#00545C]" />
-                      <span>Customer WhatsApp Message</span>
+                      <span>Customer WhatsApp Order Message</span>
                     </label>
-                    <button
-                      type="button"
-                      onClick={() => setMessage(sampleMessage)}
-                      className="text-xs font-bold text-[#00545C] hover:text-[#7DBA00] flex items-center space-x-1 cursor-pointer"
-                    >
-                      <RefreshCw className="w-3 h-3" />
-                      <span>Reset Sample</span>
-                    </button>
+                    <div className="flex items-center space-x-3 text-xs">
+                      {message && (
+                        <button
+                          type="button"
+                          onClick={() => setMessage('')}
+                          className="text-rose-600 hover:underline font-medium cursor-pointer"
+                        >
+                          Clear Text
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={handleLoadSample}
+                        className="text-[#00545C] hover:underline font-bold flex items-center space-x-1 cursor-pointer"
+                      >
+                        <RefreshCw className="w-3 h-3" />
+                        <span>Load Sample Demo Order</span>
+                      </button>
+                    </div>
                   </div>
 
                   <textarea
                     rows={4}
                     value={message}
-                    onChange={(e) => setMessage(e.target.value)}
-                    placeholder="Paste customer WhatsApp message here (e.g. Ramesh 9842711223, golden brown 1ltr 5ps, putty powder 40kg)..."
-                    className="w-full p-3.5 text-xs bg-slate-50 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#00545C] font-mono text-slate-800"
+                    onChange={(e) => { setMessage(e.target.value); setParseError(''); }}
+                    placeholder="Paste customer WhatsApp message here (e.g. Ramesh 9842711223, Apex 20lt 2 cans, Putty 40kg 5 bags, Brush 2 inch 3 nos)..."
+                    className="w-full p-3.5 text-xs bg-slate-50 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#00545C]/20 focus:border-[#00545C] font-mono text-slate-800"
                   />
 
                   {parseError && (
@@ -301,29 +379,33 @@ brush 2" 1ps`;
                     </div>
                   )}
 
-                  <div className="mt-3 flex justify-end">
+                  <div className="mt-3 flex items-center justify-between">
+                    <span className="text-[11px] text-slate-400">
+                      Supports brand abbreviations, mixed pack sizes, Tamil/English quantities, and lists.
+                    </span>
+
                     <button
                       type="button"
                       onClick={handleParse}
                       disabled={isParsing || !message.trim()}
-                      className="flex items-center space-x-2 px-5 py-2.5 rounded-xl bg-[#00545C] hover:bg-[#0A6D77] text-white text-xs font-bold shadow transition-all cursor-pointer active:scale-95 disabled:opacity-50"
+                      className="flex items-center space-x-2 px-5 py-2.5 rounded-xl bg-[#00545C] hover:bg-[#003B40] text-white text-xs font-bold shadow-sm transition-all cursor-pointer active:scale-95 disabled:opacity-50"
                     >
                       {isParsing ? (
                         <>
-                          <Loader2 className="w-4 h-4 animate-spin text-[#7DBA00]" />
-                          <span>Matching Products Across Catalog...</span>
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                          <span>Matching 5,300+ Products...</span>
                         </>
                       ) : (
                         <>
-                          <Sparkles className="w-4 h-4 text-[#7DBA00]" />
-                          <span>Intelligently Parse Message</span>
+                          <Sparkles className="w-4 h-4" />
+                          <span>Process & Match Products</span>
                         </>
                       )}
                     </button>
                   </div>
                 </div>
 
-                {/* Parsed Results Section */}
+                {/* Parsed Results Section with Suggestion & Feedback Mechanism */}
                 {items.length > 0 && (
                   <div className="space-y-4 pt-4 border-t border-slate-200">
                     
@@ -338,7 +420,7 @@ brush 2" 1ps`;
                           value={customerName}
                           onChange={(e) => setCustomerName(e.target.value)}
                           placeholder="e.g. Ramesh"
-                          className="w-full px-3 py-1.5 text-xs font-bold bg-white border border-slate-300 rounded-lg text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#00545C]"
+                          className="w-full px-3 py-1.5 text-xs font-bold bg-white border border-slate-300 rounded-lg text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#00545C]/20 focus:border-[#00545C]"
                         />
                       </div>
                       <div>
@@ -350,129 +432,297 @@ brush 2" 1ps`;
                           value={customerPhone}
                           onChange={(e) => setCustomerPhone(e.target.value)}
                           placeholder="+91 98427 11223"
-                          className="w-full px-3 py-1.5 text-xs font-bold bg-white border border-slate-300 rounded-lg text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#00545C]"
+                          className="w-full px-3 py-1.5 text-xs font-mono font-bold bg-white border border-slate-300 rounded-lg text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#00545C]/20 focus:border-[#00545C]"
                         />
                       </div>
                     </div>
 
-                    {/* Matched Items Table */}
-                    <div className="border border-slate-200 rounded-xl overflow-hidden shadow-2xs">
-                      <table className="w-full text-left text-xs border-collapse">
-                        <thead>
-                          <tr className="bg-[#00545C] text-white text-[10px] font-bold uppercase tracking-wider">
-                            <th className="py-2.5 px-3">Customer Requirement</th>
-                            <th className="py-2.5 px-3">Matched Catalog Product</th>
-                            <th className="py-2.5 px-2 text-center w-16">Unit</th>
-                            <th className="py-2.5 px-2 text-center w-16">Qty</th>
-                            <th className="py-2.5 px-3 text-right w-24">Rate (₹)</th>
-                            <th className="py-2.5 px-3 text-right w-28">Total (₹)</th>
-                            <th className="py-2.5 px-2 text-center w-8"></th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-200">
-                          {items.map((it, idx) => (
-                            <tr key={idx} className="hover:bg-slate-50/80 transition-colors">
-                              
-                              {/* Original Raw Requirement */}
-                              <td className="py-2.5 px-3">
-                                <span className="font-mono text-xs font-semibold text-slate-800 bg-slate-100 px-2 py-0.5 rounded">
-                                  {it.originalLine}
+                    {/* Matched Items Cards with Rich Feedback Options */}
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between text-xs text-slate-600 font-bold px-1">
+                        <span>Extracted Order Items ({items.length})</span>
+                        <span>Click Suggestions to swap or search any catalog item</span>
+                      </div>
+
+                      {items.map((it, idx) => {
+                        const isExpanded = !!expandedRowSuggestions[idx];
+                        const candidates = it.candidates || [];
+                        const specs = it.selectedProduct?.structuredDetails;
+                        const rowResults = rowSearchResults[idx] || [];
+
+                        return (
+                          <div 
+                            key={idx} 
+                            className="bg-white border border-slate-200 rounded-xl p-4 shadow-2xs space-y-3 transition-all hover:border-slate-300"
+                          >
+                            {/* Line Item Header: Customer Original Line + Confidence */}
+                            <div className="flex flex-wrap items-center justify-between gap-2 pb-2 border-b border-slate-100">
+                              <div className="flex items-center space-x-2">
+                                <span className="w-5 h-5 rounded-full bg-slate-100 text-slate-600 font-mono text-[10px] font-bold flex items-center justify-center">
+                                  {idx + 1}
                                 </span>
-                              </td>
+                                <span className="font-mono text-xs font-semibold text-slate-700 bg-slate-100 px-2 py-0.5 rounded">
+                                  💬 "{it.originalLine}"
+                                </span>
+                              </div>
 
-                              {/* Selected Product / Candidates Dropdown */}
-                              <td className="py-2.5 px-3">
-                                {it.candidates && it.candidates.length > 1 ? (
-                                  <div className="relative">
-                                    <select
-                                      value={it.selectedProduct?.id || ''}
-                                      onChange={(e) => {
-                                        const found = it.candidates.find(c => c.id === parseInt(e.target.value, 10));
-                                        if (found) handleProductSelect(idx, found);
-                                      }}
-                                      className="w-full text-xs font-bold text-slate-900 bg-white border border-slate-300 rounded-lg p-1.5 pr-6 appearance-none focus:outline-none focus:ring-2 focus:ring-[#00545C]"
-                                    >
-                                      {it.candidates.map(cand => (
-                                        <option key={cand.id} value={cand.id}>
-                                          {cand.item_name} - ₹{cand.sale_rate} ({cand.section})
-                                        </option>
-                                      ))}
-                                    </select>
-                                    <ChevronDown className="w-3.5 h-3.5 absolute right-2 top-2.5 text-slate-400 pointer-events-none" />
-                                  </div>
-                                ) : (
-                                  <span className="font-bold text-slate-900">
-                                    {it.selectedProduct ? it.selectedProduct.item_name : <span className="text-rose-500 italic">No match found</span>}
-                                  </span>
-                                )}
-                              </td>
+                              <div className="flex items-center space-x-2">
+                                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                                  it.confidence === 'High'
+                                    ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                                    : it.confidence === 'Medium'
+                                    ? 'bg-amber-50 text-amber-800 border-amber-200'
+                                    : 'bg-rose-50 text-rose-800 border-rose-200'
+                                }`}>
+                                  {it.confidence === 'High' ? '✓ High Match' : it.confidence === 'Medium' ? '⚠️ Medium Match' : '🔍 Review Required'}
+                                </span>
 
-                              {/* Unit */}
-                              <td className="py-2.5 px-2 text-center">
-                                <input
-                                  type="text"
-                                  value={it.unit}
-                                  onChange={(e) => handleUnitChange(idx, e.target.value)}
-                                  className="w-14 text-center font-bold text-xs p-1 border border-slate-300 rounded bg-white"
-                                />
-                              </td>
-
-                              {/* Qty */}
-                              <td className="py-2.5 px-2 text-center">
-                                <input
-                                  type="number"
-                                  min="0.01"
-                                  step="any"
-                                  value={it.quantity}
-                                  onChange={(e) => handleQtyChange(idx, e.target.value)}
-                                  className="w-14 text-center font-black text-xs p-1 border border-slate-300 rounded bg-white text-slate-900"
-                                />
-                              </td>
-
-                              {/* Rate */}
-                              <td className="py-2.5 px-3 text-right">
-                                <input
-                                  type="number"
-                                  min="0"
-                                  step="any"
-                                  value={it.sale_rate}
-                                  onChange={(e) => handleRateChange(idx, e.target.value)}
-                                  className="w-20 text-right font-bold text-xs p-1 border border-slate-300 rounded bg-white text-[#00545C] tabular-nums"
-                                />
-                              </td>
-
-                              {/* Line Total */}
-                              <td className="py-2.5 px-3 text-right font-black text-slate-900 tabular-nums">
-                                ₹{(it.quantity * it.sale_rate).toFixed(2)}
-                              </td>
-
-                              {/* Remove */}
-                              <td className="py-2.5 px-2 text-center">
                                 <button
                                   type="button"
                                   onClick={() => handleRemoveItem(idx)}
-                                  className="text-slate-400 hover:text-rose-600 p-1 cursor-pointer"
-                                  title="Remove Item"
+                                  className="text-slate-400 hover:text-rose-600 p-1 cursor-pointer transition-colors"
+                                  title="Remove this item"
                                 >
-                                  <X className="w-3.5 h-3.5" />
+                                  <Trash2 className="w-3.5 h-3.5" />
                                 </button>
-                              </td>
+                              </div>
+                            </div>
 
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
+                            {/* Main Selected Product Display */}
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                              <div className="flex-1 min-w-0">
+                                {it.selectedProduct ? (
+                                  <>
+                                    <h4 className="font-extrabold text-sm text-slate-900 leading-snug">
+                                      {it.selectedProduct.item_name}
+                                    </h4>
+
+                                    {/* Structured specs badges */}
+                                    <div className="flex flex-wrap items-center gap-1.5 mt-1">
+                                      {specs?.brand && (
+                                        <span className="text-[10px] font-bold text-slate-700 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
+                                          🏷️ {specs.brand}
+                                        </span>
+                                      )}
+                                      {specs?.packSize && (
+                                        <span className="text-[10px] font-black text-[#00545C] bg-teal-50 px-2 py-0.5 rounded border border-teal-200">
+                                          📦 {specs.packSize}
+                                        </span>
+                                      )}
+                                      {specs?.category && (
+                                        <span className="text-[10px] font-medium text-slate-600 bg-slate-100 px-1.5 py-0.5 rounded">
+                                          {specs.category}
+                                        </span>
+                                      )}
+                                      {specs?.colour && (
+                                        <span className="text-[10px] font-semibold text-purple-700 bg-purple-50 px-2 py-0.5 rounded">
+                                          🎨 {specs.colour}
+                                        </span>
+                                      )}
+                                      {it.selectedProduct.details && (
+                                        <span className="text-[10px] text-slate-500 italic">
+                                          ({it.selectedProduct.details})
+                                        </span>
+                                      )}
+                                    </div>
+                                  </>
+                                ) : (
+                                  <div className="p-2 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-800 font-bold">
+                                    No exact match found. Please choose from alternative suggestions or search below.
+                                  </div>
+                                )}
+                              </div>
+
+                              {/* Quantity, Unit, Rate, Total Controls */}
+                              <div className="flex items-center space-x-3 flex-shrink-0 self-end sm:self-center">
+                                {/* Unit */}
+                                <div className="text-center">
+                                  <span className="text-[9px] text-slate-400 block font-bold">UNIT</span>
+                                  <input
+                                    type="text"
+                                    value={it.unit}
+                                    onChange={(e) => handleUnitChange(idx, e.target.value)}
+                                    className="w-16 text-center font-bold text-xs p-1 border border-slate-300 rounded-lg bg-white text-slate-900 focus:outline-none focus:ring-1 focus:ring-[#00545C]"
+                                  />
+                                </div>
+
+                                {/* Qty Stepper */}
+                                <div className="text-center">
+                                  <span className="text-[9px] text-slate-400 block font-bold">QTY</span>
+                                  <div className="inline-flex items-center space-x-1 bg-white border border-slate-300 rounded-lg p-0.5">
+                                    <button
+                                      type="button"
+                                      onClick={() => handleQtyChange(idx, Math.max(1, it.quantity - 1))}
+                                      className="w-5 h-5 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 font-black text-xs flex items-center justify-center cursor-pointer"
+                                    >
+                                      −
+                                    </button>
+                                    <input
+                                      type="number"
+                                      min="0.01"
+                                      step="any"
+                                      value={it.quantity}
+                                      onChange={(e) => handleQtyChange(idx, e.target.value)}
+                                      className="w-10 text-center font-mono font-black text-xs bg-transparent text-slate-900 focus:outline-none"
+                                    />
+                                    <button
+                                      type="button"
+                                      onClick={() => handleQtyChange(idx, it.quantity + 1)}
+                                      className="w-5 h-5 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 font-black text-xs flex items-center justify-center cursor-pointer"
+                                    >
+                                      +
+                                    </button>
+                                  </div>
+                                </div>
+
+                                {/* Rate */}
+                                <div className="text-right">
+                                  <span className="text-[9px] text-slate-400 block font-bold">RATE (₹)</span>
+                                  <input
+                                    type="number"
+                                    min="0"
+                                    step="any"
+                                    value={it.sale_rate}
+                                    onChange={(e) => handleRateChange(idx, e.target.value)}
+                                    className="w-20 text-right font-mono font-bold text-xs p-1 border border-slate-300 rounded-lg bg-white text-[#00545C] focus:outline-none focus:ring-1 focus:ring-[#00545C]"
+                                  />
+                                </div>
+
+                                {/* Total */}
+                                <div className="text-right min-w-[70px]">
+                                  <span className="text-[9px] text-slate-400 block font-bold">TOTAL</span>
+                                  <div className="font-mono font-black text-sm text-slate-900">
+                                    ₹{(it.quantity * it.sale_rate).toFixed(2)}
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Suggestion & Feedback Accordion Toggle Button */}
+                            <div className="pt-2 border-t border-slate-100 flex items-center justify-between">
+                              <button
+                                type="button"
+                                onClick={() => toggleSuggestions(idx)}
+                                className="text-xs font-bold text-[#00545C] hover:text-[#003B40] flex items-center space-x-1 cursor-pointer bg-slate-50 hover:bg-slate-100 px-2.5 py-1 rounded-lg border border-slate-200 transition-colors"
+                              >
+                                <Sparkles className="w-3.5 h-3.5 text-amber-500" />
+                                <span>
+                                  {isExpanded ? 'Hide Alternatives' : `Alternative Suggestions (${Math.max(0, candidates.length - 1)}) & Catalog Search`}
+                                </span>
+                                {isExpanded ? <ChevronUp className="w-3.5 h-3.5 ml-1" /> : <ChevronDown className="w-3.5 h-3.5 ml-1" />}
+                              </button>
+
+                              <span className="text-[10px] text-slate-400">
+                                Official Rate includes GST
+                              </span>
+                            </div>
+
+                            {/* EXPANDED SUGGESTIONS & INLINE CATALOG REPLACEMENT DRAWER */}
+                            {isExpanded && (
+                              <div className="bg-slate-50/80 p-3 rounded-xl border border-slate-200 space-y-3 mt-2 animate-in fade-in duration-200">
+                                
+                                {/* 1. Alternative Candidates from AI Matcher */}
+                                {candidates.length > 0 && (
+                                  <div>
+                                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1.5">
+                                      Closest Matching Alternatives:
+                                    </span>
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                      {candidates.map(cand => {
+                                        const isCurrent = it.selectedProduct?.id === cand.id;
+                                        return (
+                                          <div
+                                            key={cand.id}
+                                            onClick={() => handleProductSelect(idx, cand)}
+                                            className={`p-2.5 rounded-lg border text-xs cursor-pointer transition-all flex items-center justify-between gap-2 ${
+                                              isCurrent 
+                                                ? 'bg-teal-50 border-[#00545C] text-[#00545C] font-bold shadow-2xs' 
+                                                : 'bg-white border-slate-200 hover:border-[#00545C] hover:bg-slate-50 text-slate-800'
+                                            }`}
+                                          >
+                                            <div className="min-w-0 flex-1">
+                                              <p className="truncate font-semibold">{cand.item_name}</p>
+                                              {cand.details && (
+                                                <p className="text-[10px] text-slate-500 truncate mt-0.5">{cand.details}</p>
+                                              )}
+                                            </div>
+                                            <div className="text-right flex-shrink-0">
+                                              <div className="font-mono font-bold text-xs text-[#00545C]">₹{cand.sale_rate}</div>
+                                              {isCurrent ? (
+                                                <span className="text-[9px] font-bold text-emerald-700">✓ Selected</span>
+                                              ) : (
+                                                <span className="text-[9px] text-slate-400 hover:text-[#00545C]">Use this</span>
+                                              )}
+                                            </div>
+                                          </div>
+                                        );
+                                      })}
+                                    </div>
+                                  </div>
+                                )}
+
+                                {/* 2. Live In-Row Search: If item missed in suggestions, search entire 5,300+ catalog */}
+                                <div className="pt-2 border-t border-slate-200">
+                                  <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">
+                                    Search & Replace from Full 5,300+ Catalog:
+                                  </span>
+                                  <div className="relative">
+                                    <Search className="w-3.5 h-3.5 absolute left-3 top-2.5 text-slate-400" />
+                                    <input
+                                      type="text"
+                                      value={rowSearchQueries[idx] || ''}
+                                      onChange={(e) => handleRowLiveSearch(idx, e.target.value)}
+                                      placeholder="Type product name, brand, or code to replace... (e.g. Apex 20lt, Putty, Brush)"
+                                      className="w-full pl-9 pr-8 py-2 text-xs bg-white border border-slate-300 rounded-lg text-slate-900 focus:outline-none focus:ring-1 focus:ring-[#00545C]"
+                                    />
+                                    {isRowSearching[idx] && (
+                                      <Loader2 className="w-3.5 h-3.5 animate-spin absolute right-2.5 top-2.5 text-[#00545C]" />
+                                    )}
+                                  </div>
+
+                                  {/* Row Search Results Dropdown */}
+                                  {rowResults.length > 0 && (
+                                    <div className="mt-1 bg-white border border-slate-200 rounded-lg shadow-lg max-h-48 overflow-y-auto divide-y divide-slate-100">
+                                      {rowResults.map(p => (
+                                        <div
+                                          key={p.id}
+                                          onClick={() => {
+                                            handleProductSelect(idx, p);
+                                            setRowSearchQueries(prev => ({ ...prev, [idx]: '' }));
+                                            setRowSearchResults(prev => ({ ...prev, [idx]: [] }));
+                                          }}
+                                          className="p-2 text-xs hover:bg-slate-50 cursor-pointer flex items-center justify-between"
+                                        >
+                                          <div className="min-w-0 flex-1">
+                                            <p className="font-bold text-slate-900 truncate">{p.item_name}</p>
+                                            <p className="text-[10px] text-slate-500">{p.details || p.section}</p>
+                                          </div>
+                                          <div className="font-mono font-bold text-xs text-[#00545C] ml-2">
+                                            ₹{p.sale_rate}
+                                          </div>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
+
+                              </div>
+                            )}
+
+                          </div>
+                        );
+                      })}
                     </div>
 
                     {/* Summary Bar */}
                     <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 flex items-center justify-between text-xs">
                       <div>
-                        <span className="font-bold text-slate-700">Matched {items.length} Product(s)</span>
-                        <span className="text-slate-400 ml-2">(Rates include GST as per official rate sheet)</span>
+                        <span className="font-bold text-slate-800">Total {items.length} item(s) ready for quotation</span>
+                        <span className="text-slate-400 ml-2 hidden sm:inline">• Official Udhayam catalog rates applied</span>
                       </div>
                       <div className="flex items-center space-x-2">
-                        <span className="font-bold text-slate-600">Total:</span>
-                        <span className="text-base font-black text-[#00545C] tabular-nums">
+                        <span className="font-bold text-slate-600">Subtotal:</span>
+                        <span className="text-base font-black font-mono text-[#00545C]">
                           ₹{totalAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                         </span>
                       </div>
@@ -514,9 +764,9 @@ brush 2" 1ps`;
                     type="button"
                     onClick={handleDirectSaveAndCreate}
                     disabled={items.length === 0 || isDirectCreating}
-                    className={`flex items-center space-x-2 px-5 py-2.5 rounded-xl text-xs font-black shadow transition-all active:scale-95 cursor-pointer ${
+                    className={`flex items-center space-x-2 px-5 py-2.5 rounded-xl text-xs font-black shadow-sm transition-all active:scale-95 cursor-pointer ${
                       items.length > 0 && !isDirectCreating
-                        ? 'bg-[#7DBA00] hover:bg-[#8ee000] text-[#003B40]'
+                        ? 'bg-[#00545C] hover:bg-[#003B40] text-white shadow-md shadow-[#00545C]/20'
                         : 'bg-slate-200 text-slate-400 cursor-not-allowed'
                     }`}
                   >

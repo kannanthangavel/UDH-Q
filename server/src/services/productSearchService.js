@@ -235,7 +235,7 @@ function extractProductSpecs(rawName) {
   const upper = (rawName || '').toUpperCase();
 
   // 1. Volumes: 1LT, 20LT, 4LT, 10LT, 500ML, 100ML
-  const volRegex = /(?:^|[\s\-\(\/])(\d+(?:\.\d+)?)\s*(LT|LTR|L|ML)(?:[\s\-\)\/]|$)/g;
+  const volRegex = /(?:^|[\s\-\(\/,])(\d+(?:\.\d+)?)\s*(LT|LTR|L|ML)(?:[\s\-\)\/,]|$)/g;
   let vm;
   while ((vm = volRegex.exec(upper)) !== null) {
     const num = vm[1];
@@ -244,7 +244,7 @@ function extractProductSpecs(rawName) {
   }
 
   // 2. Weights: 40KG, 25KG, 20KG, 1KG, 500GM
-  const wtRegex = /(?:^|[\s\-\(\/])(\d+(?:\.\d+)?)\s*(KG|KGS|GM|G)(?:[\s\-\)\/]|$)/g;
+  const wtRegex = /(?:^|[\s\-\(\/,])(\d+(?:\.\d+)?)\s*(KG|KGS|GM|G)(?:[\s\-\)\/,]|$)/g;
   let wm;
   while ((wm = wtRegex.exec(upper)) !== null) {
     const num = wm[1];
@@ -252,11 +252,21 @@ function extractProductSpecs(rawName) {
     specs.push(`${num}${unit}`);
   }
 
-  // 3. Inches: 2", 1 1/2", 4", 6"
-  const inchRegex = /(?:^|[\s\-\(\/])(\d+(?:\s*1\/2)?)\s*(?:\"|INCH)/g;
-  let im;
-  while ((im = inchRegex.exec(upper)) !== null) {
-    specs.push(`${im[1].replace(/\s+/g, '')}"`);
+  // 3. Fraction Inches first: 1 1/2", 2 1/2", 1/2", 3/4"
+  const fracRegex = /(?:^|[\s\-\(])((?:\d+\s+)?\d+\/\d+)\s*(?:\"|INCH\b)/g;
+  let fm;
+  while ((fm = fracRegex.exec(upper)) !== null) {
+    specs.push(`${fm[1].replace(/\s+/g, ' ')}"`);
+  }
+
+  // 4. Whole Inches (MUST NOT be preceded by fraction slash / or digit): 2", 3", 4", 5", 6"
+  const wholeInchRegex = /(?<![\/\d])\b([1-9]\d*)\s*(?:\"|INCH\b)/g;
+  let wm2;
+  while ((wm2 = wholeInchRegex.exec(upper)) !== null) {
+    const wholeVal = `${wm2[1]}"`;
+    if (!specs.some(s => s.endsWith(wholeVal) && s.includes('/'))) {
+      specs.push(wholeVal);
+    }
   }
 
   return [...new Set(specs)];
@@ -642,6 +652,9 @@ function searchProductsSmart({ search = '', section, limit = null, page = 1, isA
 module.exports = {
   searchProductsSmart,
   parseSearchQuery,
+  extractProductSpecs,
+  extractStructuredDetails,
+  getIndexedProducts,
   levenshteinDistance,
   invalidateProductCache
 };

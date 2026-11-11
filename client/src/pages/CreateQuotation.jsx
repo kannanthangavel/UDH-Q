@@ -934,61 +934,56 @@ export default function CreateQuotation({ setActivePage, initialCustomer, import
 
       </div>
 
-      {/* SECTION 2: LIVE MULTI-ATTRIBUTE QUICK SEARCH & AMBIGUITY RESOLVER */}
-      <div id="search-products-card" ref={searchContainerRef} className="bg-white rounded-2xl p-5 shadow-sm border border-slate-200/90 space-y-3.5 relative">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
-          <div className="flex items-center space-x-2">
-            <div className="w-8 h-8 rounded-xl bg-slate-100 flex items-center justify-center text-[#00545C]">
-              <Search className="w-4 h-4" />
-            </div>
-            <div>
-              <h3 className="text-sm font-black text-slate-900 tracking-tight flex items-center space-x-2">
-                <span>Intelligent Product Search</span>
-                <span className="text-[10px] font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full border border-slate-200">
-                  5,300+ items catalog
-                </span>
-              </h3>
-              <p className="text-[11px] text-slate-500">
-                Live specs matching for brand, volume, finish, shade, and codes across official inventory
-              </p>
-            </div>
+      {/* SECTION 2: QUOTATION LINE ITEMS TABLE */}
+      <div className="bg-white rounded-2xl p-5 shadow-sm border border-slate-200 space-y-4">
+        
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100">
+          <div>
+            <h2 className="text-base font-black text-slate-900 flex items-center space-x-2">
+              <span>Quotation Items</span>
+              <span className="bg-[#00545C] text-white text-xs font-bold px-2.5 py-0.5 rounded-full">
+                {items.length} {items.length === 1 ? 'item' : 'items'}
+              </span>
+            </h2>
+            <p className="text-xs text-slate-500 mt-0.5">
+              Live rate sheet pricing with instant product search, spec tags, and editable quantities
+            </p>
           </div>
 
-          {/* Section Pills */}
-          <div className="flex items-center space-x-1 bg-slate-100 p-1 rounded-xl text-xs border border-slate-200/60">
+          <div className="flex items-center space-x-2">
             <button
               type="button"
-              onClick={() => setQuickSectionFilter('ALL')}
-              className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                quickSectionFilter === 'ALL' ? 'bg-[#00545C] text-white shadow-xs' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
-              }`}
+              onClick={() => setShowSmartParser(true)}
+              className="px-3 py-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 text-xs font-bold border border-emerald-300 flex items-center space-x-1.5 transition-all cursor-pointer shadow-2xs"
             >
-              All (5,331)
+              <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
+              <span>Paste WhatsApp Order</span>
             </button>
+
             <button
               type="button"
-              onClick={() => setQuickSectionFilter('PAINTS')}
-              className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                quickSectionFilter === 'PAINTS' ? 'bg-[#00545C] text-white shadow-xs' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
-              }`}
+              onClick={() => setShowCatalogDrawer(true)}
+              className="px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold border border-slate-200 flex items-center space-x-1 transition-all cursor-pointer shadow-2xs"
             >
-              Paints ({productCounts.paints ? productCounts.paints.toLocaleString() : '4,100'})
+              <Plus className="w-3.5 h-3.5" />
+              <span>Browse Catalogue</span>
             </button>
-            <button
-              type="button"
-              onClick={() => setQuickSectionFilter('ACCESS')}
-              className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                quickSectionFilter === 'ACCESS' ? 'bg-[#00545C] text-white shadow-xs' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
-              }`}
-            >
-              Accessories ({productCounts.access ? productCounts.access.toLocaleString() : '1,231'})
-            </button>
+
+            {items.length > 0 && (
+              <button
+                type="button"
+                onClick={() => { if (confirm('Remove all items from this quotation?')) setItems([]); }}
+                className="text-xs font-semibold text-rose-600 hover:text-rose-800 hover:bg-rose-50 px-2 py-1.5 rounded-lg transition-colors cursor-pointer"
+              >
+                Clear All
+              </button>
+            )}
           </div>
         </div>
 
-        {/* Search Input Box with keyboard navigation support */}
-        <div className="relative">
-          <Search className="w-4 h-4 absolute left-3.5 top-3.5 text-slate-400" />
+        {/* Clean Inline Search Bar for quick product addition */}
+        <div ref={searchContainerRef} className="relative">
+          <Search className="w-4 h-4 absolute left-3.5 top-3 text-slate-400" />
           <input
             type="text"
             value={quickSearchQuery}
@@ -998,314 +993,115 @@ export default function CreateQuotation({ setActivePage, initialCustomer, import
             }}
             onKeyDown={handleSearchKeyDown}
             onFocus={() => { if (quickSearchResults.length > 0) setShowQuickDropdown(true); }}
-            placeholder="Search naturally: e.g. 'white 1lt', 'golden brown', 'brush 2 inch', 'putty 40kg', 'primer 20lt'..."
-            className="w-full pl-10 pr-10 py-3 bg-slate-50 hover:bg-white focus:bg-white text-slate-900 text-xs sm:text-sm font-semibold rounded-xl border border-slate-300 focus:border-[#00545C] focus:ring-2 focus:ring-[#00545C]/20 focus:outline-none transition-all shadow-xs"
+            placeholder="Type to search and add products... (e.g. 'Apex 20lt', 'White 1lt', 'Putty 40kg', 'Brush 2&quot;', 'Dr Fixit 302')"
+            className="w-full pl-10 pr-10 py-2.5 bg-slate-50 hover:bg-white focus:bg-white text-slate-900 text-xs sm:text-sm font-semibold rounded-xl border border-slate-300 focus:border-[#00545C] focus:ring-2 focus:ring-[#00545C]/20 focus:outline-none transition-all shadow-2xs"
           />
           {isSearchingQuick ? (
-            <div className="absolute right-3.5 top-3.5 text-[#00545C]">
+            <div className="absolute right-3.5 top-2.5 text-[#00545C]">
               <Loader2 className="w-4 h-4 animate-spin" />
             </div>
           ) : quickSearchQuery ? (
             <button
               type="button"
               onClick={() => { setQuickSearchQuery(''); setShowQuickDropdown(false); setActiveDropdownIndex(-1); }}
-              className="absolute right-3.5 top-3.5 text-slate-400 hover:text-slate-600 cursor-pointer"
+              className="absolute right-3.5 top-2.5 text-slate-400 hover:text-slate-600 cursor-pointer"
             >
               <X className="w-4 h-4" />
             </button>
           ) : null}
 
-          {/* Quick Dropdown Results with ALL MATCHING PRODUCTS & STRUCTURED SPECS */}
+          {/* Clean Floating Autocomplete Dropdown */}
           {showQuickDropdown && (
-            <div className="absolute left-0 right-0 top-12 z-40 bg-white border border-slate-200 rounded-2xl shadow-2xl max-h-[480px] overflow-y-auto divide-y divide-slate-100 mt-1">
-              
-              {/* Results Count Banner & Drawer Quick Link */}
-              <div className="bg-slate-50 border-b border-slate-200 px-4 py-2.5 flex flex-wrap items-center justify-between gap-2 sticky top-0 z-20 backdrop-blur-xs">
-                <div className="flex items-center space-x-2 text-xs">
-                  <span className="w-2 h-2 rounded-full bg-[#00545C]"></span>
-                  <span className="font-bold text-slate-800">
-                    Found <span className="text-[#00545C] font-black">{displayedQuickResults.length}</span> matching products
-                    {quickSearchResults.length !== displayedQuickResults.length && ` (filtered from ${quickSearchResults.length} matches)`}
-                  </span>
-                  <span className="hidden sm:inline-block text-[10px] text-slate-500 font-medium">
-                    • Use ↑ / ↓ and Enter to select
-                  </span>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setCatalogSearch(quickSearchQuery);
-                    setShowCatalogDrawer(true);
-                    setShowQuickDropdown(false);
-                  }}
-                  className="text-[11px] font-bold text-[#00545C] hover:text-[#003B40] flex items-center space-x-1 cursor-pointer bg-white px-2.5 py-1 rounded-lg border border-slate-300 shadow-2xs"
-                >
-                  <Layers className="w-3 h-3 text-[#00545C]" />
-                  <span>Open Catalogue Drawer</span>
-                </button>
+            <div className="absolute left-0 right-0 top-11 z-40 bg-white border border-slate-200 rounded-2xl shadow-2xl max-h-80 overflow-y-auto divide-y divide-slate-100 mt-1">
+              <div className="bg-slate-50 px-3 py-1.5 text-[11px] text-slate-500 font-medium flex items-center justify-between sticky top-0 z-10 border-b border-slate-100">
+                <span>Found {displayedQuickResults.length} matching products</span>
+                <span>Press Enter to add, Esc to close</span>
               </div>
-
-              {/* Did-You-Mean Typo Suggestion Banner */}
-              {searchSuggestions?.didYouMean && (
-                <div className="bg-amber-50/80 border-b border-amber-200 p-2 px-4 flex items-center justify-between gap-2 sticky top-9 z-15 backdrop-blur-xs text-xs">
-                  <div className="flex items-center space-x-1.5 text-amber-900 font-bold">
-                    <Sparkles className="w-3.5 h-3.5 text-amber-600 flex-shrink-0" />
-                    <span>Did you mean:</span>
-                    <button
-                      type="button"
-                      onClick={() => setQuickSearchQuery(searchSuggestions.didYouMean)}
-                      className="text-[#00545C] underline font-black cursor-pointer hover:text-amber-800 ml-1"
-                    >
-                      "{searchSuggestions.didYouMean}"
-                    </button>
-                  </div>
-                  <span className="text-[10px] text-amber-700 font-medium">Click to apply suggestion</span>
-                </div>
-              )}
-
-              {/* Ambiguity Resolver Header (Category Filter) */}
-              {isSearchAmbiguous && searchDistinctTypes.length > 0 && (
-                <div className="bg-slate-50 border-b border-slate-200 p-2.5 px-4 flex flex-wrap items-center justify-between gap-2 sticky top-9 z-10 backdrop-blur-xs">
-                  <div className="flex items-center space-x-1.5 text-xs text-slate-700 font-bold">
-                    <Sparkles className="w-3.5 h-3.5 text-[#00545C] flex-shrink-0" />
-                    <span>Filter by category:</span>
-                  </div>
-                  <div className="flex flex-wrap items-center gap-1 text-[11px]">
-                    <button
-                      type="button"
-                      onClick={() => setSelectedTypeFilter('ALL')}
-                      className={`px-2.5 py-0.5 rounded-lg font-bold cursor-pointer transition-all ${
-                        selectedTypeFilter === 'ALL' ? 'bg-[#00545C] text-white' : 'bg-white text-slate-700 border border-slate-300 hover:bg-slate-100'
-                      }`}
-                    >
-                      All Types ({quickSearchResults.length})
-                    </button>
-                    {searchDistinctTypes.map(t => (
-                      <button
-                        key={t}
-                        type="button"
-                        onClick={() => setSelectedTypeFilter(t)}
-                        className={`px-2.5 py-0.5 rounded-lg font-bold cursor-pointer transition-all ${
-                          selectedTypeFilter === t ? 'bg-[#00545C] text-white' : 'bg-white text-slate-700 border border-slate-300 hover:bg-slate-100'
-                        }`}
-                      >
-                        {t}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Pack Sizes Suggestion & Quick Filter Pills */}
-              {searchSuggestions?.availableSizes && searchSuggestions.availableSizes.length > 1 && (
-                <div className="bg-slate-50 border-b border-slate-200 p-2 px-4 flex flex-wrap items-center gap-1.5 text-xs">
-                  <span className="font-bold text-slate-700 text-[11px] mr-1">Available Sizes:</span>
-                  <button
-                    type="button"
-                    onClick={() => setSelectedSizeFilter('ALL')}
-                    className={`px-2.5 py-0.5 rounded-lg text-[11px] font-bold cursor-pointer transition-all ${
-                      selectedSizeFilter === 'ALL' ? 'bg-[#00545C] text-white shadow-2xs' : 'bg-white text-slate-700 border border-slate-300 hover:bg-slate-100'
-                    }`}
-                  >
-                    All Sizes
-                  </button>
-                  {searchSuggestions.availableSizes.map(sz => (
-                    <button
-                      key={sz}
-                      type="button"
-                      onClick={() => setSelectedSizeFilter(sz)}
-                      className={`px-2.5 py-0.5 rounded-lg text-[11px] font-bold cursor-pointer transition-all ${
-                        selectedSizeFilter === sz ? 'bg-[#00545C] text-white shadow-2xs' : 'bg-white text-slate-700 border border-slate-300 hover:bg-slate-100'
-                      }`}
-                    >
-                      {sz}
-                    </button>
-                  ))}
-                </div>
-              )}
-
               {displayedQuickResults.length === 0 ? (
-                <div className="p-6 text-center text-xs text-slate-500 space-y-1">
-                  <p className="font-bold text-slate-700">No exact match for "{quickSearchQuery}"</p>
-                  <p>Try searching by brand (e.g. Asian Paints, Abro, Fixit) or size (e.g. 20lt, 4lt, 1lt, 40kg).</p>
+                <div className="p-4 text-center text-xs text-slate-500">
+                  No products found for "{quickSearchQuery}". Try another keyword or browse the full catalogue.
                 </div>
               ) : (
-                <>
-                  {displayedQuickResults.map((prod, pIdx) => {
-                    const alreadyIndex = items.findIndex(it => it.product_id === prod.id);
-                    const isAlreadyAdded = alreadyIndex !== -1;
-                    const alreadyQty = isAlreadyAdded ? items[alreadyIndex].quantity : 0;
-                    const isHighlighted = activeDropdownIndex === pIdx;
-                    const specs = prod.structuredDetails;
+                displayedQuickResults.map((prod, pIdx) => {
+                  const alreadyIndex = items.findIndex(it => it.product_id === prod.id);
+                  const isAlreadyAdded = alreadyIndex !== -1;
+                  const alreadyQty = isAlreadyAdded ? items[alreadyIndex].quantity : 0;
+                  const isHighlighted = activeDropdownIndex === pIdx;
+                  const specs = prod.structuredDetails;
 
-                    return (
-                      <div
-                        key={prod.id}
-                        onClick={() => handleAddProduct(prod)}
-                        className={`p-3.5 cursor-pointer flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-slate-900 transition-colors ${
-                          isHighlighted
-                            ? 'bg-teal-50/80 border-l-4 border-l-[#00545C]'
-                            : isAlreadyAdded
-                            ? 'bg-amber-50/30 hover:bg-amber-50/60'
-                            : 'hover:bg-slate-50'
-                        }`}
-                      >
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center space-x-2">
-                            <span className="text-[10px] font-mono text-slate-400">#{prod.s_no}</span>
-                            <span className="font-extrabold text-xs sm:text-sm text-slate-900 truncate">
-                              {prod.item_name}
-                            </span>
-                          </div>
-
-                          {/* Structured Product Badges */}
-                          <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
-                            {specs?.brand && (
-                              <span className="text-[10px] font-bold text-slate-700 bg-slate-100 px-2 py-0.5 rounded-md border border-slate-200">
-                                🏷️ {specs.brand}
-                              </span>
-                            )}
-                            {specs?.packSize && (
-                              <span className="text-[10px] font-black text-[#00545C] bg-teal-50 px-2 py-0.5 rounded-md border border-teal-200">
-                                📦 {specs.packSize}
-                              </span>
-                            )}
-                            {specs?.category && (
-                              <span className="text-[10px] font-bold text-slate-600 bg-slate-100 px-2 py-0.5 rounded-md">
-                                {specs.category}
-                              </span>
-                            )}
-                            {specs?.colour && (
-                              <span className="text-[10px] font-semibold text-purple-700 bg-purple-50 px-2 py-0.5 rounded-md border border-purple-200">
-                                🎨 {specs.colour}
-                              </span>
-                            )}
-                            {specs?.finish && (
-                              <span className="text-[10px] font-medium text-slate-600 bg-slate-100 px-1.5 py-0.5 rounded">
-                                {specs.finish}
-                              </span>
-                            )}
-                            {specs?.code && (
-                              <span className="text-[10px] font-mono text-slate-600 bg-slate-100 px-1.5 py-0.5 rounded">
-                                Code: {specs.code}
-                              </span>
-                            )}
-                            <span className="text-[10px] font-medium text-slate-500">
-                              Unit: {prod.main_unit || 'Nos'}
-                            </span>
-                            {prod.hsn_sac && (
-                              <span className="text-[10px] font-mono text-slate-400">
-                                HSN: {prod.hsn_sac}
-                              </span>
-                            )}
-                          </div>
-
-                          {/* Full Specification Description */}
-                          {prod.details && (
-                            <p className="text-[11px] text-slate-600 mt-1 font-medium">
-                              <span className="text-slate-400 font-normal">Spec:</span> {prod.details}
-                            </p>
-                          )}
+                  return (
+                    <div
+                      key={prod.id}
+                      onClick={() => handleAddProduct(prod)}
+                      className={`p-3 cursor-pointer flex items-center justify-between gap-3 text-slate-900 transition-colors ${
+                        isHighlighted
+                          ? 'bg-teal-50 border-l-4 border-l-[#00545C]'
+                          : isAlreadyAdded
+                          ? 'bg-amber-50/40 hover:bg-amber-50'
+                          : 'hover:bg-slate-50'
+                      }`}
+                    >
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center space-x-2">
+                          <span className="font-extrabold text-xs sm:text-sm text-slate-900 truncate">
+                            {prod.item_name}
+                          </span>
                         </div>
-
-                        <div className="flex items-center justify-between sm:justify-end space-x-3 flex-shrink-0 pt-1 sm:pt-0 border-t sm:border-t-0 border-slate-100">
-                          <div className="text-left sm:text-right">
-                            <div className="font-mono font-black text-sm sm:text-base text-[#00545C]">
-                              ₹{Number(prod.sale_rate).toFixed(2)}
-                            </div>
-                            <span className="text-[10px] text-emerald-700 font-bold bg-emerald-50 px-1.5 py-0.2 rounded">
-                              GST Included
+                        <div className="flex flex-wrap items-center gap-1.5 mt-1">
+                          {specs?.brand && (
+                            <span className="text-[10px] font-bold text-slate-700 bg-slate-100 px-1.5 py-0.2 rounded border border-slate-200">
+                              {specs.brand}
                             </span>
-                          </div>
-
-                          {isAlreadyAdded ? (
-                            <div className="flex items-center space-x-1.5">
-                              <span className="px-2.5 py-1 rounded-lg bg-amber-100 text-amber-900 font-bold text-xs border border-amber-300">
-                                In Quote ({alreadyQty})
-                              </span>
-                              <button
-                                type="button"
-                                onClick={(e) => { e.stopPropagation(); handleAddProduct(prod); }}
-                                className="px-2 py-1 rounded-lg bg-slate-200 hover:bg-slate-300 text-slate-800 text-xs font-bold cursor-pointer transition-colors"
-                                title="Add another to quotation"
-                              >
-                                +1
-                              </button>
-                            </div>
-                          ) : (
-                            <button
-                              type="button"
-                              className="px-3.5 py-1.5 rounded-xl bg-[#00545C] hover:bg-[#003B40] text-white font-bold text-xs shadow-xs flex items-center space-x-1 active:scale-95 transition-all cursor-pointer"
-                            >
-                              <Plus className="w-3.5 h-3.5" />
-                              <span>+ Add</span>
-                            </button>
                           )}
+                          {specs?.packSize && (
+                            <span className="text-[10px] font-black text-[#00545C] bg-teal-50 px-1.5 py-0.2 rounded border border-teal-200">
+                              {specs.packSize}
+                            </span>
+                          )}
+                          {specs?.category && (
+                            <span className="text-[10px] font-medium text-slate-600 bg-slate-100 px-1.5 py-0.2 rounded">
+                              {specs.category}
+                            </span>
+                          )}
+                          {specs?.colour && (
+                            <span className="text-[10px] font-semibold text-purple-700 bg-purple-50 px-1.5 py-0.2 rounded">
+                              {specs.colour}
+                            </span>
+                          )}
+                          <span className="text-[10px] text-slate-400">
+                            Unit: {prod.main_unit || 'Nos'}
+                          </span>
                         </div>
                       </div>
-                    );
-                  })}
 
-                  <div className="p-3 bg-slate-50 border-t border-slate-200 text-center text-[11px] text-slate-500 font-medium">
-                    Showing all {displayedQuickResults.length} matching products from official inventory.
-                  </div>
-                </>
+                      <div className="flex items-center space-x-3 flex-shrink-0">
+                        <div className="text-right">
+                          <div className="font-mono font-black text-sm text-[#00545C]">
+                            ₹{Number(prod.sale_rate).toFixed(2)}
+                          </div>
+                          <span className="text-[9px] text-emerald-700 font-bold bg-emerald-50 px-1 py-0.2 rounded">
+                            Incl. GST
+                          </span>
+                        </div>
+                        {isAlreadyAdded ? (
+                          <span className="px-2 py-1 rounded bg-amber-100 text-amber-900 font-bold text-xs border border-amber-300">
+                            In Quote ({alreadyQty})
+                          </span>
+                        ) : (
+                          <button
+                            type="button"
+                            className="px-3 py-1 rounded-lg bg-[#00545C] hover:bg-[#003B40] text-white font-bold text-xs shadow-2xs"
+                          >
+                            + Add
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })
               )}
             </div>
           )}
-        </div>
-
-        {/* Quick Suggestion Chips */}
-        <div className="flex flex-wrap items-center gap-1.5 pt-1 text-[11px]">
-          <span className="text-slate-400 font-semibold text-[10px] uppercase tracking-wider mr-1">Quick Suggestions:</span>
-          {['Golden Brown 1ltr', 'White 1lt', 'Putty Powder 40kg', 'Brush 2"', 'Asian Paints', 'Apex', 'Enamel', 'White Cement', 'Thinner'].map(tag => (
-            <button
-              key={tag}
-              type="button"
-              onClick={() => { setQuickSearchQuery(tag); }}
-              className="bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200/80 px-2.5 py-0.5 rounded-lg font-medium transition-colors cursor-pointer"
-            >
-              {tag}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* SECTION 3: LINE ITEMS TABLE (THE HEART OF QUOTATION CREATION) */}
-      <div className="bg-white rounded-2xl p-5 shadow-sm border border-slate-200 space-y-4">
-        
-        <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-          <div>
-            <h2 className="text-base font-black text-slate-900 flex items-center space-x-2">
-              <span>Quotation Items Table</span>
-              <span className="bg-[#00545C] text-white text-xs font-bold px-2 py-0.5 rounded-full">
-                {items.length} {items.length === 1 ? 'item' : 'items'}
-              </span>
-            </h2>
-            <p className="text-xs text-slate-500 mt-0.5">
-              Edit quantities, units, customer requirements/shades, and rates directly in the table
-            </p>
-          </div>
-
-          <div className="flex items-center space-x-2">
-            <button
-              type="button"
-              onClick={() => setShowCatalogDrawer(true)}
-              className="text-xs font-bold text-[#00545C] hover:underline flex items-center space-x-1 cursor-pointer"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              <span>Add From Catalogue</span>
-            </button>
-            {items.length > 0 && (
-              <button
-                type="button"
-                onClick={() => { if (confirm('Remove all items from this quotation?')) setItems([]); }}
-                className="text-xs font-bold text-rose-600 hover:underline ml-3 cursor-pointer"
-              >
-                Clear All
-              </button>
-            )}
-          </div>
         </div>
 
         {itemsError && (

@@ -1,6 +1,7 @@
 const { db } = require('../db/database');
+const { searchProductsSmart, extractProductSpecs, levenshteinDistance } = require('./productSearchService');
 
-// Common unit standardizations
+// Comprehensive Indian / Tamil hardware & paint unit standardizations
 const UNIT_MAP = {
   'ps': 'Nos',
   'pcs': 'Nos',
@@ -11,6 +12,33 @@ const UNIT_MAP = {
   'nos': 'Nos',
   'number': 'Nos',
   'numbers': 'Nos',
+  'can': 'Nos',
+  'cans': 'Nos',
+  'tin': 'Nos',
+  'tins': 'Nos',
+  'dabba': 'Nos',
+  'dabbas': 'Nos',
+  'bucket': 'Nos',
+  'buckets': 'Nos',
+  'bottle': 'Nos',
+  'bottles': 'Nos',
+  'btl': 'Nos',
+  'bag': 'Bags',
+  'bags': 'Bags',
+  'mootai': 'Bags',
+  'box': 'Box',
+  'boxes': 'Box',
+  'pkt': 'Pocket',
+  'pkts': 'Pocket',
+  'packet': 'Pocket',
+  'packets': 'Pocket',
+  'set': 'Set',
+  'sets': 'Set',
+  'roll': 'Roll',
+  'rolls': 'Roll',
+  'bundle': 'Bundle',
+  'bundles': 'Bundle',
+  'kattu': 'Bundle',
   'lt': 'Litre',
   'ltr': 'Litre',
   'liter': 'Litre',
@@ -21,77 +49,46 @@ const UNIT_MAP = {
   'kg': 'Kg',
   'kgs': 'Kg',
   'kilo': 'Kg',
-  'kilos': 'Kg',
-  'bag': 'Bags',
-  'bags': 'Bags',
-  'can': 'Nos',
-  'tin': 'Nos',
-  'bucket': 'Nos',
-  'box': 'Box',
-  'boxes': 'Box',
-  'pkt': 'Pocket',
-  'packet': 'Pocket',
-  'set': 'Set',
-  'roll': 'Roll',
-  'bundle': 'Bundle'
+  'kilos': 'Kg'
 };
 
-const TRADE_CORRECTIONS = [
-  { pattern: /\bblock\b/gi, replacement: 'black' },
-  { pattern: /\bwite\b|\bwhte\b/gi, replacement: 'white' },
-  { pattern: /\benamal\b|\benaml\b/gi, replacement: 'enamel' },
+const TRADE_PHRASE_NORMALIZATION = [
+  // Brand & Model expansions for exact catalog hit
+  { pattern: /\b(asian\s*paints?|ap)\s+(apex|ace|tractor|royale|apcolite|dampproof|smartcare)\b/gi, replacement: 'AS $2' },
+  { pattern: /\b(apex|ace|tractor|royale|apcolite)\b/gi, replacement: 'AS $1' },
+  { pattern: /\b(berger|bp)\s+(bison|walmasta|weathercoat|luxol)\b/gi, replacement: 'BR $2' },
+  { pattern: /\b(dr\s*fixit|dr\.fixit|pidilite)\s*(302|101|urp|lw\+?|fastflex|primecoat)\b/gi, replacement: 'DR FIXIT $2' },
+  { pattern: /\b(fixit|pidilite)\b/gi, replacement: 'DR FIXIT' },
+  { pattern: /\b(birla\s*white|birla)\s*(putty|wall\s*care)?\b/gi, replacement: 'BIRLA WHITE WALL CARE PUTTY' },
+  { pattern: /\b(jk\s*cement|jk)\s*(putty|shield\s*max)?\b/gi, replacement: 'JK PUTTY SHIELD MAX' },
+  { pattern: /\b(touch\s*wood|touchwood)\b/gi, replacement: 'TOUCH WOOD' },
+  { pattern: /\b(putty\s*powder|wall\s*putty|patty\s*powder|patti)\b/gi, replacement: 'PUTTY' },
+  { pattern: /\b(red\s*oxide|yellow\s*primer|metal\s*primer)\b/gi, replacement: '$1 PRIMER' },
+  { pattern: /\b(foam\s*roller|cotton\s*roller)\b/gi, replacement: '$1 ROLLER' },
+  { pattern: /\b(tiger\s*brush|mayil\s*brush|paint\s*brush)\b/gi, replacement: 'BRUSH' },
   { pattern: /\bthiner\b|\btinner\b/gi, replacement: 'thinner' },
-  { pattern: /\bbrsh\b/gi, replacement: 'brush' },
-  { pattern: /\bputty\s*powder\b/gi, replacement: 'putty' },
-  { pattern: /\bwall\s*putty\b/gi, replacement: 'putty' },
-  { pattern: /\bfixit\b/gi, replacement: 'dr fixit' },
-  { pattern: /\btouch\s*wood\b/gi, replacement: 'touchwood' }
+  { pattern: /\benamal\b|\benaml\b/gi, replacement: 'enamel' },
+  { pattern: /\bwite\b|\bwhte\b/gi, replacement: 'white' },
+  { pattern: /\bblock\b/gi, replacement: 'black' },
+  { pattern: /\bbrwn\b/gi, replacement: 'brown' }
 ];
 
-function extractSpecs(text) {
-  const specs = [];
-  const clean = text.toLowerCase();
-
-  // Volume: 1lt, 1ltr, 4lt, 20lt, 500ml, 200ml
-  const volMatches = clean.match(/\b\d+(\.\d+)?\s*(lt|ltr|liter|litre|l|ml)\b/gi);
-  if (volMatches) {
-    volMatches.forEach(m => {
-      let v = m.replace(/\s+/g, '').toUpperCase();
-      v = v.replace('LTR', 'LT').replace('LITER', 'LT').replace('LITRE', 'LT');
-      specs.push(v);
-    });
-  }
-
-  // Weight: 40kg, 25kg, 20kg, 5kg, 1kg
-  const wtMatches = clean.match(/\b\d+(\.\d+)?\s*(kg|kgs|kilo|gm)\b/gi);
-  if (wtMatches) {
-    wtMatches.forEach(m => {
-      let w = m.replace(/\s+/g, '').toUpperCase();
-      w = w.replace('KGS', 'KG').replace('KILO', 'KG');
-      specs.push(w);
-    });
-  }
-
-  // Dimensions / Brush sizes: 2", 1", 1 1/2", 3", 4", 2 inch
-  // Match fraction first e.g. 1 1/2"
-  const fracMatches = clean.match(/(?:\d+\s+)?\d+\/\d+\s*(?:\"|inch|in\b)/gi);
-  if (fracMatches) {
-    fracMatches.forEach(m => specs.push(m.replace(/\s+/g, '').replace(/inch|in/gi, '"')));
-  } else {
-    // Pure integer inch e.g. 2", 3", 4" (ensure not preceded by / or digit)
-    const wholeMatches = clean.match(/(?<![\/\d])(\d+)\s*(?:\"|inch|in\b)/gi);
-    if (wholeMatches) {
-      wholeMatches.forEach(m => specs.push(m.replace(/\s+/g, '').replace(/inch|in/gi, '"')));
-    }
-  }
-
-  return [...new Set(specs)];
+function cleanWhatsAppNoise(raw) {
+  if (!raw) return '';
+  return raw
+    // Strip WhatsApp date-time header e.g. [10:30 am, 5/11/2026] Kannan: or 05/11/26, 10:45 AM - Kannan:
+    .replace(/\[\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{2,4},?\s*\d{1,2}:\d{2}(?::\d{2})?\s*(?:am|pm)?\]\s*[^:]*:\s*/gi, '')
+    .replace(/\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{2,4},?\s*\d{1,2}:\d{2}(?::\d{2})?\s*(?:am|pm)?\s*[\-\–]\s*[^:]*:\s*/gi, '')
+    // Strip bullet markers e.g. * - • 1. 2)
+    .replace(/^[\s\*\-\•\>]*(?:\d+[\.\)\-]\s*)?/, '')
+    .trim();
 }
 
 function parseCustomerDetails(fullText) {
   let customerName = '';
   let customerPhone = '';
 
+  // Extract phone (+91 optional, 10-digit mobile starting with 6, 7, 8, 9)
   const phoneMatch = fullText.match(/(?:\+91[\-\s]?)?[6789]\d{4}[\-\s]?\d{5}\b|(?:\+91[\-\s]?)?[6789]\d{9}\b/);
   if (phoneMatch) {
     const rawDigits = phoneMatch[0].replace(/\D/g, '');
@@ -99,10 +96,13 @@ function parseCustomerDetails(fullText) {
     customerPhone = '+91 ' + clean10;
   }
 
-  // Name match: e.g. Customer: Ramesh or Customer Name: Ramesh
-  const nameMatch = fullText.match(/(?:customer|client|name|to|m\/s)[:\s\-]+([A-Za-z\s\.\&]{2,35}?)(?:\+91|\d{10}|\n|,|$)/i);
-  if (nameMatch) {
-    customerName = nameMatch[1].trim();
+  // Extract name: e.g. "Customer: Ramesh", "Client: Kumar", "To: Ramesh Builders"
+  const nameMatch = fullText.match(/(?:customer|client|name|to|m\/s|mr|from)[:\s\-]+([A-Za-z\s\.\&]{2,35}?)(?:\+91|\d{10}|\n|,|$)/i);
+  if (nameMatch && nameMatch[1]) {
+    const cand = nameMatch[1].trim();
+    if (!/^(hi|hello|quote|quotation|sir|order)/i.test(cand)) {
+      customerName = cand;
+    }
   }
 
   return { customerName, customerPhone };
@@ -110,58 +110,66 @@ function parseCustomerDetails(fullText) {
 
 function parseRequirementLine(line) {
   if (!line || !line.trim()) return null;
-  let raw = line.trim();
+  let raw = cleanWhatsAppNoise(line);
+  if (!raw) return null;
 
-  // Ignore chat timestamps e.g. [10:30 am, 5/11/2026]
-  raw = raw.replace(/\[\d{1,2}:\d{2}\s*(?:am|pm)?,\s*[^\]]+\]/gi, '').trim();
-
-  // If this line is just metadata like "Customer: Ramesh" or "Site: Perundurai", skip it as a product line
+  // Skip standalone metadata lines (e.g. "Customer: Ramesh", "Site: Perundurai Bypass")
   if (/^(customer|client|name|phone|mobile|date|site|address|delivery|location|note|gst|gstin|email)[:\s\-]/i.test(raw)) {
     return null;
   }
 
-  // Ignore greetings or non-product lines
+  // Skip greetings, thank yous, or generic non-order sentences
   const lower = raw.toLowerCase();
   if (
-    /^(hi|hello|sir|vanakkam|good\s*morning|good\s*afternoon|quote|quotation|rate\s*send|price\s*send|please\s*send|need\s*rates?|send\s*bill)/i.test(lower) &&
-    raw.split(' ').length < 5 &&
+    /^(hi|hello|sir|vanakkam|good\s*morning|good\s*afternoon|quote|quotation|rate\s*send|price\s*send|please\s*send|need\s*rates?|send\s*bill|bill\s*send|total\s*send|thanks|thank\s*you)/i.test(lower) &&
+    raw.split(/\s+/).length < 5 &&
     !/\d/.test(raw)
   ) {
     return null;
   }
 
   let cleanedText = raw;
-  for (const { pattern, replacement } of TRADE_CORRECTIONS) {
+  for (const { pattern, replacement } of TRADE_PHRASE_NORMALIZATION) {
     cleanedText = cleanedText.replace(pattern, replacement);
   }
 
-  const specs = extractSpecs(cleanedText);
+  // Extract Pack Size / Volume Specs (e.g. 20LT, 40KG, 2")
+  const specs = extractProductSpecs(cleanedText);
 
-  // Extract Quantity and Unit
+  // Extract Quantity & Unit
   let quantity = 1;
   let unit = 'Nos';
   let isQuantityExplicit = false;
 
-  // 1. Explicit count with unit (e.g., 5ps, 5 nos, 5 pcs, 2 tin, 3 can, 10 box)
-  const countWithUnitRegex = /(\d+(?:\.\d+)?)\s*(ps|pcs|pc|pieces?|nos?|numbers?|can|tin|buckets?|boxes?|pkts?|packets?|sets?|rolls?|bundles?)\b/i;
+  // 1. Explicit count with unit (e.g., 5ps, 5 nos, 5 pcs, 2 can, 2 tin, 10 box, 5 bags)
+  const countWithUnitRegex = /(\d+(?:\.\d+)?)\s*(ps|pcs|pc|pieces?|nos?|numbers?|cans?|tins?|buckets?|dabbas?|boxes?|pkts?|packets?|sets?|rolls?|bundles?|kattu|bags?|mootai|bottles?|btl)\b/i;
   const countMatch = cleanedText.match(countWithUnitRegex);
 
-  // 2. Count at start or end of line (e.g., "5 golden brown" or "golden brown 5")
+  // 2. Multiplier notation e.g. "apex 20lt x 2" or "putty 40kg * 5" or "brush 2" @ 3"
+  const multiplierMatch = cleanedText.match(/[\s\*\-\x\@\:]\s*(\d+(?:\.\d+)?)\s*(?:nos|pcs|can|bag)?$/i);
+
+  // 3. Leading count e.g. "2 apex 20lt" or "5 putty 40kg"
   const leadingCountMatch = cleanedText.match(/^(\d+(?:\.\d+)?)\s+(?=[a-zA-Z])/);
+
+  // 4. Trailing integer count e.g. "golden brown 1ltr 5" or "apex 20lt 2"
   const trailingCountMatch = cleanedText.match(/\s+(\d+(?:\.\d+)?)$/);
 
   if (countMatch) {
-    quantity = parseFloat(countMatch[1]);
+    quantity = Math.max(0.01, parseFloat(countMatch[1]) || 1);
     const rawU = countMatch[2].toLowerCase();
     unit = UNIT_MAP[rawU] || 'Nos';
     isQuantityExplicit = true;
     cleanedText = cleanedText.replace(countMatch[0], ' ');
-  } else if (leadingCountMatch) {
-    quantity = parseFloat(leadingCountMatch[1]);
+  } else if (multiplierMatch && !specs.some(s => s.replace(/\D/g, '') === multiplierMatch[1])) {
+    quantity = Math.max(0.01, parseFloat(multiplierMatch[1]) || 1);
+    isQuantityExplicit = true;
+    cleanedText = cleanedText.replace(multiplierMatch[0], ' ');
+  } else if (leadingCountMatch && !specs.some(s => s.replace(/\D/g, '') === leadingCountMatch[1])) {
+    quantity = Math.max(0.01, parseFloat(leadingCountMatch[1]) || 1);
     isQuantityExplicit = true;
     cleanedText = cleanedText.replace(leadingCountMatch[0], ' ');
-  } else if (trailingCountMatch) {
-    quantity = parseFloat(trailingCountMatch[1]);
+  } else if (trailingCountMatch && !specs.some(s => s.replace(/\D/g, '') === trailingCountMatch[1])) {
+    quantity = Math.max(0.01, parseFloat(trailingCountMatch[1]) || 1);
     isQuantityExplicit = true;
     cleanedText = cleanedText.replace(trailingCountMatch[0], ' ');
   } else if (specs.length > 0) {
@@ -173,18 +181,19 @@ function parseRequirementLine(line) {
     }
   }
 
-  // Clean keywords for searching
+  // Build clean search query for the multi-attribute matching engine
   let searchTokens = cleanedText
     .replace(/[^\w\s\"\.\-]/g, ' ')
     .replace(/\s+/g, ' ')
     .trim()
     .split(' ')
-    .filter(t => t.length > 0 && !['of', 'need', 'req', 'required', 'pls', 'please', 'for', 'send'].includes(t.toLowerCase()));
+    .filter(t => t.length > 0 && !['of', 'need', 'req', 'required', 'pls', 'please', 'for', 'send', 'sendme', 'want'].includes(t.toLowerCase()));
+
+  const cleanSearchQuery = searchTokens.join(' ').trim();
 
   return {
     originalLine: raw,
-    cleanedText: cleanedText.trim(),
-    searchTokens,
+    cleanSearchQuery: cleanSearchQuery || raw,
     specs,
     quantity,
     unit,
@@ -193,144 +202,64 @@ function parseRequirementLine(line) {
 }
 
 /**
- * Intelligent Multi-Stage Product Matcher
- * Finds exact or closest matching products from SQLite database
+ * Intelligent Multi-Candidate Product Matcher
+ * Executes search across all 5,300+ indexed catalog products using the searchProductsSmart engine
  */
 function matchProductsForRequirement(parsedReq) {
-  const { originalLine, searchTokens, specs, quantity, unit } = parsedReq;
+  const { originalLine, cleanSearchQuery, specs, quantity, unit } = parsedReq;
 
-  const searchWords = searchTokens.filter(w => w.length > 1);
-  if (searchWords.length === 0 && specs.length === 0) {
+  // Search through all 5,300+ catalog products
+  const searchResult = searchProductsSmart({
+    search: cleanSearchQuery || originalLine,
+    limit: 10,
+    all: 'true'
+  });
+
+  const matchingProducts = searchResult.products || [];
+
+  if (matchingProducts.length === 0) {
     return {
       originalLine,
       matchedProduct: null,
       quantity,
       unit,
       confidence: 'None',
+      explanation: `No exact product found for "${cleanSearchQuery}". Use the search bar below to pick from catalogue.`,
       candidates: []
     };
   }
 
-  // Construct flexible search query
-  let sql = 'SELECT id, s_no, item_name, details, sale_rate, main_unit, hsn_sac, section FROM products WHERE is_active = 1';
-  const params = [];
+  // Top candidate
+  const topProduct = matchingProducts[0];
+  const topScore = topProduct.searchScore || 0;
 
-  const keywordConditions = [];
-  for (const word of searchWords.slice(0, 4)) {
-    keywordConditions.push('item_name LIKE ?');
-    params.push(`%${word}%`);
-  }
-
-  for (const spec of specs) {
-    keywordConditions.push('item_name LIKE ?');
-    params.push(`%${spec}%`);
-  }
-
-  if (keywordConditions.length > 0) {
-    sql += ' AND (' + keywordConditions.join(' OR ') + ')';
-  }
-
-  sql += ' LIMIT 150';
-
-  const potentialProducts = db.prepare(sql).all(...params);
-
-  if (potentialProducts.length === 0) {
-    return {
-      originalLine,
-      matchedProduct: null,
-      quantity,
-      unit,
-      confidence: 'None',
-      explanation: 'No product found matching terms in database.',
-      candidates: []
-    };
-  }
-
-  // Score each candidate
-  const scored = [];
-  const lowerLine = originalLine.toLowerCase();
-
-  for (const prod of potentialProducts) {
-    const prodName = prod.item_name.toLowerCase();
-    let score = 0;
-
-    // A. Keyword overlap
-    for (const word of searchWords) {
-      const w = word.toLowerCase();
-      if (prodName.includes(w)) {
-        score += 25;
-      }
-    }
-
-    // B. Specification match (e.g. 1LT, 40KG, 2")
-    for (const spec of specs) {
-      const s = spec.toLowerCase();
-      if (s === '2"') {
-        // Strict 2 inch check: ensure not 1/2", 1 1/2", 11/2", 2 1/2"
-        const isFraction = /\d+\/\d+/.test(prodName);
-        if (prodName.includes('2"') && !isFraction) {
-          score += 70;
-        } else if (isFraction) {
-          score -= 50;
-        }
-      } else if (prodName.includes(s)) {
-        score += 40;
-      }
-    }
-
-    // C. Non-spray preference unless spray paint asked
-    if (!lowerLine.includes('spray') && prodName.includes('spray')) {
-      score -= 25;
-    }
-
-    // D. Unit match bonus
-    if (prod.main_unit && unit && prod.main_unit.toLowerCase() === unit.toLowerCase()) {
-      score += 10;
-    }
-
-    // E. Rate > 0 bonus
-    if (prod.sale_rate > 0) {
-      score += 5;
-    }
-
-    // F. Direct brand matching bonus
-    if (/brush/i.test(lowerLine) && /^br\s+/i.test(prod.item_name)) {
-      score += 30; // Trade standard: brush items start with "BR "
-    }
-    if (/roller/i.test(lowerLine) && (/roller/i.test(prodName) || /^ro\s+/i.test(prod.item_name))) {
-      score += 30;
-    }
-
-    scored.push({
-      product: prod,
-      score
-    });
-  }
-
-  // Sort descending by score
-  scored.sort((a, b) => b.score - a.score);
-
-  const top = scored[0];
-  const candidates = scored.slice(0, 6).map(s => ({
-    id: s.product.id,
-    s_no: s.product.s_no,
-    item_name: s.product.item_name,
-    sale_rate: s.product.sale_rate,
-    main_unit: s.product.main_unit,
-    hsn_sac: s.product.hsn_sac,
-    section: s.product.section,
-    score: s.score
+  // Map candidates with full structured details
+  const candidates = matchingProducts.slice(0, 6).map(p => ({
+    id: p.id,
+    s_no: p.s_no,
+    item_name: p.item_name,
+    details: p.details || p.structuredDetails?.summary || '',
+    structuredDetails: p.structuredDetails || null,
+    sale_rate: p.sale_rate || 0,
+    main_unit: p.main_unit || 'Nos',
+    hsn_sac: p.hsn_sac || '',
+    section: p.section || 'PAINTS',
+    score: p.searchScore || 0,
+    matchReasons: p.matchReasons || []
   }));
 
   let confidence = 'Medium';
-  if (top.score >= 60) confidence = 'High';
-  else if (top.score < 30) confidence = 'Low';
+  if (topScore >= 120) {
+    confidence = 'High';
+  } else if (topScore < 60) {
+    confidence = 'Low';
+  }
 
   return {
     originalLine,
-    matchedProduct: top ? candidates[0] : null,
+    matchedProduct: candidates[0],
     quantity,
-    unit: top?.product?.main_unit || unit,
+    unit: candidates[0]?.main_unit || unit,
     confidence,
     candidates
   };
@@ -340,15 +269,31 @@ function processWhatsAppMessage(messageText) {
   if (!messageText || typeof messageText !== 'string' || !messageText.trim()) {
     return {
       success: false,
-      error: 'Message text is empty'
+      error: 'Please paste a customer WhatsApp message to parse.'
     };
   }
 
   const { customerName, customerPhone } = parseCustomerDetails(messageText);
-  const lines = messageText.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+
+  // Split lines, also handling comma or semicolon separated item lists
+  const rawLines = messageText.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+  const normalizedLines = [];
+
+  for (const rawLine of rawLines) {
+    // If line has multiple items separated by comma or semicolon e.g. "apex 20lt 2, putty 40kg 5, brush 2\" 3"
+    if (rawLine.includes(',') && !/customer|client|address|site/i.test(rawLine) && rawLine.split(',').length >= 2) {
+      const parts = rawLine.split(',').map(p => p.trim()).filter(Boolean);
+      normalizedLines.push(...parts);
+    } else if (rawLine.includes(';') && rawLine.split(';').length >= 2) {
+      const parts = rawLine.split(';').map(p => p.trim()).filter(Boolean);
+      normalizedLines.push(...parts);
+    } else {
+      normalizedLines.push(rawLine);
+    }
+  }
 
   const results = [];
-  for (const line of lines) {
+  for (const line of normalizedLines) {
     const parsed = parseRequirementLine(line);
     if (parsed) {
       const matched = matchProductsForRequirement(parsed);
