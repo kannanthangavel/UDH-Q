@@ -32,6 +32,10 @@ export default function CreateQuotation({ setActivePage, initialCustomer, import
   const [customerEmail, setCustomerEmail] = useState('');
   const [customerAddress, setCustomerAddress] = useState('');
   const [customerError, setCustomerError] = useState('');
+  const [customerNameTouched, setCustomerNameTouched] = useState(false);
+  const [customerPhoneTouched, setCustomerPhoneTouched] = useState(false);
+  const [itemsError, setItemsError] = useState('');
+  const [activeDropdownIndex, setActiveDropdownIndex] = useState(-1);
 
   // Quotation Meta
   const [quotationDate] = useState(() => new Date().toISOString().split('T')[0]);
@@ -291,7 +295,10 @@ export default function CreateQuotation({ setActivePage, initialCustomer, import
     setTimeout(() => setRecentActionToast(''), 3500);
   }
 
-  // Add product to quote with DUPLICATE PREVENTION & CUSTOMER REQUIREMENT PRESERVATION
+  const isNameValid = customerName.trim().length > 0;
+  const isPhoneValid = customerPhone.replace(/\D/g, '').length >= 10;
+
+  // Add product to quote with DUPLICATE PREVENTION & STRUCTURED SPECIFICATION PRESERVATION
   function handleAddProduct(product) {
     // Rapid double-click guard
     const now = Date.now();
@@ -308,11 +315,11 @@ export default function CreateQuotation({ setActivePage, initialCustomer, import
       const rowEl = document.getElementById(`quote-row-${existingIndex}`);
       if (rowEl) rowEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 
-      showToast(`Item already added in Row #${existingIndex + 1}. Modify its quantity below.`);
+      showToast(`Item already in quotation (Row #${existingIndex + 1}).`);
       return;
     }
 
-    // Preserve original customer wording if present in quick search query
+    const officialDetails = product.details || product.structuredDetails?.summary || '';
     const customerReq = quickSearchQuery.trim();
 
     const newItem = {
@@ -320,18 +327,57 @@ export default function CreateQuotation({ setActivePage, initialCustomer, import
       item_name: product.item_name,
       hsn_sac: product.hsn_sac || '',
       unit: product.main_unit || 'Nos',
-      details: customerReq ? customerReq : (product.details || ''),
+      details: officialDetails,
+      customer_req: customerReq,
       quantity: 1,
       sale_rate: product.sale_rate,
       catalog_rate: product.sale_rate,
       line_total: product.sale_rate,
-      is_overridden: false
+      is_overridden: false,
+      structuredDetails: product.structuredDetails || null
     };
 
     setItems(prev => [...prev, newItem]);
+    setItemsError('');
     setQuickSearchQuery('');
     setShowQuickDropdown(false);
-    showToast(`Added: ${product.item_name}`);
+    setActiveDropdownIndex(-1);
+    showToast(`✓ Added: ${product.item_name}`);
+  }
+
+  function handleSearchKeyDown(e) {
+    if (!showQuickDropdown || displayedQuickResults.length === 0) {
+      if (e.key === 'ArrowDown' && displayedQuickResults.length > 0) {
+        setShowQuickDropdown(true);
+      }
+      return;
+    }
+
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setActiveDropdownIndex(prev => (prev < displayedQuickResults.length - 1 ? prev + 1 : 0));
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setActiveDropdownIndex(prev => (prev > 0 ? prev - 1 : displayedQuickResults.length - 1));
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      if (activeDropdownIndex >= 0 && activeDropdownIndex < displayedQuickResults.length) {
+        handleAddProduct(displayedQuickResults[activeDropdownIndex]);
+      } else if (displayedQuickResults.length > 0) {
+        handleAddProduct(displayedQuickResults[0]);
+      }
+    } else if (e.key === 'Escape') {
+      setShowQuickDropdown(false);
+      setActiveDropdownIndex(-1);
+    }
+  }
+
+  function updateItemCustomerReq(index, val) {
+    setItems(prev => {
+      const next = [...prev];
+      next[index] = { ...next[index], customer_req: val };
+      return next;
+    });
   }
 
   // BULLETPROOF QUANTITY CONTROLS
@@ -472,23 +518,34 @@ export default function CreateQuotation({ setActivePage, initialCustomer, import
     if (isSubmitting) return; // Prevent repeated double-clicks
 
     if (!customerName.trim()) {
+      setCustomerNameTouched(true);
       setCustomerError('Customer Name is required.');
       document.getElementById('customer-name-input')?.focus();
       return;
     }
-    if (!customerPhone.trim()) {
-      setCustomerError('Customer Mobile / WhatsApp number is required.');
+    if (customerPhone.replace(/\D/g, '').length < 10) {
+      setCustomerPhoneTouched(true);
+      setCustomerError('A valid 10-digit mobile number is required for quotation sharing.');
       document.getElementById('customer-phone-input')?.focus();
       return;
     }
     if (items.length === 0) {
-      alert('Please add at least one product item to the quotation.');
+      setItemsError('Please add at least one product item to the quotation.');
+      document.getElementById('search-products-card')?.scrollIntoView({ behavior: 'smooth' });
+      return;
+    }
+
+    const invalidQtyIndex = items.findIndex(it => !it.quantity || parseFloat(it.quantity) <= 0);
+    if (invalidQtyIndex !== -1) {
+      setItemsError(`Item #${invalidQtyIndex + 1} (${items[invalidQtyIndex].item_name}) has invalid quantity. Please specify at least 1.`);
+      setHighlightedRowIndex(invalidQtyIndex);
       return;
     }
 
     try {
       setIsSubmitting(true);
       setCustomerError('');
+      setItemsError('');
 
       const payload = {
         customer_id: selectedCustomerId,
@@ -497,15 +554,21 @@ export default function CreateQuotation({ setActivePage, initialCustomer, import
         customer_email: customerEmail.trim(),
         customer_address: customerAddress.trim(),
         is_tax_inclusive: true,
-        items: items.map(it => ({
-          product_id: it.product_id,
-          item_name: it.item_name,
-          details: it.details || '',
-          hsn_sac: it.hsn_sac,
-          unit: it.unit || 'Nos',
-          quantity: Math.max(0.01, parseFloat(it.quantity) || 1),
-          sale_rate: parseFloat(it.sale_rate) || 0
-        })),
+        items: items.map(it => {
+          let finalDetails = it.details || '';
+          if (it.customer_req && it.customer_req.trim() && !finalDetails.includes(it.customer_req.trim())) {
+            finalDetails = finalDetails ? `${finalDetails} • ${it.customer_req.trim()}` : it.customer_req.trim();
+          }
+          return {
+            product_id: it.product_id,
+            item_name: it.item_name,
+            details: finalDetails,
+            hsn_sac: it.hsn_sac,
+            unit: it.unit || 'Nos',
+            quantity: Math.max(0.01, parseFloat(it.quantity) || 1),
+            sale_rate: parseFloat(it.sale_rate) || 0
+          };
+        }),
         discount_percent: discountMode === 'percent' ? (parseFloat(discountPercent) || 0) : 0,
         gst_rate: gstRateVal,
         delivery_charges: deliveryVal,
@@ -756,36 +819,78 @@ export default function CreateQuotation({ setActivePage, initialCustomer, import
           )}
         </div>
 
-        {/* Input Fields Grid */}
+        {/* Input Fields Grid with Real-time Error Highlighting & Helper Guidance */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
           <div>
-            <label className="block font-bold text-slate-700 mb-1">
-              Customer Name <span className="text-rose-500">*</span>
-            </label>
+            <div className="flex items-center justify-between mb-1">
+              <label className="font-bold text-slate-700">
+                Customer Name <span className="text-rose-500">*</span>
+              </label>
+              {customerNameTouched && (
+                isNameValid ? (
+                  <span className="text-[10px] text-emerald-600 font-bold flex items-center space-x-0.5">
+                    <Check className="w-3 h-3" /> <span>Valid</span>
+                  </span>
+                ) : (
+                  <span className="text-[10px] text-rose-500 font-bold">Required</span>
+                )
+              )}
+            </div>
             <input
               id="customer-name-input"
               type="text"
               value={customerName}
               onChange={(e) => { setCustomerName(e.target.value); setCustomerError(''); }}
+              onBlur={() => setCustomerNameTouched(true)}
               placeholder="e.g. Ramesh Builders / Kumar"
-              className="w-full px-3 py-2 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#00545C] font-semibold text-slate-900"
+              className={`w-full px-3 py-2 border rounded-xl font-semibold text-slate-900 transition-all focus:outline-none focus:ring-2 ${
+                customerNameTouched && !isNameValid
+                  ? 'border-rose-400 bg-rose-50/40 focus:ring-rose-200'
+                  : 'border-slate-300 focus:border-[#00545C] focus:ring-[#00545C]/20'
+              }`}
               required
             />
+            {customerNameTouched && !isNameValid && (
+              <p className="text-[11px] text-rose-600 font-medium mt-1">
+                ⚠️ Customer name is required.
+              </p>
+            )}
           </div>
 
           <div>
-            <label className="block font-bold text-slate-700 mb-1">
-              Mobile / WhatsApp <span className="text-rose-500">*</span>
-            </label>
+            <div className="flex items-center justify-between mb-1">
+              <label className="font-bold text-slate-700">
+                Mobile / WhatsApp <span className="text-rose-500">*</span>
+              </label>
+              {customerPhoneTouched && (
+                isPhoneValid ? (
+                  <span className="text-[10px] text-emerald-600 font-bold flex items-center space-x-0.5">
+                    <Check className="w-3 h-3" /> <span>Valid (10 digits)</span>
+                  </span>
+                ) : (
+                  <span className="text-[10px] text-rose-500 font-bold">10 digits required</span>
+                )
+              )}
+            </div>
             <input
               id="customer-phone-input"
               type="tel"
               value={customerPhone}
               onChange={(e) => { setCustomerPhone(e.target.value); setCustomerError(''); }}
+              onBlur={() => setCustomerPhoneTouched(true)}
               placeholder="e.g. 98427 11223"
-              className="w-full px-3 py-2 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#00545C] font-mono font-bold text-slate-900"
+              className={`w-full px-3 py-2 border rounded-xl font-mono font-bold text-slate-900 transition-all focus:outline-none focus:ring-2 ${
+                customerPhoneTouched && !isPhoneValid
+                  ? 'border-rose-400 bg-rose-50/40 focus:ring-rose-200'
+                  : 'border-slate-300 focus:border-[#00545C] focus:ring-[#00545C]/20'
+              }`}
               required
             />
+            {customerPhoneTouched && !isPhoneValid && (
+              <p className="text-[11px] text-rose-600 font-medium mt-1">
+                ⚠️ Please enter a valid 10-digit mobile number.
+              </p>
+            )}
           </div>
 
           <div>
@@ -797,7 +902,7 @@ export default function CreateQuotation({ setActivePage, initialCustomer, import
               value={customerEmail}
               onChange={(e) => setCustomerEmail(e.target.value)}
               placeholder="client@gmail.com"
-              className="w-full px-3 py-2 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#00545C]"
+              className="w-full px-3 py-2 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#00545C]/20 focus:border-[#00545C]"
             />
           </div>
 
@@ -809,7 +914,7 @@ export default function CreateQuotation({ setActivePage, initialCustomer, import
               type="date"
               value={validityDate}
               onChange={(e) => setValidityDate(e.target.value)}
-              className="w-full px-3 py-2 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#00545C]"
+              className="w-full px-3 py-2 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#00545C]/20 focus:border-[#00545C]"
             />
           </div>
 
@@ -822,7 +927,7 @@ export default function CreateQuotation({ setActivePage, initialCustomer, import
               value={customerAddress}
               onChange={(e) => setCustomerAddress(e.target.value)}
               placeholder="e.g. Site 44, Perundurai SIPCOT Road, Erode - 638052"
-              className="w-full px-3 py-2 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#00545C]"
+              className="w-full px-3 py-2 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#00545C]/20 focus:border-[#00545C]"
             />
           </div>
         </div>
@@ -830,25 +935,32 @@ export default function CreateQuotation({ setActivePage, initialCustomer, import
       </div>
 
       {/* SECTION 2: LIVE MULTI-ATTRIBUTE QUICK SEARCH & AMBIGUITY RESOLVER */}
-      <div ref={searchContainerRef} className="bg-[#00545C] text-white rounded-2xl p-4 sm:p-5 shadow-sm space-y-3 relative">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+      <div id="search-products-card" ref={searchContainerRef} className="bg-white rounded-2xl p-5 shadow-sm border border-slate-200/90 space-y-3.5 relative">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
           <div className="flex items-center space-x-2">
-            <Search className="w-4 h-4 text-[#7DBA00]" />
-            <h3 className="text-sm font-extrabold text-white">
-              Instant Product Search & Ambiguity Resolver
-            </h3>
-            <span className="text-[10px] text-emerald-200">
-              (8,000+ Inventory Items Supported)
-            </span>
+            <div className="w-8 h-8 rounded-xl bg-slate-100 flex items-center justify-center text-[#00545C]">
+              <Search className="w-4 h-4" />
+            </div>
+            <div>
+              <h3 className="text-sm font-black text-slate-900 tracking-tight flex items-center space-x-2">
+                <span>Intelligent Product Search</span>
+                <span className="text-[10px] font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full border border-slate-200">
+                  5,300+ items catalog
+                </span>
+              </h3>
+              <p className="text-[11px] text-slate-500">
+                Live specs matching for brand, volume, finish, shade, and codes across official inventory
+              </p>
+            </div>
           </div>
 
           {/* Section Pills */}
-          <div className="flex items-center space-x-1 bg-[#003B40] p-1 rounded-xl text-xs">
+          <div className="flex items-center space-x-1 bg-slate-100 p-1 rounded-xl text-xs border border-slate-200/60">
             <button
               type="button"
               onClick={() => setQuickSectionFilter('ALL')}
-              className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all cursor-pointer ${
-                quickSectionFilter === 'ALL' ? 'bg-[#7DBA00] text-[#003B40]' : 'text-emerald-200 hover:text-white'
+              className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                quickSectionFilter === 'ALL' ? 'bg-[#00545C] text-white shadow-xs' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
               }`}
             >
               All (5,331)
@@ -856,34 +968,38 @@ export default function CreateQuotation({ setActivePage, initialCustomer, import
             <button
               type="button"
               onClick={() => setQuickSectionFilter('PAINTS')}
-              className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all cursor-pointer ${
-                quickSectionFilter === 'PAINTS' ? 'bg-[#7DBA00] text-[#003B40]' : 'text-emerald-200 hover:text-white'
+              className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                quickSectionFilter === 'PAINTS' ? 'bg-[#00545C] text-white shadow-xs' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
               }`}
             >
-              Paints ({productCounts.paints.toLocaleString()})
+              Paints ({productCounts.paints ? productCounts.paints.toLocaleString() : '4,100'})
             </button>
             <button
               type="button"
               onClick={() => setQuickSectionFilter('ACCESS')}
-              className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all cursor-pointer ${
-                quickSectionFilter === 'ACCESS' ? 'bg-[#7DBA00] text-[#003B40]' : 'text-emerald-200 hover:text-white'
+              className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                quickSectionFilter === 'ACCESS' ? 'bg-[#00545C] text-white shadow-xs' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
               }`}
             >
-              Accessories ({productCounts.access.toLocaleString()})
+              Accessories ({productCounts.access ? productCounts.access.toLocaleString() : '1,231'})
             </button>
           </div>
         </div>
 
-        {/* Search Input Box with small inline loading indicator */}
+        {/* Search Input Box with keyboard navigation support */}
         <div className="relative">
           <Search className="w-4 h-4 absolute left-3.5 top-3.5 text-slate-400" />
           <input
             type="text"
             value={quickSearchQuery}
-            onChange={(e) => setQuickSearchQuery(e.target.value)}
+            onChange={(e) => {
+              setQuickSearchQuery(e.target.value);
+              setActiveDropdownIndex(-1);
+            }}
+            onKeyDown={handleSearchKeyDown}
             onFocus={() => { if (quickSearchResults.length > 0) setShowQuickDropdown(true); }}
-            placeholder="Type customer requirements naturally (e.g. white 1lt, golden brwn, brush 2 inch, putty powder 40kg)..."
-            className="w-full pl-10 pr-10 py-3 bg-white text-slate-900 text-xs sm:text-sm font-semibold rounded-xl border-2 border-transparent focus:border-[#7DBA00] focus:outline-none shadow-inner"
+            placeholder="Search naturally: e.g. 'white 1lt', 'golden brown', 'brush 2 inch', 'putty 40kg', 'primer 20lt'..."
+            className="w-full pl-10 pr-10 py-3 bg-slate-50 hover:bg-white focus:bg-white text-slate-900 text-xs sm:text-sm font-semibold rounded-xl border border-slate-300 focus:border-[#00545C] focus:ring-2 focus:ring-[#00545C]/20 focus:outline-none transition-all shadow-xs"
           />
           {isSearchingQuick ? (
             <div className="absolute right-3.5 top-3.5 text-[#00545C]">
@@ -892,27 +1008,27 @@ export default function CreateQuotation({ setActivePage, initialCustomer, import
           ) : quickSearchQuery ? (
             <button
               type="button"
-              onClick={() => { setQuickSearchQuery(''); setShowQuickDropdown(false); }}
-              className="absolute right-3.5 top-3.5 text-slate-400 hover:text-slate-600"
+              onClick={() => { setQuickSearchQuery(''); setShowQuickDropdown(false); setActiveDropdownIndex(-1); }}
+              className="absolute right-3.5 top-3.5 text-slate-400 hover:text-slate-600 cursor-pointer"
             >
               <X className="w-4 h-4" />
             </button>
           ) : null}
 
-          {/* Quick Dropdown Results with ALL MATCHING PRODUCTS */}
+          {/* Quick Dropdown Results with ALL MATCHING PRODUCTS & STRUCTURED SPECS */}
           {showQuickDropdown && (
             <div className="absolute left-0 right-0 top-12 z-40 bg-white border border-slate-200 rounded-2xl shadow-2xl max-h-[480px] overflow-y-auto divide-y divide-slate-100 mt-1">
               
               {/* Results Count Banner & Drawer Quick Link */}
-              <div className="bg-slate-100/95 border-b border-slate-200 px-4 py-2.5 flex flex-wrap items-center justify-between gap-2 sticky top-0 z-20 backdrop-blur-xs">
+              <div className="bg-slate-50 border-b border-slate-200 px-4 py-2.5 flex flex-wrap items-center justify-between gap-2 sticky top-0 z-20 backdrop-blur-xs">
                 <div className="flex items-center space-x-2 text-xs">
-                  <span className="w-2 h-2 rounded-full bg-[#7DBA00] animate-pulse"></span>
-                  <span className="font-extrabold text-slate-800">
+                  <span className="w-2 h-2 rounded-full bg-[#00545C]"></span>
+                  <span className="font-bold text-slate-800">
                     Found <span className="text-[#00545C] font-black">{displayedQuickResults.length}</span> matching products
-                    {quickSearchResults.length !== displayedQuickResults.length && ` (of ${quickSearchResults.length} total)`}
+                    {quickSearchResults.length !== displayedQuickResults.length && ` (filtered from ${quickSearchResults.length} matches)`}
                   </span>
                   <span className="hidden sm:inline-block text-[10px] text-slate-500 font-medium">
-                    • Showing all related results
+                    • Use ↑ / ↓ and Enter to select
                   </span>
                 </div>
                 <button
@@ -922,44 +1038,44 @@ export default function CreateQuotation({ setActivePage, initialCustomer, import
                     setShowCatalogDrawer(true);
                     setShowQuickDropdown(false);
                   }}
-                  className="text-[11px] font-bold text-[#00545C] hover:text-[#7DBA00] flex items-center space-x-1 cursor-pointer bg-white px-2.5 py-1 rounded-lg border border-slate-300 hover:border-[#7DBA00] shadow-2xs"
+                  className="text-[11px] font-bold text-[#00545C] hover:text-[#003B40] flex items-center space-x-1 cursor-pointer bg-white px-2.5 py-1 rounded-lg border border-slate-300 shadow-2xs"
                 >
-                  <Layers className="w-3 h-3 text-[#7DBA00]" />
+                  <Layers className="w-3 h-3 text-[#00545C]" />
                   <span>Open Catalogue Drawer</span>
                 </button>
               </div>
 
               {/* Did-You-Mean Typo Suggestion Banner */}
               {searchSuggestions?.didYouMean && (
-                <div className="bg-emerald-50 border-b border-emerald-200 p-2 px-4 flex items-center justify-between gap-2 sticky top-9 z-15 backdrop-blur-xs text-xs">
-                  <div className="flex items-center space-x-1.5 text-emerald-900 font-bold">
-                    <Sparkles className="w-3.5 h-3.5 text-[#7DBA00] flex-shrink-0" />
+                <div className="bg-amber-50/80 border-b border-amber-200 p-2 px-4 flex items-center justify-between gap-2 sticky top-9 z-15 backdrop-blur-xs text-xs">
+                  <div className="flex items-center space-x-1.5 text-amber-900 font-bold">
+                    <Sparkles className="w-3.5 h-3.5 text-amber-600 flex-shrink-0" />
                     <span>Did you mean:</span>
                     <button
                       type="button"
                       onClick={() => setQuickSearchQuery(searchSuggestions.didYouMean)}
-                      className="text-[#00545C] underline font-black cursor-pointer hover:text-emerald-700 ml-1"
+                      className="text-[#00545C] underline font-black cursor-pointer hover:text-amber-800 ml-1"
                     >
                       "{searchSuggestions.didYouMean}"
                     </button>
                   </div>
-                  <span className="text-[10px] text-emerald-700 font-medium">Click to apply suggestion</span>
+                  <span className="text-[10px] text-amber-700 font-medium">Click to apply suggestion</span>
                 </div>
               )}
 
               {/* Ambiguity Resolver Header (Category Filter) */}
               {isSearchAmbiguous && searchDistinctTypes.length > 0 && (
-                <div className="bg-amber-50/90 border-b border-amber-200 p-2.5 px-4 flex flex-wrap items-center justify-between gap-2 sticky top-9 z-10 backdrop-blur-xs">
-                  <div className="flex items-center space-x-1.5 text-xs text-amber-900 font-extrabold">
-                    <Sparkles className="w-3.5 h-3.5 text-amber-600 flex-shrink-0" />
+                <div className="bg-slate-50 border-b border-slate-200 p-2.5 px-4 flex flex-wrap items-center justify-between gap-2 sticky top-9 z-10 backdrop-blur-xs">
+                  <div className="flex items-center space-x-1.5 text-xs text-slate-700 font-bold">
+                    <Sparkles className="w-3.5 h-3.5 text-[#00545C] flex-shrink-0" />
                     <span>Filter by category:</span>
                   </div>
                   <div className="flex flex-wrap items-center gap-1 text-[11px]">
                     <button
                       type="button"
                       onClick={() => setSelectedTypeFilter('ALL')}
-                      className={`px-2 py-0.5 rounded font-bold cursor-pointer transition-all ${
-                        selectedTypeFilter === 'ALL' ? 'bg-[#00545C] text-white' : 'bg-white text-slate-700 border border-amber-300 hover:bg-amber-100'
+                      className={`px-2.5 py-0.5 rounded-lg font-bold cursor-pointer transition-all ${
+                        selectedTypeFilter === 'ALL' ? 'bg-[#00545C] text-white' : 'bg-white text-slate-700 border border-slate-300 hover:bg-slate-100'
                       }`}
                     >
                       All Types ({quickSearchResults.length})
@@ -969,8 +1085,8 @@ export default function CreateQuotation({ setActivePage, initialCustomer, import
                         key={t}
                         type="button"
                         onClick={() => setSelectedTypeFilter(t)}
-                        className={`px-2 py-0.5 rounded font-bold cursor-pointer transition-all ${
-                          selectedTypeFilter === t ? 'bg-[#00545C] text-white' : 'bg-white text-slate-700 border border-amber-300 hover:bg-amber-100'
+                        className={`px-2.5 py-0.5 rounded-lg font-bold cursor-pointer transition-all ${
+                          selectedTypeFilter === t ? 'bg-[#00545C] text-white' : 'bg-white text-slate-700 border border-slate-300 hover:bg-slate-100'
                         }`}
                       >
                         {t}
@@ -983,11 +1099,11 @@ export default function CreateQuotation({ setActivePage, initialCustomer, import
               {/* Pack Sizes Suggestion & Quick Filter Pills */}
               {searchSuggestions?.availableSizes && searchSuggestions.availableSizes.length > 1 && (
                 <div className="bg-slate-50 border-b border-slate-200 p-2 px-4 flex flex-wrap items-center gap-1.5 text-xs">
-                  <span className="font-extrabold text-[#00545C] text-[11px] mr-1">Available Sizes:</span>
+                  <span className="font-bold text-slate-700 text-[11px] mr-1">Available Sizes:</span>
                   <button
                     type="button"
                     onClick={() => setSelectedSizeFilter('ALL')}
-                    className={`px-2 py-0.5 rounded-md text-[11px] font-bold cursor-pointer transition-all ${
+                    className={`px-2.5 py-0.5 rounded-lg text-[11px] font-bold cursor-pointer transition-all ${
                       selectedSizeFilter === 'ALL' ? 'bg-[#00545C] text-white shadow-2xs' : 'bg-white text-slate-700 border border-slate-300 hover:bg-slate-100'
                     }`}
                   >
@@ -998,8 +1114,8 @@ export default function CreateQuotation({ setActivePage, initialCustomer, import
                       key={sz}
                       type="button"
                       onClick={() => setSelectedSizeFilter(sz)}
-                      className={`px-2 py-0.5 rounded-md text-[11px] font-bold cursor-pointer transition-all ${
-                        selectedSizeFilter === sz ? 'bg-[#7DBA00] text-[#003B40] shadow-2xs' : 'bg-white text-slate-700 border border-slate-300 hover:bg-slate-100'
+                      className={`px-2.5 py-0.5 rounded-lg text-[11px] font-bold cursor-pointer transition-all ${
+                        selectedSizeFilter === sz ? 'bg-[#00545C] text-white shadow-2xs' : 'bg-white text-slate-700 border border-slate-300 hover:bg-slate-100'
                       }`}
                     >
                       {sz}
@@ -1009,22 +1125,29 @@ export default function CreateQuotation({ setActivePage, initialCustomer, import
               )}
 
               {displayedQuickResults.length === 0 ? (
-                <div className="p-5 text-center text-xs text-slate-500">
-                  No products found for "{quickSearchQuery}". Try another keyword or browse the full catalogue.
+                <div className="p-6 text-center text-xs text-slate-500 space-y-1">
+                  <p className="font-bold text-slate-700">No exact match for "{quickSearchQuery}"</p>
+                  <p>Try searching by brand (e.g. Asian Paints, Abro, Fixit) or size (e.g. 20lt, 4lt, 1lt, 40kg).</p>
                 </div>
               ) : (
                 <>
-                  {displayedQuickResults.map(prod => {
+                  {displayedQuickResults.map((prod, pIdx) => {
                     const alreadyIndex = items.findIndex(it => it.product_id === prod.id);
                     const isAlreadyAdded = alreadyIndex !== -1;
                     const alreadyQty = isAlreadyAdded ? items[alreadyIndex].quantity : 0;
+                    const isHighlighted = activeDropdownIndex === pIdx;
+                    const specs = prod.structuredDetails;
 
                     return (
                       <div
                         key={prod.id}
                         onClick={() => handleAddProduct(prod)}
-                        className={`p-3 cursor-pointer flex items-center justify-between gap-3 text-slate-900 transition-colors ${
-                          isAlreadyAdded ? 'bg-amber-50/40 hover:bg-amber-50' : 'hover:bg-emerald-50/50'
+                        className={`p-3.5 cursor-pointer flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-slate-900 transition-colors ${
+                          isHighlighted
+                            ? 'bg-teal-50/80 border-l-4 border-l-[#00545C]'
+                            : isAlreadyAdded
+                            ? 'bg-amber-50/30 hover:bg-amber-50/60'
+                            : 'hover:bg-slate-50'
                         }`}
                       >
                         <div className="flex-1 min-w-0">
@@ -1034,44 +1157,85 @@ export default function CreateQuotation({ setActivePage, initialCustomer, import
                               {prod.item_name}
                             </span>
                           </div>
-                          <div className="flex flex-wrap items-center gap-1.5 mt-1 text-[10px]">
-                            <span className="font-semibold text-[#00545C] bg-slate-100 px-1.5 py-0.2 rounded uppercase">
-                              {prod.section}
-                            </span>
-                            <span className="bg-slate-100 text-slate-600 px-1.5 py-0.2 rounded font-bold">
-                              Unit: {prod.main_unit}
-                            </span>
-                            {prod.hsn_sac && (
-                              <span className="text-slate-400 font-mono">HSN: {prod.hsn_sac}</span>
-                            )}
-                            {prod.matchReasons && prod.matchReasons.length > 0 && (
-                              <span className="text-emerald-700 bg-emerald-50 px-1.5 py-0.2 rounded font-bold">
-                                ✓ {prod.matchReasons[0]}
+
+                          {/* Structured Product Badges */}
+                          <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
+                            {specs?.brand && (
+                              <span className="text-[10px] font-bold text-slate-700 bg-slate-100 px-2 py-0.5 rounded-md border border-slate-200">
+                                🏷️ {specs.brand}
                               </span>
                             )}
-                            <span className="text-emerald-800 bg-emerald-100/60 px-1.5 py-0.2 rounded font-bold">
+                            {specs?.packSize && (
+                              <span className="text-[10px] font-black text-[#00545C] bg-teal-50 px-2 py-0.5 rounded-md border border-teal-200">
+                                📦 {specs.packSize}
+                              </span>
+                            )}
+                            {specs?.category && (
+                              <span className="text-[10px] font-bold text-slate-600 bg-slate-100 px-2 py-0.5 rounded-md">
+                                {specs.category}
+                              </span>
+                            )}
+                            {specs?.colour && (
+                              <span className="text-[10px] font-semibold text-purple-700 bg-purple-50 px-2 py-0.5 rounded-md border border-purple-200">
+                                🎨 {specs.colour}
+                              </span>
+                            )}
+                            {specs?.finish && (
+                              <span className="text-[10px] font-medium text-slate-600 bg-slate-100 px-1.5 py-0.5 rounded">
+                                {specs.finish}
+                              </span>
+                            )}
+                            {specs?.code && (
+                              <span className="text-[10px] font-mono text-slate-600 bg-slate-100 px-1.5 py-0.5 rounded">
+                                Code: {specs.code}
+                              </span>
+                            )}
+                            <span className="text-[10px] font-medium text-slate-500">
+                              Unit: {prod.main_unit || 'Nos'}
+                            </span>
+                            {prod.hsn_sac && (
+                              <span className="text-[10px] font-mono text-slate-400">
+                                HSN: {prod.hsn_sac}
+                              </span>
+                            )}
+                          </div>
+
+                          {/* Full Specification Description */}
+                          {prod.details && (
+                            <p className="text-[11px] text-slate-600 mt-1 font-medium">
+                              <span className="text-slate-400 font-normal">Spec:</span> {prod.details}
+                            </p>
+                          )}
+                        </div>
+
+                        <div className="flex items-center justify-between sm:justify-end space-x-3 flex-shrink-0 pt-1 sm:pt-0 border-t sm:border-t-0 border-slate-100">
+                          <div className="text-left sm:text-right">
+                            <div className="font-mono font-black text-sm sm:text-base text-[#00545C]">
+                              ₹{Number(prod.sale_rate).toFixed(2)}
+                            </div>
+                            <span className="text-[10px] text-emerald-700 font-bold bg-emerald-50 px-1.5 py-0.2 rounded">
                               GST Included
                             </span>
                           </div>
-                        </div>
-
-                        <div className="flex items-center space-x-3 flex-shrink-0">
-                          <div className="text-right">
-                            <div className="font-mono font-black text-sm text-[#00545C]">
-                              ₹{Number(prod.sale_rate).toFixed(2)}
-                            </div>
-                            <span className="text-[9px] text-slate-400">Official Rate</span>
-                          </div>
 
                           {isAlreadyAdded ? (
-                            <div className="px-2.5 py-1 rounded-xl bg-amber-100 text-amber-800 font-bold text-xs border border-amber-300 flex items-center space-x-1">
-                              <Check className="w-3 h-3 text-amber-700" />
-                              <span>In Quote ({alreadyQty})</span>
+                            <div className="flex items-center space-x-1.5">
+                              <span className="px-2.5 py-1 rounded-lg bg-amber-100 text-amber-900 font-bold text-xs border border-amber-300">
+                                In Quote ({alreadyQty})
+                              </span>
+                              <button
+                                type="button"
+                                onClick={(e) => { e.stopPropagation(); handleAddProduct(prod); }}
+                                className="px-2 py-1 rounded-lg bg-slate-200 hover:bg-slate-300 text-slate-800 text-xs font-bold cursor-pointer transition-colors"
+                                title="Add another to quotation"
+                              >
+                                +1
+                              </button>
                             </div>
                           ) : (
                             <button
                               type="button"
-                              className="px-3.5 py-1.5 rounded-xl bg-[#7DBA00] hover:bg-[#8ee000] text-[#003B40] font-black text-xs shadow-xs flex items-center space-x-1 active:scale-95 transition-all cursor-pointer"
+                              className="px-3.5 py-1.5 rounded-xl bg-[#00545C] hover:bg-[#003B40] text-white font-bold text-xs shadow-xs flex items-center space-x-1 active:scale-95 transition-all cursor-pointer"
                             >
                               <Plus className="w-3.5 h-3.5" />
                               <span>+ Add</span>
@@ -1091,15 +1255,15 @@ export default function CreateQuotation({ setActivePage, initialCustomer, import
           )}
         </div>
 
-        {/* Quick Tag Chips for instant search */}
+        {/* Quick Suggestion Chips */}
         <div className="flex flex-wrap items-center gap-1.5 pt-1 text-[11px]">
-          <span className="text-emerald-200/80 font-bold text-[10px] uppercase tracking-wider mr-1">Customer Wording Samples:</span>
+          <span className="text-slate-400 font-semibold text-[10px] uppercase tracking-wider mr-1">Quick Suggestions:</span>
           {['Golden Brown 1ltr', 'White 1lt', 'Putty Powder 40kg', 'Brush 2"', 'Asian Paints', 'Apex', 'Enamel', 'White Cement', 'Thinner'].map(tag => (
             <button
               key={tag}
               type="button"
               onClick={() => { setQuickSearchQuery(tag); }}
-              className="bg-[#003B40] hover:bg-[#0A6D77] text-white px-2.5 py-0.5 rounded-lg font-medium transition-colors cursor-pointer"
+              className="bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200/80 px-2.5 py-0.5 rounded-lg font-medium transition-colors cursor-pointer"
             >
               {tag}
             </button>
@@ -1144,10 +1308,17 @@ export default function CreateQuotation({ setActivePage, initialCustomer, import
           </div>
         </div>
 
+        {itemsError && (
+          <div className="p-3 bg-rose-50 border border-rose-300 rounded-xl text-rose-800 text-xs font-bold flex items-center space-x-2">
+            <AlertCircle className="w-4 h-4 text-rose-600 flex-shrink-0" />
+            <span>{itemsError}</span>
+          </div>
+        )}
+
         {/* Empty State */}
         {items.length === 0 ? (
           <div className="py-12 px-4 text-center border-2 border-dashed border-slate-200 rounded-2xl bg-slate-50/50 space-y-3">
-            <div className="w-12 h-12 rounded-2xl bg-emerald-100 text-[#00545C] font-black flex items-center justify-center mx-auto">
+            <div className="w-12 h-12 rounded-2xl bg-teal-50 text-[#00545C] font-black flex items-center justify-center mx-auto">
               <FileText className="w-6 h-6" />
             </div>
             <div>
@@ -1179,8 +1350,8 @@ export default function CreateQuotation({ setActivePage, initialCustomer, import
               <thead className="bg-[#00545C] text-white text-[11px] font-bold uppercase tracking-wider">
                 <tr>
                   <th className="py-3 px-3 text-center w-12">#</th>
-                  <th className="py-3 px-4 min-w-[220px]">Product Description</th>
-                  <th className="py-3 px-3 min-w-[160px]">Customer Requirement / Shade</th>
+                  <th className="py-3 px-4 min-w-[240px]">Product & Specifications</th>
+                  <th className="py-3 px-3 min-w-[170px]">Customer Notes / Shade</th>
                   <th className="py-3 px-2 text-center w-24">Unit</th>
                   <th className="py-3 px-3 text-center w-36">Quantity</th>
                   <th className="py-3 px-3 text-right w-28">Rate (₹)</th>
@@ -1191,6 +1362,7 @@ export default function CreateQuotation({ setActivePage, initialCustomer, import
               <tbody className="divide-y divide-slate-100">
                 {items.map((item, idx) => {
                   const isHighlighted = highlightedRowIndex === idx;
+                  const isQtyInvalid = !item.quantity || parseFloat(item.quantity) <= 0;
 
                   return (
                     <tr 
@@ -1209,26 +1381,31 @@ export default function CreateQuotation({ setActivePage, initialCustomer, import
                         {idx + 1}
                       </td>
 
-                      {/* Product Name & HSN */}
+                      {/* Product Name & Specifications Badge */}
                       <td className="py-2.5 px-4">
                         <p className="font-extrabold text-slate-900 text-xs sm:text-sm leading-snug">
                           {item.item_name}
                         </p>
+                        {item.details && (
+                          <div className="mt-1 inline-block bg-slate-100 text-slate-700 text-[11px] font-medium px-2 py-0.5 rounded border border-slate-200/80">
+                            {item.details}
+                          </div>
+                        )}
                         {item.hsn_sac && (
-                          <span className="font-mono text-[10px] text-slate-400">
+                          <span className="block font-mono text-[10px] text-slate-400 mt-0.5">
                             HSN/SAC: {item.hsn_sac}
                           </span>
                         )}
                       </td>
 
-                      {/* Customer Requirement / Shade Input */}
+                      {/* Customer Requirement / Custom Shade Input */}
                       <td className="py-2 px-3">
                         <input
                           type="text"
-                          value={item.details || ''}
-                          onChange={(e) => updateItemDetails(idx, e.target.value)}
-                          placeholder="e.g. Req: white paint 1lt / Shade 201"
-                          className="w-full px-2.5 py-1.5 text-xs border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-1 focus:ring-[#00545C]"
+                          value={item.customer_req || ''}
+                          onChange={(e) => updateItemCustomerReq(idx, e.target.value)}
+                          placeholder="e.g. Shade 4202 / Req: 1lt white"
+                          className="w-full px-2.5 py-1.5 text-xs border border-slate-300 rounded-lg bg-white text-slate-900 focus:outline-none focus:ring-1 focus:ring-[#00545C] focus:border-[#00545C]"
                         />
                       </td>
 
@@ -1251,9 +1428,11 @@ export default function CreateQuotation({ setActivePage, initialCustomer, import
                         </div>
                       </td>
 
-                      {/* QUANTITY INPUT WITH STEPPER BUTTONS */}
+                      {/* QUANTITY INPUT WITH STEPPER BUTTONS & ERROR HIGHLIGHT */}
                       <td className="py-2 px-3 text-center">
-                        <div className="inline-flex items-center space-x-1 bg-white border border-slate-300 rounded-lg p-0.5 shadow-2xs">
+                        <div className={`inline-flex items-center space-x-1 bg-white border rounded-lg p-0.5 shadow-2xs ${
+                          isQtyInvalid ? 'border-rose-400 ring-2 ring-rose-200' : 'border-slate-300'
+                        }`}>
                           <button
                             type="button"
                             onClick={() => stepQuantity(idx, -1)}
@@ -1280,6 +1459,9 @@ export default function CreateQuotation({ setActivePage, initialCustomer, import
                             +
                           </button>
                         </div>
+                        {isQtyInvalid && (
+                          <span className="block text-[9px] text-rose-600 font-bold mt-0.5">Min 1</span>
+                        )}
                       </td>
 
                       {/* Sale Rate (₹ Incl. GST) */}
@@ -1501,16 +1683,16 @@ export default function CreateQuotation({ setActivePage, initialCustomer, import
               </div>
 
               {/* GRAND TOTAL */}
-              <div className="bg-[#00545C] text-white p-4 rounded-xl shadow-sm space-y-1 mt-3">
+              <div className="bg-[#00545C] text-white p-5 rounded-2xl shadow-sm space-y-1.5 mt-3">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold uppercase tracking-wider text-emerald-200">
+                  <span className="text-xs font-bold uppercase tracking-wider text-slate-200">
                     Grand Total (INR)
                   </span>
-                  <span className="text-xl sm:text-2xl font-black font-mono text-[#7DBA00]">
+                  <span className="text-xl sm:text-2xl font-black font-mono text-white">
                     {formatCurrency(grandTotal)}
                   </span>
                 </div>
-                <p className="text-[10px] text-emerald-100 italic pt-1 border-t border-[#003B40] leading-tight">
+                <p className="text-[10px] text-teal-100 italic pt-1.5 border-t border-teal-700/60 leading-tight">
                   {numberToIndianWords(grandTotal)}
                 </p>
               </div>
@@ -1525,8 +1707,8 @@ export default function CreateQuotation({ setActivePage, initialCustomer, import
               className={`w-full py-3.5 px-4 rounded-xl text-sm font-black shadow-md transition-all transform flex items-center justify-center space-x-2 cursor-pointer ${
                 items.length > 0 && !isSubmitting
                   ? editingQuote 
-                    ? 'bg-amber-500 hover:bg-amber-600 text-white active:scale-95 shadow-amber-500/20'
-                    : 'bg-[#7DBA00] hover:bg-[#8ee000] text-[#003B40] active:scale-95 shadow-[#7DBA00]/20'
+                    ? 'bg-amber-600 hover:bg-amber-700 text-white active:scale-95 shadow-amber-600/20'
+                    : 'bg-[#00545C] hover:bg-[#003B40] text-white active:scale-95 shadow-[#00545C]/20'
                   : 'bg-slate-200 text-slate-400 cursor-not-allowed'
               }`}
             >

@@ -233,12 +233,17 @@ router.post('/', (req, res) => {
 
   transaction();
 
+  const createdQuote = db.prepare('SELECT * FROM quotations WHERE id = ?').get(quotationId);
+  const createdItems = db.prepare('SELECT * FROM quotation_items WHERE quotation_id = ? ORDER BY id ASC').all(quotationId);
+  const fullQuotation = { ...createdQuote, items: createdItems };
+
   res.json({
     success: true,
     id: quotationId,
     quotation_number: quoteNumber,
     customer_id: finalCustomerId,
     grand_total: grandTotal,
+    quotation: fullQuotation,
     message: `Quotation ${quoteNumber} created successfully`
   });
 });

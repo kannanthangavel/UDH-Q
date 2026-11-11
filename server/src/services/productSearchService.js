@@ -121,6 +121,147 @@ function invalidateProductCache() {
   lastCacheTimestamp = 0;
 }
 
+function extractStructuredDetails(rawName, rawDetails, specs, colours, types, section) {
+  const upper = rawName.toUpperCase();
+  
+  // 1. Brand Detection
+  let brand = '';
+  if (upper.includes('(ASIAN)') || upper.startsWith('AS ') || upper.startsWith('ASIAN') || upper.includes(' ASIAN')) {
+    brand = 'Asian Paints';
+  } else if (upper.includes('ABRO')) {
+    brand = 'Abro';
+  } else if (upper.includes('DR.FIX IT') || upper.includes('DR.FIXIT') || upper.includes('DR FIXIT') || upper.includes('FIXIT')) {
+    brand = 'Dr. Fixit';
+  } else if (upper.includes('JK ') || upper.includes('(SHIELD MAX)') || upper.includes('JK 40KG')) {
+    brand = 'JK Cement';
+  } else if (upper.includes('NEOSEAL')) {
+    brand = 'Neoseal';
+  } else if (upper.includes('3M')) {
+    brand = '3M';
+  } else if (upper.includes('ADDITION') || upper.startsWith('AD ')) {
+    brand = 'Addition';
+  } else if (upper.includes('BRILLA')) {
+    brand = 'Brilla';
+  } else if (upper.includes('ESDEE')) {
+    brand = 'Esdee';
+  } else if (upper.includes('SHEENLAC')) {
+    brand = 'Sheenlac';
+  } else if (upper.includes('NEROLAC')) {
+    brand = 'Nerolac';
+  } else if (upper.includes('BERGER')) {
+    brand = 'Berger';
+  } else if (upper.includes('JOYNA')) {
+    brand = 'Joyna';
+  } else if (upper.includes('PADMASHRI')) {
+    brand = 'Padmashri';
+  } else if (upper.includes('UDAYA')) {
+    brand = 'Udaya';
+  } else {
+    const parenMatch = upper.match(/\(([A-Z0-9\.\s\-]+)\)$/);
+    if (parenMatch && parenMatch[1] && parenMatch[1].length <= 15) {
+      brand = parenMatch[1].trim();
+    }
+  }
+
+  // 2. Category
+  let category = '';
+  if (types.includes('emulsion') || upper.includes('EML') || upper.includes('EMULSION') || upper.includes('TRACTOR') || upper.includes('APEX') || upper.includes('ACE ') || upper.includes('ROYALE')) {
+    category = 'Emulsion';
+  } else if (types.includes('enamel') || upper.includes('ENAMEL') || upper.includes(' EN ')) {
+    category = 'Enamel';
+  } else if (types.includes('primer') || upper.includes('PRIMER') || upper.includes('PR ') || upper.includes('PS ')) {
+    category = 'Primer';
+  } else if (types.includes('putty') || upper.includes('PUTTY') || upper.includes('PATTI')) {
+    category = 'Wall Putty';
+  } else if (types.includes('spray') || upper.includes('SPRAY')) {
+    category = 'Spray Paint';
+  } else if (types.includes('brush') || upper.includes('BRUSH') || upper.startsWith('BR ')) {
+    category = 'Paint Brush';
+  } else if (types.includes('roller') || upper.includes('ROLLER')) {
+    category = 'Paint Roller';
+  } else if (types.includes('thinner') || upper.includes('THINNER')) {
+    category = 'Thinner';
+  } else if (upper.includes('LATEX') || upper.includes('SEAL') || upper.includes('WATERPROOF')) {
+    category = 'Waterproofing';
+  } else if (types.includes('varnish') || types.includes('touchwood') || upper.includes('POLISH')) {
+    category = 'Wood Finish / Polish';
+  } else {
+    category = section === 'PAINTS' ? 'Paints & Coatings' : 'Hardware & Accessory';
+  }
+
+  // 3. Finish
+  let finish = '';
+  if (upper.includes('GLSY') || upper.includes('GLOSS') || upper.includes('GLOSSY')) {
+    finish = 'Glossy';
+  } else if (upper.includes('MATT') || upper.includes('MAT ') || upper.includes('-MATT')) {
+    finish = 'Matt';
+  } else if (upper.includes('SHYNE') || upper.includes('SHINE') || upper.includes('SATIN')) {
+    finish = 'Shyne / Satin';
+  }
+
+  // 4. Code / Model (e.g. SP-39, AC2G, 302, 502)
+  let code = '';
+  const codeMatch = upper.match(/\b(SP-\d+[A-Z]?|AC\d+[A-Z]?|\d{3,4}\b)/);
+  if (codeMatch) {
+    code = codeMatch[1];
+  }
+
+  // Pack size
+  const packSize = specs.length > 0 ? specs[0] : '';
+  const colour = colours.length > 0 ? colours[0].replace(/\b\w/g, c => c.toUpperCase()) : '';
+
+  // Concise structured summary
+  const summaryParts = [];
+  if (brand) summaryParts.push(brand);
+  if (packSize) summaryParts.push(packSize);
+  if (category) summaryParts.push(category);
+  if (colour) summaryParts.push(colour);
+  if (finish) summaryParts.push(finish);
+  if (code) summaryParts.push(`Code: ${code}`);
+
+  return {
+    brand,
+    category,
+    packSize,
+    colour,
+    finish,
+    code,
+    summary: summaryParts.join(' • ')
+  };
+}
+
+function extractProductSpecs(rawName) {
+  const specs = [];
+  const upper = (rawName || '').toUpperCase();
+
+  // 1. Volumes: 1LT, 20LT, 4LT, 10LT, 500ML, 100ML
+  const volRegex = /(?:^|[\s\-\(\/])(\d+(?:\.\d+)?)\s*(LT|LTR|L|ML)(?:[\s\-\)\/]|$)/g;
+  let vm;
+  while ((vm = volRegex.exec(upper)) !== null) {
+    const num = vm[1];
+    const unit = vm[2].startsWith('M') ? 'ML' : 'LT';
+    specs.push(`${num}${unit}`);
+  }
+
+  // 2. Weights: 40KG, 25KG, 20KG, 1KG, 500GM
+  const wtRegex = /(?:^|[\s\-\(\/])(\d+(?:\.\d+)?)\s*(KG|KGS|GM|G)(?:[\s\-\)\/]|$)/g;
+  let wm;
+  while ((wm = wtRegex.exec(upper)) !== null) {
+    const num = wm[1];
+    const unit = wm[2].startsWith('G') ? 'GM' : 'KG';
+    specs.push(`${num}${unit}`);
+  }
+
+  // 3. Inches: 2", 1 1/2", 4", 6"
+  const inchRegex = /(?:^|[\s\-\(\/])(\d+(?:\s*1\/2)?)\s*(?:\"|INCH)/g;
+  let im;
+  while ((im = inchRegex.exec(upper)) !== null) {
+    specs.push(`${im[1].replace(/\s+/g, '')}"`);
+  }
+
+  return [...new Set(specs)];
+}
+
 function getIndexedProducts() {
   const now = Date.now();
   if (cachedProducts && (now - lastCacheTimestamp < 60000)) {
@@ -133,23 +274,16 @@ function getIndexedProducts() {
     cachedProducts = rows.map(p => {
       const rawName = p.item_name || '';
       const rawDetails = p.details || '';
-      const normName = cleanNorm(rawName);
-      const normDetails = cleanNorm(rawDetails);
       const words = rawName.toLowerCase().split(/[\s\-\.\/\"\'\(\)\[\]\_\+\,]+/).filter(Boolean);
 
-      // Extract pack specs
-      const specs = [];
-      for (const [spec, syns] of Object.entries(SPEC_SYNONYMS)) {
-        if (syns.some(s => rawName.toUpperCase().includes(s.toUpperCase()) || normName.includes(cleanNorm(s)))) {
-          specs.push(spec);
-        }
-      }
+      // Extract pack specs accurately using regex patterns
+      const specs = extractProductSpecs(rawName);
 
       // Extract colors
       const colours = [];
       const colourNames = ['golden brown', 'white', 'black', 'brown', 'red', 'blue', 'green', 'yellow', 'grey', 'gray', 'orange', 'ivory'];
       for (const c of colourNames) {
-        if (rawName.toLowerCase().includes(c) || normName.includes(cleanNorm(c))) {
+        if (rawName.toLowerCase().includes(c) || cleanNorm(rawName).includes(cleanNorm(c))) {
           colours.push(c);
         }
       }
@@ -158,13 +292,22 @@ function getIndexedProducts() {
       const types = [];
       const typeNames = ['enamel', 'emulsion', 'primer', 'putty', 'brush', 'roller', 'thinner', 'cement', 'paint', 'touchwood', 'varnish', 'spray'];
       for (const t of typeNames) {
-        if (rawName.toLowerCase().includes(t) || normName.includes(cleanNorm(t))) {
+        if (rawName.toLowerCase().includes(t) || cleanNorm(rawName).includes(cleanNorm(t))) {
           types.push(t);
         }
       }
 
+      // Extract structured intelligent details
+      const structuredDetails = extractStructuredDetails(rawName, rawDetails, specs, colours, types, p.section);
+      const effectiveDetails = rawDetails || structuredDetails.summary;
+
+      const normName = cleanNorm(rawName);
+      const normDetails = cleanNorm(effectiveDetails);
+
       return {
         ...p,
+        details: effectiveDetails,
+        structuredDetails,
         rawName,
         rawDetails,
         normName,

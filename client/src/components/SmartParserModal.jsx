@@ -177,10 +177,15 @@ brush 2" 1ps`;
       };
 
       const res = await api.createQuotation(payload);
-      if (res && res.quotation) {
-        setCreatedQuotation(res.quotation);
+      if (res && (res.quotation || res.id)) {
+        if (res.quotation) {
+          setCreatedQuotation(res.quotation);
+        } else {
+          const full = await api.getQuotation(res.id);
+          setCreatedQuotation(full.quotation);
+        }
       } else {
-        throw new Error(res.error || 'Failed to save quotation');
+        throw new Error(res?.error || 'Failed to save quotation');
       }
     } catch (err) {
       alert('Error creating quotation: ' + (err.message || 'Server error'));

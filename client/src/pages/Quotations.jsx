@@ -203,7 +203,7 @@ export default function Quotations({ setActivePage, onEditQuotation }) {
                 <th className="py-3 px-4">Date & Validity</th>
                 <th className="py-3 px-4 text-right">Grand Total (₹)</th>
                 <th className="py-3 px-4 text-center">Status</th>
-                <th className="py-3 px-4 text-right">Actions</th>
+                <th className="py-3 px-4 text-right min-w-[300px]">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -274,18 +274,19 @@ export default function Quotations({ setActivePage, onEditQuotation }) {
 
                     {/* Actions */}
                     <td className="py-3.5 px-4 text-right">
-                      <div className="flex items-center justify-end space-x-1">
+                      <div className="flex items-center justify-end space-x-1.5 flex-wrap gap-y-1">
                         <button
                           onClick={() => handleEdit(quote)}
-                          className="p-1.5 text-amber-600 hover:text-amber-800 hover:bg-amber-50 rounded-lg transition-colors"
-                          title="Edit Quotation"
+                          className="inline-flex items-center space-x-1 px-2.5 py-1 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-800 text-xs font-bold border border-amber-300 transition-all cursor-pointer shadow-2xs"
+                          title="Edit Quotation details and items"
                         >
-                          <Edit3 className="w-4 h-4" />
+                          <Edit3 className="w-3.5 h-3.5 text-amber-700" />
+                          <span>Edit</span>
                         </button>
 
                         <button
                           onClick={() => openPdf(quote)}
-                          className="p-1.5 text-slate-600 hover:text-[#00545C] hover:bg-slate-100 rounded-lg transition-colors"
+                          className="p-1.5 text-slate-700 hover:text-[#00545C] hover:bg-slate-100 rounded-lg transition-colors border border-slate-200"
                           title="Print / View PDF"
                         >
                           <Printer className="w-4 h-4" />
@@ -293,7 +294,7 @@ export default function Quotations({ setActivePage, onEditQuotation }) {
 
                         <button
                           onClick={() => openWhatsApp(quote)}
-                          className="p-1.5 text-slate-600 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors"
+                          className="p-1.5 text-emerald-700 hover:text-emerald-900 hover:bg-emerald-50 rounded-lg transition-colors border border-emerald-200"
                           title="Share on WhatsApp"
                         >
                           <MessageCircle className="w-4 h-4" />
@@ -301,7 +302,7 @@ export default function Quotations({ setActivePage, onEditQuotation }) {
 
                         <button
                           onClick={() => openEmail(quote)}
-                          className="p-1.5 text-slate-600 hover:text-sky-600 hover:bg-sky-50 rounded-lg transition-colors"
+                          className="p-1.5 text-slate-600 hover:text-sky-600 hover:bg-sky-50 rounded-lg transition-colors border border-slate-200"
                           title="Share via Email"
                         >
                           <Mail className="w-4 h-4" />
@@ -309,7 +310,7 @@ export default function Quotations({ setActivePage, onEditQuotation }) {
 
                         <button
                           onClick={() => handleDuplicate(quote.id)}
-                          className="p-1.5 text-slate-600 hover:text-purple-600 hover:bg-purple-50 rounded-lg transition-colors"
+                          className="p-1.5 text-slate-600 hover:text-purple-600 hover:bg-purple-50 rounded-lg transition-colors border border-slate-200"
                           title="Duplicate Quotation"
                         >
                           <Copy className="w-4 h-4" />
@@ -317,10 +318,11 @@ export default function Quotations({ setActivePage, onEditQuotation }) {
 
                         <button
                           onClick={() => handleDelete(quote)}
-                          className="p-1.5 text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded-lg transition-colors"
+                          className="inline-flex items-center space-x-1 px-2 py-1 rounded-lg text-rose-600 hover:text-rose-800 hover:bg-rose-50 border border-transparent hover:border-rose-200 text-xs font-semibold transition-all cursor-pointer"
                           title="Delete Quotation"
                         >
-                          <Trash2 className="w-4 h-4" />
+                          <Trash2 className="w-3.5 h-3.5 text-rose-500" />
+                          <span>Delete</span>
                         </button>
                       </div>
                     </td>
