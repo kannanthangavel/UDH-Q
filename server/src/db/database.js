@@ -3,20 +3,23 @@ const fs = require('fs');
 const Database = require('better-sqlite3');
 const { hashPassword } = require('../utils/security');
 
+const storageDirEnv = process.env.STORAGE_DIR;
 const isVercel = process.env.VERCEL === '1' || process.env.VERCEL === true || Boolean(process.env.VERCEL);
-const dbDir = isVercel ? '/tmp/storage' : path.join(__dirname, '../../storage');
+const dbDir = storageDirEnv || (isVercel ? '/tmp/storage' : path.join(__dirname, '../../storage'));
 if (!fs.existsSync(dbDir)) {
   fs.mkdirSync(dbDir, { recursive: true });
 }
 
 const bundledDb = path.join(__dirname, '../../storage/ud_qm.sqlite');
-const dbPath = isVercel ? path.join(dbDir, 'ud_qm.sqlite') : bundledDb;
+const dbPath = process.env.DATABASE_PATH || (storageDirEnv ? path.join(storageDirEnv, 'ud_qm.sqlite') : (isVercel ? path.join(dbDir, 'ud_qm.sqlite') : bundledDb));
 
-if (isVercel && !fs.existsSync(dbPath) && fs.existsSync(bundledDb)) {
+// In cloud environments where destination db is outside source repository (e.g. /tmp on Vercel or mounted disk on Render)
+if (dbPath !== bundledDb && !fs.existsSync(dbPath) && fs.existsSync(bundledDb)) {
   try {
     fs.copyFileSync(bundledDb, dbPath);
+    console.log(`[DB] Successfully seeded initial SQLite database to: ${dbPath}`);
   } catch (err) {
-    console.warn('[DB] Failed copying bundled sqlite to /tmp:', err);
+    console.warn('[DB] Failed copying bundled sqlite to destination:', err);
   }
 }
 

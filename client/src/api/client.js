@@ -1,4 +1,15 @@
-const API_BASE = '/api';
+const rawApiBase = import.meta.env.VITE_API_URL 
+  ? `${import.meta.env.VITE_API_URL.replace(/\/$/, '')}/api` 
+  : '/api';
+const API_BASE = rawApiBase;
+
+export function getUploadUrl(url) {
+  if (!url) return '';
+  if (url.startsWith('http://') || url.startsWith('https://')) return url;
+  const baseUrl = import.meta.env.VITE_API_URL ? import.meta.env.VITE_API_URL.replace(/\/$/, '') : '';
+  const cleanPath = url.startsWith('/') ? url : `/${url}`;
+  return `${baseUrl}${cleanPath}`;
+}
 
 function getStoredToken() {
   return localStorage.getItem('udqm_token') || '';

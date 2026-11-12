@@ -28,18 +28,21 @@ app.use(express.json({ limit: '15mb' }));
 app.use(express.urlencoded({ extended: true, limit: '15mb' }));
 
 // Static uploads directory for logos and files
+const storageDirEnv = process.env.STORAGE_DIR;
 const isVercel = process.env.VERCEL === '1' || process.env.VERCEL === true || Boolean(process.env.VERCEL);
-const uploadsDir = isVercel ? '/tmp/uploads' : path.join(__dirname, '../storage/uploads');
+const defaultUploads = path.join(__dirname, '../storage/uploads');
+const uploadsDir = storageDirEnv ? path.join(storageDirEnv, 'uploads') : (isVercel ? '/tmp/uploads' : defaultUploads);
 if (!fs.existsSync(uploadsDir)) {
   try {
     fs.mkdirSync(uploadsDir, { recursive: true });
   } catch (e) {}
 }
-const bundledUploads = path.join(__dirname, '../storage/uploads');
-if (fs.existsSync(bundledUploads)) {
-  app.use('/uploads', express.static(bundledUploads));
+if (fs.existsSync(defaultUploads)) {
+  app.use('/uploads', express.static(defaultUploads));
 }
-app.use('/uploads', express.static(uploadsDir));
+if (uploadsDir !== defaultUploads && fs.existsSync(uploadsDir)) {
+  app.use('/uploads', express.static(uploadsDir));
+}
 
 // Attach Auth Middleware
 app.use(authMiddleware);
