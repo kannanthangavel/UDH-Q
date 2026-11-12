@@ -1,10 +1,32 @@
 const { db } = require('../db/database');
 
 function authMiddleware(req, res, next) {
+  // 1. Check API Key Header for n8n / external webhook integrations
+  const apiKeyHeader = req.headers['x-api-key'] || (req.headers['authorization']?.startsWith('ApiKey ') ? req.headers['authorization'].substring(7).trim() : null);
+  if (apiKeyHeader) {
+    const keyRow = db.prepare("SELECT value FROM settings WHERE key = 'api_key'").get();
+    if (keyRow && keyRow.value && keyRow.value === apiKeyHeader) {
+      const masterAdmin = db.prepare("SELECT id, name, email, role, avatar_url FROM users WHERE role = 'admin' LIMIT 1").get();
+      req.user = masterAdmin || { id: 1, name: 'n8n Automation', email: 'n8n@udhayam.com', role: 'admin' };
+      req.isApiKey = true;
+      return next();
+    }
+  }
+
   let token = null;
   const authHeader = req.headers['authorization'];
   if (authHeader && authHeader.startsWith('Bearer ')) {
     token = authHeader.substring(7).trim();
+    // Check if the bearer token is actually the API key
+    if (token.startsWith('udqm_live_')) {
+      const keyRow = db.prepare("SELECT value FROM settings WHERE key = 'api_key'").get();
+      if (keyRow && keyRow.value && keyRow.value === token) {
+        const masterAdmin = db.prepare("SELECT id, name, email, role, avatar_url FROM users WHERE role = 'admin' LIMIT 1").get();
+        req.user = masterAdmin || { id: 1, name: 'n8n Automation', email: 'n8n@udhayam.com', role: 'admin' };
+        req.isApiKey = true;
+        return next();
+      }
+    }
   } else if (req.headers['x-auth-token']) {
     token = req.headers['x-auth-token'];
   }

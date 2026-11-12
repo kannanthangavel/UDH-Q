@@ -3,6 +3,7 @@ const router = express.Router();
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
+const crypto = require('crypto');
 const { db, logAudit } = require('../db/database');
 const { requireAdmin } = require('../middleware/auth');
 
@@ -225,6 +226,59 @@ router.delete('/qr-code', requireAdmin, (req, res) => {
     filename: 'default_upi_qr.png',
     url: '/uploads/qr/default_upi_qr.png',
     message: 'Reset payment QR code to default UPI QR'
+  });
+});
+
+// GET /api/settings/api-key - Retrieve current API Key for n8n / external webhook integrations
+router.get('/api-key', (req, res) => {
+  let row = db.prepare("SELECT value FROM settings WHERE key = 'api_key'").get();
+  if (!row || !row.value) {
+    const generated = 'udqm_live_' + crypto.randomBytes(24).toString('hex');
+    db.prepare(`
+      INSERT INTO settings (key, value, updated_at)
+      VALUES ('api_key', ?, datetime('now'))
+      ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = datetime('now')
+    `).run(generated);
+    row = { value: generated };
+  }
+
+  const origin = req.protocol + '://' + req.get('host');
+  res.json({
+    success: true,
+    apiKey: row.value,
+    endpoints: {
+      parseMessage: `${origin}/api/whatsapp/parse`,
+      createQuotation: `${origin}/api/quotations`,
+      getQuotation: `${origin}/api/quotations/:id`,
+      getQuotationPdf: `${origin}/api/quotations/:id/pdf`,
+      searchProducts: `${origin}/api/products`
+    }
+  });
+});
+
+// POST /api/settings/api-key/regenerate - Regenerate API Key (Admin only)
+router.post('/api-key/regenerate', requireAdmin, (req, res) => {
+  const newApiKey = 'udqm_live_' + crypto.randomBytes(24).toString('hex');
+  db.prepare(`
+    INSERT INTO settings (key, value, updated_at)
+    VALUES ('api_key', ?, datetime('now'))
+    ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = datetime('now')
+  `).run(newApiKey);
+
+  logAudit(
+    req.user?.id || 1,
+    req.user?.email || 'kids@udhayam.com',
+    req.user?.role || 'admin',
+    'REGENERATE_API_KEY',
+    'SETTINGS',
+    'api_key',
+    'Regenerated UD-QM API Key for n8n automation'
+  );
+
+  res.json({
+    success: true,
+    apiKey: newApiKey,
+    message: 'New API Key generated successfully'
   });
 });
 

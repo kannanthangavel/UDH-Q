@@ -185,6 +185,28 @@ Red Oxide Primer 4lt`);
     setItems(items.filter((_, idx) => idx !== itemIdx));
   }
 
+  // Add another entry manually inside WhatsApp Parser
+  function handleAddNewManualItem() {
+    setItems(prev => {
+      const newIdx = prev.length;
+      setExpandedRowSuggestions(e => ({ ...e, [newIdx]: true }));
+      return [
+        ...prev,
+        {
+          id: Date.now() + Math.random(),
+          originalLine: 'Manual Order Entry',
+          selectedProduct: null,
+          quantity: 1,
+          unit: 'Nos',
+          sale_rate: 0,
+          candidates: [],
+          availableSizes: [],
+          confidence: 'Low'
+        }
+      ];
+    });
+  }
+
   // Running total calculation (Tax Inclusive)
   const totalAmount = items.reduce((sum, it) => sum + (it.quantity * it.sale_rate), 0);
 
@@ -361,9 +383,18 @@ Red Oxide Primer 4lt`);
 
                     {/* Matched Items Cards with Rich Feedback Options */}
                     <div className="space-y-3">
-                      <div className="flex items-center justify-between text-xs text-slate-600 font-bold px-1">
-                        <span>Extracted Order Items ({items.length})</span>
-                        <span>Click Suggestions to swap or search any catalog item</span>
+                      <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-600 font-bold px-1">
+                        <span className="text-slate-900 font-extrabold">Extracted Order Items ({items.length})</span>
+                        <div className="flex items-center space-x-2">
+                          <button
+                            type="button"
+                            onClick={handleAddNewManualItem}
+                            className="flex items-center space-x-1.5 px-3 py-1 bg-teal-50 hover:bg-teal-100 text-[#00545C] font-bold text-xs rounded-lg border border-teal-200 transition-colors cursor-pointer shadow-2xs"
+                          >
+                            <Plus className="w-3.5 h-3.5" />
+                            <span>+ Add Another Entry</span>
+                          </button>
+                        </div>
                       </div>
 
                       {items.map((it, idx) => {

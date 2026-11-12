@@ -239,26 +239,14 @@ export default function CreateQuotation({ setActivePage, initialCustomer, import
     if (address) setCustomerAddress(address);
 
     if (data.items && data.items.length > 0) {
-      const formattedItems = [];
-      const seenIds = new Set();
-
-      data.items.forEach(it => {
+      const formattedItems = data.items.map((it, idx) => {
         const pId = it.product_id || it.productId || it.id || null;
-        if (pId && seenIds.has(pId)) {
-          // consolidate duplicate
-          const existing = formattedItems.find(x => x.product_id === pId);
-          if (existing) {
-            existing.quantity += parseFloat(it.quantity) || 1;
-            existing.line_total = Math.round(existing.quantity * existing.sale_rate * 100) / 100;
-          }
-          return;
-        }
-
         const qty = parseFloat(it.quantity) || 1;
         const rate = parseFloat(it.sale_rate || it.saleRate || 0);
         const customerReq = it.details || it.rawText || it.originalLine || '';
 
-        formattedItems.push({
+        return {
+          id: Date.now() + Math.random() + idx,
           product_id: pId,
           item_name: it.item_name || it.itemName || 'Selected Product',
           hsn_sac: it.hsn_sac || it.hsnSac || '',
@@ -270,13 +258,12 @@ export default function CreateQuotation({ setActivePage, initialCustomer, import
           line_total: Math.round(qty * rate * 100) / 100,
           is_overridden: false,
           availableSizes: it.availableSizes || []
-        });
-
-        if (pId) seenIds.add(pId);
+        };
       });
 
-      setItems(formattedItems);
-      showToast(`✓ Transferred ${formattedItems.length} product(s) from WhatsApp!`);
+      // Append new items to allow multiple entries freely without wiping existing rows
+      setItems(prev => [...prev, ...formattedItems]);
+      showToast(`✓ Added ${formattedItems.length} product entry(s) to quotation!`);
     }
   }
 
@@ -299,31 +286,18 @@ export default function CreateQuotation({ setActivePage, initialCustomer, import
   const isNameValid = customerName.trim().length > 0;
   const isPhoneValid = customerPhone.replace(/\D/g, '').length >= 10;
 
-  // Add product to quote with DUPLICATE PREVENTION & STRUCTURED SPECIFICATION PRESERVATION
+  // Add product to quote (Supports Multiple Entries for different shades/specs/rooms)
   function handleAddProduct(product) {
     // Rapid double-click guard
     const now = Date.now();
     if (now - lastAddClickRef.current < 250) return;
     lastAddClickRef.current = now;
 
-    // Check for duplicate item ID
-    const existingIndex = items.findIndex(it => it.product_id === product.id);
-    if (existingIndex !== -1) {
-      // DUPLICATE PREVENTED: Do not create another row
-      setHighlightedRowIndex(existingIndex);
-      setTimeout(() => setHighlightedRowIndex(null), 3000);
-
-      const rowEl = document.getElementById(`quote-row-${existingIndex}`);
-      if (rowEl) rowEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-
-      showToast(`Item already in quotation (Row #${existingIndex + 1}).`);
-      return;
-    }
-
     const officialDetails = product.details || product.structuredDetails?.summary || '';
     const customerReq = quickSearchQuery.trim();
 
     const newItem = {
+      id: Date.now() + Math.random(),
       product_id: product.id,
       item_name: product.item_name,
       hsn_sac: product.hsn_sac || '',
@@ -345,6 +319,28 @@ export default function CreateQuotation({ setActivePage, initialCustomer, import
     setShowQuickDropdown(false);
     setActiveDropdownIndex(-1);
     showToast(`✓ Added: ${product.item_name}`);
+  }
+
+  // Rapid Blank Row Addition for Manual Quotation Creation
+  function handleAddBlankItem() {
+    const newItem = {
+      id: Date.now() + Math.random(),
+      product_id: null,
+      item_name: '',
+      hsn_sac: '32091010',
+      unit: 'Nos',
+      details: '',
+      customer_req: '',
+      quantity: 1,
+      sale_rate: 0,
+      catalog_rate: 0,
+      line_total: 0,
+      is_overridden: true,
+      availableSizes: []
+    };
+    setItems(prev => [...prev, newItem]);
+    setItemsError('');
+    showToast('✓ Added blank row. You can type item name, rate, and unit directly.');
   }
 
   function handleSearchKeyDown(e) {
@@ -722,6 +718,54 @@ export default function CreateQuotation({ setActivePage, initialCustomer, import
             </button>
           </div>
         </div>
+
+        {/* Persistent Post-Creation CTA Banner */}
+        {createdQuotation && (
+          <div className="bg-gradient-to-r from-emerald-50 via-teal-50 to-white border-2 border-emerald-400 p-4 rounded-2xl shadow-sm flex flex-wrap items-center justify-between gap-3 animate-in fade-in">
+            <div className="flex items-center space-x-2.5">
+              <div className="w-9 h-9 rounded-xl bg-emerald-600 text-white flex items-center justify-center shadow-xs">
+                <Check className="w-5 h-5 font-black" />
+              </div>
+              <div>
+                <h4 className="font-extrabold text-sm text-slate-900 leading-tight">
+                  Quotation <span className="font-mono text-[#00545C]">{createdQuotation.quotation_number}</span> Created Successfully!
+                </h4>
+                <p className="text-xs text-slate-600">
+                  Customer: <strong>{createdQuotation.customer_name}</strong> • Amount: <strong className="font-mono text-[#00545C]">₹{Number(createdQuotation.grand_total).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</strong>
+                </p>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setShowPdfModal(true)}
+                className="flex items-center space-x-1 px-3 py-1.5 rounded-xl bg-white hover:bg-slate-100 text-slate-700 text-xs font-bold border border-slate-300 shadow-2xs transition-colors cursor-pointer"
+              >
+                <FileText className="w-3.5 h-3.5 text-[#00545C]" />
+                <span>View PDF Preview</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setShowWaModal(true)}
+                className="flex items-center space-x-1 px-3.5 py-1.5 rounded-xl bg-[#25D366] hover:bg-[#20ba59] text-white text-xs font-bold shadow-2xs transition-all active:scale-95 cursor-pointer"
+              >
+                <MessageSquare className="w-3.5 h-3.5 text-white" />
+                <span>Share WhatsApp</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setActivePage('quotations')}
+                className="flex items-center space-x-1.5 px-4 py-1.5 rounded-xl bg-[#00545C] hover:bg-[#003B40] text-white text-xs font-extrabold shadow-sm transition-all active:scale-95 cursor-pointer"
+              >
+                <span>Go to Quotes Register</span>
+                <ArrowRight className="w-3.5 h-3.5 text-emerald-300" />
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* EDIT MODE ACTIVE NOTICE BANNER */}
@@ -984,10 +1028,20 @@ export default function CreateQuotation({ setActivePage, initialCustomer, import
 
             <button
               type="button"
+              onClick={handleAddBlankItem}
+              className="px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold border border-slate-200 flex items-center space-x-1.5 transition-all cursor-pointer shadow-2xs"
+              title="Add a manual entry row to type custom items directly"
+            >
+              <Plus className="w-3.5 h-3.5 text-[#00545C]" />
+              <span>+ Add Blank Item</span>
+            </button>
+
+            <button
+              type="button"
               onClick={() => setShowCatalogDrawer(true)}
               className="px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold border border-slate-200 flex items-center space-x-1 transition-all cursor-pointer shadow-2xs"
             >
-              <Plus className="w-3.5 h-3.5" />
+              <Layers className="w-3.5 h-3.5 text-[#00545C]" />
               <span>Browse Catalogue</span>
             </button>
 
@@ -1201,9 +1255,26 @@ export default function CreateQuotation({ setActivePage, initialCustomer, import
 
                       {/* Product Name & Specifications Badge */}
                       <td className="py-2.5 px-4">
-                        <p className="font-extrabold text-slate-900 text-xs sm:text-sm leading-snug">
-                          {item.item_name}
-                        </p>
+                        {item.product_id === null ? (
+                          <input
+                            type="text"
+                            value={item.item_name}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              setItems(prev => {
+                                const next = [...prev];
+                                next[idx] = { ...next[idx], item_name: val };
+                                return next;
+                              });
+                            }}
+                            placeholder="Type custom product name or service..."
+                            className="w-full px-2.5 py-1 text-xs font-bold border border-slate-300 rounded-lg bg-white text-slate-900 focus:outline-none focus:ring-1 focus:ring-[#00545C]"
+                          />
+                        ) : (
+                          <p className="font-extrabold text-slate-900 text-xs sm:text-sm leading-snug">
+                            {item.item_name}
+                          </p>
+                        )}
                         {item.details && (
                           <div className="mt-1 inline-block bg-slate-100 text-slate-700 text-[11px] font-medium px-2 py-0.5 rounded border border-slate-200/80">
                             {item.details}
@@ -1812,9 +1883,14 @@ export default function CreateQuotation({ setActivePage, initialCustomer, import
           quotation={createdQuotation}
           onClose={() => {
             setShowPdfModal(false);
-            if (confirm('Quotation saved successfully! Would you like to view it in the Quotations register?')) {
-              setActivePage('quotations');
-            }
+          }}
+          onGoToQuotes={() => {
+            setShowPdfModal(false);
+            setActivePage('quotations');
+          }}
+          onNewQuotation={() => {
+            setShowPdfModal(false);
+            handleClearForm();
           }}
           onShareWhatsApp={() => {
             setShowPdfModal(false);

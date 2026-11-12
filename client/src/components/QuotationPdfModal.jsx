@@ -1,9 +1,12 @@
 import React, { useState } from 'react';
-import { Printer, Download, X, FileText, CheckCircle2, ShieldCheck, Building2, Edit3, Trash2 } from 'lucide-react';
+import { 
+  Printer, Download, X, FileText, CheckCircle2, ShieldCheck, 
+  Building2, Edit3, Trash2, ArrowRight, MessageSquare, Plus 
+} from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { numberToIndianWords } from '../utils/numberToWords';
 
-export default function QuotationPdfModal({ quotation, onClose, onEdit, onDelete }) {
+export default function QuotationPdfModal({ quotation, onClose, onEdit, onDelete, onGoToQuotes, onNewQuotation, onShareWhatsApp }) {
   if (!quotation) return null;
 
   const { settings } = useAuth();
@@ -476,6 +479,55 @@ export default function QuotationPdfModal({ quotation, onClose, onEdit, onDelete
 
           </div>
 
+        </div>
+
+        {/* Post-Creation Action Bar & CTAs (Hidden during print) */}
+        <div className="no-print bg-white px-4 sm:px-6 py-3 border-t border-slate-300 flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center space-x-2 text-xs">
+            <CheckCircle2 className="w-4 h-4 text-emerald-600 flex-shrink-0" />
+            <span className="font-extrabold text-slate-800">
+              Quotation {quotation.quotation_number} Ready!
+            </span>
+            <span className="text-slate-400 hidden md:inline">• Official rates applied</span>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            {onNewQuotation && (
+              <button
+                type="button"
+                onClick={onNewQuotation}
+                className="flex items-center space-x-1.5 px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs transition-colors cursor-pointer"
+                title="Create a new blank quotation"
+              >
+                <Plus className="w-3.5 h-3.5 text-slate-600" />
+                <span>+ Create Another</span>
+              </button>
+            )}
+
+            {onShareWhatsApp && (
+              <button
+                type="button"
+                onClick={onShareWhatsApp}
+                className="flex items-center space-x-1.5 px-4 py-1.5 rounded-xl bg-[#25D366] hover:bg-[#20ba59] text-white font-bold text-xs shadow-xs transition-all active:scale-95 cursor-pointer"
+                title="Share via WhatsApp with PDF Document"
+              >
+                <MessageSquare className="w-3.5 h-3.5 text-white" />
+                <span>Share WhatsApp</span>
+              </button>
+            )}
+
+            {onGoToQuotes && (
+              <button
+                type="button"
+                onClick={onGoToQuotes}
+                className="flex items-center space-x-1.5 px-5 py-1.5 rounded-xl bg-[#00545C] hover:bg-[#003B40] text-white font-black text-xs shadow-md transition-all active:scale-95 cursor-pointer shadow-[#00545C]/20"
+                title="Navigate to the full Quotations Register"
+              >
+                <span>Go to Quotations List</span>
+                <ArrowRight className="w-3.5 h-3.5 text-emerald-300" />
+              </button>
+            )}
+          </div>
         </div>
 
       </div>

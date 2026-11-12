@@ -52,16 +52,14 @@ export default function Settings() {
   const [qrSuccess, setQrSuccess] = useState('');
   const [qrError, setQrError] = useState('');
 
-  // WhatsApp Cloud API State
-  const [waConfig, setWaConfig] = useState({
-    phoneNumberId: '',
-    wabaId: '',
-    accessToken: '',
-    webhookVerifyToken: ''
-  });
-  const [isSavingWa, setIsSavingWa] = useState(false);
-  const [waSuccess, setWaSuccess] = useState(false);
-  const [waError, setWaError] = useState('');
+  // API Key & n8n Automation State
+  const [apiKey, setApiKey] = useState('');
+  const [apiEndpoints, setApiEndpoints] = useState(null);
+  const [isLoadingApiKey, setIsLoadingApiKey] = useState(false);
+  const [isRegeneratingApiKey, setIsRegeneratingApiKey] = useState(false);
+  const [apiKeyCopied, setApiKeyCopied] = useState(false);
+  const [apiKeySuccessMsg, setApiKeySuccessMsg] = useState('');
+  const [apiKeyErrorMsg, setApiKeyErrorMsg] = useState('');
 
   // User Account (Kids) Profile Edit State
   const [profileName, setProfileName] = useState('Kids');
@@ -91,6 +89,8 @@ export default function Settings() {
   useEffect(() => {
     if (activeTab === 'audit') {
       loadAudit();
+    } else if (activeTab === 'api-key') {
+      loadApiKey();
     }
   }, [activeTab]);
 
@@ -114,35 +114,45 @@ export default function Settings() {
     }
   }
 
-  async function loadWaConfig() {
+  async function loadApiKey() {
     try {
-      const res = await api.getWhatsAppConfig();
-      if (res.config) {
-        setWaConfig({
-          phoneNumberId: res.config.phoneNumberId || '',
-          wabaId: res.config.wabaId || '',
-          accessToken: res.config.accessToken || '',
-          webhookVerifyToken: res.config.webhookVerifyToken || ''
-        });
+      setIsLoadingApiKey(true);
+      const res = await api.getApiKey();
+      if (res.success && res.apiKey) {
+        setApiKey(res.apiKey);
+        setApiEndpoints(res.endpoints);
       }
     } catch (e) {
-      console.warn('Failed to load WhatsApp config:', e);
+      console.warn('Failed to load API key:', e);
+    } finally {
+      setIsLoadingApiKey(false);
     }
   }
 
-  async function handleSaveWaConfig(e) {
-    e.preventDefault();
-    try {
-      setIsSavingWa(true);
-      setWaError('');
-      await api.saveWhatsAppConfig(waConfig);
-      setWaSuccess(true);
-      setTimeout(() => setWaSuccess(false), 3000);
-    } catch (err) {
-      setWaError(err.message || 'Failed to save WhatsApp config');
-    } finally {
-      setIsSavingWa(false);
+  async function handleRegenerateApiKey() {
+    if (!confirm('Are you sure you want to regenerate the API Key? Any active n8n workflows using the old key will need to be updated with the new key.')) {
+      return;
     }
+    try {
+      setIsRegeneratingApiKey(true);
+      setApiKeyErrorMsg('');
+      const res = await api.regenerateApiKey();
+      if (res.success && res.apiKey) {
+        setApiKey(res.apiKey);
+        setApiKeySuccessMsg('New API Key generated successfully!');
+        setTimeout(() => setApiKeySuccessMsg(''), 4000);
+      }
+    } catch (err) {
+      setApiKeyErrorMsg(err.message || 'Failed to regenerate API Key');
+    } finally {
+      setIsRegeneratingApiKey(false);
+    }
+  }
+
+  function handleCopyApiKey(text) {
+    navigator.clipboard.writeText(text);
+    setApiKeyCopied(true);
+    setTimeout(() => setApiKeyCopied(false), 2000);
   }
 
   async function loadAudit() {
@@ -355,13 +365,13 @@ export default function Settings() {
             </button>
 
             <button
-              onClick={() => setActiveTab('whatsapp-api')}
+              onClick={() => setActiveTab('api-key')}
               className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer ${
-                activeTab === 'whatsapp-api' ? 'bg-[#00545C] text-white shadow-sm' : 'text-slate-600 hover:text-slate-900'
+                activeTab === 'api-key' ? 'bg-[#00545C] text-white shadow-sm' : 'text-slate-600 hover:text-slate-900'
               }`}
             >
-              <MessageSquare className="w-3.5 h-3.5 text-[#25D366]" />
-              <span>WhatsApp Cloud API</span>
+              <Key className="w-3.5 h-3.5 text-amber-500" />
+              <span>API Key & n8n Integration</span>
             </button>
 
             <button
@@ -932,112 +942,201 @@ export default function Settings() {
         </form>
       )}
 
-      {/* TAB 4: WHATSAPP CLOUD API INTEGRATION */}
-      {activeTab === 'whatsapp-api' && (
-        <form onSubmit={handleSaveWaConfig} className="bg-white rounded-2xl p-6 shadow-sm border border-slate-200 space-y-5 animate-in fade-in">
+      {/* TAB 4: API KEY & n8n WEBHOOK INTEGRATION */}
+      {activeTab === 'api-key' && (
+        <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-200 space-y-6 animate-in fade-in">
           <div>
             <div className="flex items-center space-x-2">
-              <MessageSquare className="w-5 h-5 text-[#25D366]" />
+              <Key className="w-5 h-5 text-amber-500" />
               <h3 className="text-base font-extrabold text-slate-900">
-                WhatsApp Business Cloud API Configuration
+                UD-QM Web App API Key & n8n Webhook Integration
               </h3>
             </div>
             <p className="text-xs text-slate-500 mt-0.5">
-              Configure Meta WhatsApp Cloud API credentials to enable direct server-side messaging and bot automation.
+              Connect n8n workflows, WhatsApp bots, and custom automations directly into UD-QM using secure API token authentication.
             </p>
           </div>
 
-          {waSuccess && (
-            <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 p-3.5 rounded-xl text-xs flex items-center space-x-2">
-              <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-              <span className="font-bold">WhatsApp API settings saved successfully!</span>
+          {apiKeySuccessMsg && (
+            <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 p-3.5 rounded-xl text-xs flex items-center space-x-2 animate-in fade-in">
+              <CheckCircle2 className="w-4 h-4 text-emerald-600 flex-shrink-0" />
+              <span className="font-bold">{apiKeySuccessMsg}</span>
             </div>
           )}
 
-          {waError && (
-            <div className="bg-rose-50 border border-rose-200 text-rose-700 p-3.5 rounded-xl text-xs flex items-center space-x-2">
-              <AlertCircle className="w-4 h-4 text-rose-600" />
-              <span>{waError}</span>
+          {apiKeyErrorMsg && (
+            <div className="bg-rose-50 border border-rose-200 text-rose-700 p-3.5 rounded-xl text-xs flex items-center space-x-2 animate-in fade-in">
+              <AlertCircle className="w-4 h-4 text-rose-600 flex-shrink-0" />
+              <span>{apiKeyErrorMsg}</span>
             </div>
           )}
 
-          <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 text-xs text-slate-600 space-y-1">
-            <p className="font-bold text-slate-800">📌 Ready for API credentials:</p>
-            <p>
-              You can paste your Meta WhatsApp Business Cloud API tokens below at any time. In the meantime, UD-QM's instant <b>WhatsApp Web & Desktop sharing link</b> with Tamil/English emojis is 100% active and works with zero setup!
-            </p>
-          </div>
+          {/* Active API Key Card */}
+          <div className="bg-slate-50 p-5 rounded-xl border border-slate-200 space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <label className="block text-xs font-bold text-slate-800 uppercase tracking-wider">
+                  Secret Web App API Key
+                </label>
+                <p className="text-[11px] text-slate-500">
+                  Header name: <code className="font-mono bg-white px-1.5 py-0.5 rounded border border-slate-300 text-slate-800 font-bold">X-API-Key</code> or Bearer token
+                </p>
+              </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
-            <div>
-              <label className="block font-bold text-slate-700 mb-1">
-                WhatsApp Business Account (WABA) ID
-              </label>
+              <div className="flex items-center space-x-2">
+                <button
+                  type="button"
+                  onClick={() => handleCopyApiKey(apiKey)}
+                  className="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-white hover:bg-slate-100 text-slate-700 font-bold text-xs border border-slate-300 transition-colors shadow-2xs cursor-pointer"
+                >
+                  {apiKeyCopied ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Key className="w-3.5 h-3.5 text-slate-500" />}
+                  <span>{apiKeyCopied ? 'Copied Key!' : 'Copy API Key'}</span>
+                </button>
+
+                {isAdmin && (
+                  <button
+                    type="button"
+                    disabled={isRegeneratingApiKey}
+                    onClick={handleRegenerateApiKey}
+                    className="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold text-xs border border-rose-200 transition-colors cursor-pointer disabled:opacity-50"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${isRegeneratingApiKey ? 'animate-spin' : ''}`} />
+                    <span>{isRegeneratingApiKey ? 'Regenerating…' : 'Regenerate'}</span>
+                  </button>
+                )}
+              </div>
+            </div>
+
+            <div className="relative">
               <input
                 type="text"
-                placeholder="e.g. 109283746592837"
-                value={waConfig.wabaId}
-                onChange={(e) => setWaConfig({ ...waConfig, wabaId: e.target.value })}
-                className="w-full px-3 py-2 font-mono border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#00545C]"
+                readOnly
+                value={apiKey || 'Loading API key...'}
+                className="w-full px-3.5 py-2.5 font-mono text-xs font-bold bg-white text-slate-900 border border-slate-300 rounded-xl select-all focus:outline-none focus:ring-2 focus:ring-[#00545C]"
               />
             </div>
 
-            <div>
-              <label className="block font-bold text-slate-700 mb-1">
-                WhatsApp Phone Number ID
-              </label>
-              <input
-                type="text"
-                placeholder="e.g. 102938475610293"
-                value={waConfig.phoneNumberId}
-                onChange={(e) => setWaConfig({ ...waConfig, phoneNumberId: e.target.value })}
-                className="w-full px-3 py-2 font-mono border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#00545C]"
-              />
-            </div>
-
-            <div className="sm:col-span-2">
-              <label className="block font-bold text-slate-700 mb-1">
-                Permanent System User Access Token
-              </label>
-              <input
-                type="password"
-                placeholder="EAAGm0PX4ZC... (Paste permanent Meta token)"
-                value={waConfig.accessToken}
-                onChange={(e) => setWaConfig({ ...waConfig, accessToken: e.target.value })}
-                className="w-full px-3 py-2 font-mono border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#00545C]"
-              />
-            </div>
-
-            <div className="sm:col-span-2">
-              <label className="block font-bold text-slate-700 mb-1">
-                Webhook Verify Token
-              </label>
-              <input
-                type="text"
-                placeholder="e.g. udhayam_paint_webhook_token_2026"
-                value={waConfig.webhookVerifyToken}
-                onChange={(e) => setWaConfig({ ...waConfig, webhookVerifyToken: e.target.value })}
-                className="w-full px-3 py-2 font-mono border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#00545C]"
-              />
+            <div className="flex items-center space-x-2 text-[11px] text-emerald-700 font-semibold">
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+              <span>Authentication ready for n8n workflows & webhook triggers</span>
             </div>
           </div>
 
-          <div className="pt-4 border-t border-slate-100 flex items-center justify-between">
-            <div className="flex items-center space-x-2 text-xs text-slate-500">
-              <span className="w-2 h-2 rounded-full bg-[#25D366]"></span>
-              <span>WhatsApp Click-to-Chat active on: <b>+91 97156 22499</b></span>
-            </div>
+          {/* Endpoints for n8n */}
+          <div className="space-y-3">
+            <h4 className="text-xs font-extrabold uppercase tracking-wider text-slate-700">
+              Available Webhook & Automation Endpoints for n8n:
+            </h4>
 
-            <button
-              type="submit"
-              disabled={isSavingWa}
-              className="flex items-center space-x-1.5 px-6 py-2.5 rounded-xl bg-[#25D366] hover:bg-[#20ba59] text-white font-black text-xs shadow transition-all active:scale-95 cursor-pointer"
-            >
-              <Save className="w-3.5 h-3.5" />
-              <span>{isSavingWa ? 'Saving API Settings...' : 'Save WhatsApp API Config'}</span>
-            </button>
+            <div className="grid grid-cols-1 gap-2.5 text-xs">
+              
+              {/* Endpoint 1: Parse WhatsApp */}
+              <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div className="space-y-0.5">
+                  <div className="flex items-center space-x-2">
+                    <span className="px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 font-black text-[10px] font-mono">POST</span>
+                    <code className="font-mono font-bold text-slate-900">/api/whatsapp/parse</code>
+                  </div>
+                  <p className="text-[11px] text-slate-500">
+                    Parse customer order messages from WhatsApp & match 5,300+ items with available pack sizes.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => handleCopyApiKey(apiEndpoints?.parseMessage || `${window.location.origin}/api/whatsapp/parse`)}
+                  className="px-2.5 py-1 bg-white hover:bg-slate-100 border border-slate-300 rounded-lg text-slate-700 font-bold text-[11px] self-start sm:self-center cursor-pointer"
+                >
+                  Copy URL
+                </button>
+              </div>
+
+              {/* Endpoint 2: Create Quotation */}
+              <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div className="space-y-0.5">
+                  <div className="flex items-center space-x-2">
+                    <span className="px-2 py-0.5 rounded bg-blue-100 text-blue-800 font-black text-[10px] font-mono">POST</span>
+                    <code className="font-mono font-bold text-slate-900">/api/quotations</code>
+                  </div>
+                  <p className="text-[11px] text-slate-500">
+                    Create official quotation with tax-inclusive calculation and generate UDQ-YYYY-XXXXXX number.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => handleCopyApiKey(apiEndpoints?.createQuotation || `${window.location.origin}/api/quotations`)}
+                  className="px-2.5 py-1 bg-white hover:bg-slate-100 border border-slate-300 rounded-lg text-slate-700 font-bold text-[11px] self-start sm:self-center cursor-pointer"
+                >
+                  Copy URL
+                </button>
+              </div>
+
+              {/* Endpoint 3: Stream PDF */}
+              <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div className="space-y-0.5">
+                  <div className="flex items-center space-x-2">
+                    <span className="px-2 py-0.5 rounded bg-purple-100 text-purple-800 font-black text-[10px] font-mono">GET</span>
+                    <code className="font-mono font-bold text-slate-900">/api/quotations/:id/pdf?download=true</code>
+                  </div>
+                  <p className="text-[11px] text-slate-500">
+                    Stream crisp A4/A5 PDF binary to send as document attachment in WhatsApp bot workflows.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => handleCopyApiKey(apiEndpoints?.getQuotationPdf || `${window.location.origin}/api/quotations/:id/pdf?download=true`)}
+                  className="px-2.5 py-1 bg-white hover:bg-slate-100 border border-slate-300 rounded-lg text-slate-700 font-bold text-[11px] self-start sm:self-center cursor-pointer"
+                >
+                  Copy URL
+                </button>
+              </div>
+
+              {/* Endpoint 4: Search Products */}
+              <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div className="space-y-0.5">
+                  <div className="flex items-center space-x-2">
+                    <span className="px-2 py-0.5 rounded bg-purple-100 text-purple-800 font-black text-[10px] font-mono">GET</span>
+                    <code className="font-mono font-bold text-slate-900">/api/products?search=...</code>
+                  </div>
+                  <p className="text-[11px] text-slate-500">
+                    Query catalog items, rates, and pack sizes with fuzzy and space-agnostic matching.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => handleCopyApiKey(apiEndpoints?.searchProducts || `${window.location.origin}/api/products`)}
+                  className="px-2.5 py-1 bg-white hover:bg-slate-100 border border-slate-300 rounded-lg text-slate-700 font-bold text-[11px] self-start sm:self-center cursor-pointer"
+                >
+                  Copy URL
+                </button>
+              </div>
+
+            </div>
           </div>
-        </form>
+
+          {/* n8n Integration Guide Snippet */}
+          <div className="bg-[#003B40] text-slate-200 p-4 rounded-xl space-y-2 text-xs">
+            <div className="flex items-center justify-between">
+              <span className="font-bold text-emerald-300">n8n HTTP Request Node Configuration:</span>
+              <button
+                type="button"
+                onClick={() => handleCopyApiKey(`curl -X POST "${window.location.origin}/api/whatsapp/parse" \\\n  -H "Content-Type: application/json" \\\n  -H "X-API-Key: ${apiKey}" \\\n  -d '{"message": "Customer: Ramesh\\nAsian Paints Apex 20lt 2 cans"}'`)}
+                className="text-[11px] text-emerald-200 hover:text-white font-mono font-bold cursor-pointer underline"
+              >
+                Copy cURL Sample
+              </button>
+            </div>
+            <pre className="font-mono text-[11px] overflow-x-auto text-emerald-100/90 bg-black/30 p-2.5 rounded-lg leading-relaxed">
+{`Method: POST
+URL: ${window.location.origin}/api/whatsapp/parse
+Headers:
+  Content-Type: application/json
+  X-API-Key: ${apiKey || 'udqm_live_...'}
+Body (JSON):
+  { "message": "Customer: Ramesh\\nUdhayam Manjal 4lt 2\\nBirla Putty 40kg 5" }`}
+            </pre>
+          </div>
+
+        </div>
       )}
 
       {/* TAB 5: SINGLE USER ACCOUNT (Kids / 22499) PROFILE & PASSWORD MANAGEMENT */}

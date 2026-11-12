@@ -98,6 +98,8 @@ export const api = {
   resetLogo: () => request('/settings/logo', { method: 'DELETE' }),
   uploadQrCode: (formData) => request('/settings/qr-code', { method: 'POST', body: formData }),
   resetQrCode: () => request('/settings/qr-code', { method: 'DELETE' }),
+  getApiKey: () => request('/settings/api-key'),
+  regenerateApiKey: () => request('/settings/api-key/regenerate', { method: 'POST' }),
 
   // Audit Logs
   getAuditLogs: (params = {}) => {

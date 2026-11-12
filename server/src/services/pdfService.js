@@ -63,18 +63,29 @@ function generateQuotationPdf(quotation, settings, res) {
   const contentWidth = pageWidth - margin * 2;
   const logoPath = getLogoPath(settings.company_logo);
 
-  // Top Header Banner (Proportionately balanced for A5 and A4)
-  const headerHeight = isA5 ? 46 : 68;
-  doc.rect(margin, margin, contentWidth, headerHeight).fill(COLOR_TEAL);
+  // Card and Pill Corner Radii
+  const R_CARD = isA5 ? 6 : 8;
+  const R_SM = isA5 ? 4 : 5;
 
-  // Logo
+  // Top Header Banner with sleek rounded card corners & Lime bottom accent strip
+  const headerHeight = isA5 ? 46 : 68;
+  doc.roundedRect(margin, margin, contentWidth, headerHeight, R_CARD).fill(COLOR_TEAL);
+
+  // Sleek Lime accent strip at bottom of header banner
+  const accentHeight = isA5 ? 2.5 : 3.5;
+  doc.roundedRect(margin, margin + headerHeight - accentHeight, contentWidth, accentHeight, 1).fill(COLOR_LIME);
+
+  // Logo in clean rounded white container
   let textLeft = margin + (isA5 ? 6 : 10);
   if (logoPath) {
     try {
-      doc.image(logoPath, margin + (isA5 ? 4 : 6), margin + (isA5 ? 5 : 8), {
-        fit: [isA5 ? 65 : 95, isA5 ? 36 : 52]
+      const logoBoxW = isA5 ? 65 : 95;
+      const logoBoxH = isA5 ? 36 : 52;
+      doc.roundedRect(margin + (isA5 ? 4 : 6), margin + (isA5 ? 4 : 6), logoBoxW, logoBoxH, R_SM).fill('#FFFFFF');
+      doc.image(logoPath, margin + (isA5 ? 5 : 8), margin + (isA5 ? 5 : 8), {
+        fit: [logoBoxW - (isA5 ? 2 : 4), logoBoxH - (isA5 ? 2 : 4)]
       });
-      textLeft = margin + (isA5 ? 74 : 112);
+      textLeft = margin + logoBoxW + (isA5 ? 8 : 14);
     } catch (e) {
       console.warn('Logo load error:', e.message);
     }
@@ -98,19 +109,22 @@ function generateQuotationPdf(quotation, settings, res) {
      .text(`Phone: ${settings.company_phone || '+91 97156 22499'} | GSTIN: ${settings.company_gstin || '33AADFU6496M1ZJ'}`, textLeft, margin + (isA5 ? 36 : 52));
 
   // "QUOTATION" Title Badge at top-right
-  const badgeWidth = isA5 ? 64 : 84;
-  doc.rect(pageWidth - margin - badgeWidth - 4, margin + (isA5 ? 6 : 8), badgeWidth, isA5 ? 18 : 24)
+  const badgeWidth = isA5 ? 66 : 86;
+  const badgeHeight = isA5 ? 18 : 22;
+  const badgeX = pageWidth - margin - badgeWidth - (isA5 ? 5 : 8);
+  const badgeY = margin + (isA5 ? 6 : 8);
+  doc.roundedRect(badgeX, badgeY, badgeWidth, badgeHeight, R_SM)
      .fill(COLOR_LIME);
   doc.fillColor(COLOR_TEAL_DARK)
      .font('Helvetica-Bold')
      .fontSize(isA5 ? 8 : 10)
-     .text('QUOTATION', pageWidth - margin - badgeWidth - 4, margin + (isA5 ? 11 : 16), { width: badgeWidth, align: 'center' });
+     .text('QUOTATION', badgeX, badgeY + (isA5 ? 5 : 6), { width: badgeWidth, align: 'center' });
 
   let curY = margin + headerHeight + (isA5 ? 4 : 6);
 
-  // Customer & Quotation Meta Box
+  // Customer & Quotation Meta Box (Rounded Card)
   const infoBoxHeight = isA5 ? 46 : 60;
-  doc.rect(margin, curY, contentWidth, infoBoxHeight)
+  doc.roundedRect(margin, curY, contentWidth, infoBoxHeight, R_CARD)
      .fillAndStroke('#F8FAFC', COLOR_BORDER);
 
   const colWidth = (contentWidth - 16) / 2;
@@ -132,8 +146,15 @@ function generateQuotationPdf(quotation, settings, res) {
      .text(`Phone: ${quotation.customer_phone || '-'}`, margin + 6, curY + (isA5 ? 23 : 29))
      .text(`Address: ${quotation.customer_address || '-'}`, margin + 6, curY + (isA5 ? 32 : 39), { width: colWidth, height: 14, ellipsis: true });
 
+  // Vertical subtle divider between Customer & Quote details
+  doc.moveTo(margin + colWidth + 4, curY + 6)
+     .lineTo(margin + colWidth + 4, curY + infoBoxHeight - 6)
+     .strokeColor(COLOR_BORDER)
+     .lineWidth(0.5)
+     .stroke();
+
   // Right: Quotation Meta
-  const rightX = margin + colWidth + 8;
+  const rightX = margin + colWidth + 10;
   doc.fillColor(COLOR_TEAL)
      .font('Helvetica-Bold')
      .fontSize(isA5 ? 6.5 : 8)
@@ -171,7 +192,7 @@ function generateQuotationPdf(quotation, settings, res) {
   ];
 
   function drawTableHeader(y) {
-    doc.rect(margin, y, contentWidth, tableHeaderHeight)
+    doc.roundedRect(margin, y, contentWidth, tableHeaderHeight, R_SM)
        .fill(COLOR_TEAL);
     doc.fillColor('#FFFFFF')
        .font('Helvetica-Bold')
@@ -296,8 +317,8 @@ function generateQuotationPdf(quotation, settings, res) {
   const leftBoxWidth = isA5 ? 210 : 285;
   const rightBoxWidth = contentWidth - leftBoxWidth - (isA5 ? 6 : 8);
 
-  // Left Box: Bank Details & UPI QR Code & Terms
-  doc.rect(margin, curY, leftBoxWidth, summaryHeight)
+  // Left Box: Bank Details & UPI QR Code & Terms (Rounded Card)
+  doc.roundedRect(margin, curY, leftBoxWidth, summaryHeight, R_CARD)
      .fillAndStroke('#F8FAFC', COLOR_BORDER);
 
   doc.fillColor(COLOR_TEAL)
@@ -305,66 +326,70 @@ function generateQuotationPdf(quotation, settings, res) {
      .fontSize(isA5 ? 6.5 : 8)
      .text('BANK & UPI PAYMENT DETAILS:', margin + (isA5 ? 6 : 8), curY + (isA5 ? 5 : 6));
 
-  const qrSize = isA5 ? 42 : 56;
-  const bankTextWidth = leftBoxWidth - qrSize - (isA5 ? 14 : 20);
+  const qrSize = isA5 ? 38 : 52;
+  const qrCardW = qrSize + (isA5 ? 8 : 12);
+  const qrCardH = qrSize + (isA5 ? 12 : 16);
+  const bankTextWidth = leftBoxWidth - qrCardW - (isA5 ? 14 : 18);
+
   doc.font('Helvetica')
      .fontSize(isA5 ? 5.5 : 7)
      .fillColor(COLOR_TEXT)
-     .text(`Bank: ${settings.bank_name || 'Indian Bank'} (${settings.bank_branch || 'Perundurai'})`, margin + (isA5 ? 6 : 8), curY + (isA5 ? 14 : 16), { width: bankTextWidth })
-     .text(`A/c Name: ${settings.bank_account_name || 'Udhayam Agencies'}`, margin + (isA5 ? 6 : 8), curY + (isA5 ? 23 : 26), { width: bankTextWidth })
+     .text(`Bank: ${settings.bank_name || 'Indian Bank'} (${settings.bank_branch || 'Perundurai'})`, margin + (isA5 ? 6 : 8), curY + (isA5 ? 14 : 17), { width: bankTextWidth })
+     .text(`A/c Name: ${settings.bank_account_name || 'Udhayam Agencies'}`, margin + (isA5 ? 6 : 8), curY + (isA5 ? 23 : 27), { width: bankTextWidth })
      .font('Helvetica-Bold')
-     .text(`A/c No: ${settings.bank_account_no || '6659330152'}`, margin + (isA5 ? 6 : 8), curY + (isA5 ? 32 : 36), { width: bankTextWidth })
+     .text(`A/c No: ${settings.bank_account_no || '6659330152'}`, margin + (isA5 ? 6 : 8), curY + (isA5 ? 32 : 37), { width: bankTextWidth })
      .font('Helvetica')
-     .text(`IFSC: ${settings.bank_ifsc || 'IDIB000P034'}`, margin + (isA5 ? 6 : 8), curY + (isA5 ? 41 : 46), { width: bankTextWidth })
+     .text(`IFSC: ${settings.bank_ifsc || 'IDIB000P034'}`, margin + (isA5 ? 6 : 8), curY + (isA5 ? 41 : 47), { width: bankTextWidth })
      .font('Helvetica-Bold')
      .fillColor(COLOR_TEAL)
-     .text(`GPay: ${settings.gpay_number || '+91 97156 22499'} (MS Udhayam)`, margin + (isA5 ? 6 : 8), curY + (isA5 ? 50 : 56), { width: bankTextWidth });
+     .text(`GPay: ${settings.gpay_number || '+91 97156 22499'} (MS Udhayam)`, margin + (isA5 ? 6 : 8), curY + (isA5 ? 50 : 57), { width: bankTextWidth });
 
-  // Draw UPI Payment QR Code inside Bank Box (Guaranteed No Overlap)
+  // Draw UPI Payment QR Code inside its own perfectly aligned rounded white card
   const qrPath = getQrCodePath(settings.payment_qr_code);
-  const qrX = margin + leftBoxWidth - qrSize - (isA5 ? 6 : 8);
-  const qrY = curY + (isA5 ? 10 : 14);
+  const qrX = margin + leftBoxWidth - qrCardW - (isA5 ? 6 : 8);
+  const qrY = curY + (isA5 ? 5 : 6);
 
   if (qrPath) {
     try {
-      doc.rect(qrX - 2, qrY - 2, qrSize + 4, qrSize + 4)
+      doc.roundedRect(qrX, qrY, qrCardW, qrCardH, R_SM)
          .fillAndStroke('#FFFFFF', COLOR_BORDER);
-      doc.image(qrPath, qrX, qrY, { fit: [qrSize, qrSize] });
+      doc.image(qrPath, qrX + (qrCardW - qrSize) / 2, qrY + (isA5 ? 2.5 : 3.5), { fit: [qrSize, qrSize] });
       doc.fillColor(COLOR_TEAL_DARK)
          .font('Helvetica-Bold')
          .fontSize(isA5 ? 4.5 : 5.5)
-         .text('SCAN TO PAY UPI', qrX - 4, qrY + qrSize + 2, { width: qrSize + 8, align: 'center' });
+         .text('SCAN TO PAY UPI', qrX, qrY + qrSize + (isA5 ? 3.5 : 4.5), { width: qrCardW, align: 'center' });
     } catch (e) {
       console.warn('QR code render warning:', e.message);
     }
   }
 
-  // Divider above Terms & Conditions inside Left Box
-  doc.moveTo(margin + (isA5 ? 6 : 8), curY + (isA5 ? 60 : 74))
-     .lineTo(margin + leftBoxWidth - (isA5 ? 6 : 8), curY + (isA5 ? 60 : 74))
+  // Divider above Terms & Conditions inside Left Box (Guaranteed clear of QR card!)
+  const termsDividerY = curY + Math.max(isA5 ? 58 : 74, qrCardH + (isA5 ? 8 : 10));
+  doc.moveTo(margin + (isA5 ? 6 : 8), termsDividerY)
+     .lineTo(margin + leftBoxWidth - (isA5 ? 6 : 8), termsDividerY)
      .strokeColor(COLOR_BORDER)
      .lineWidth(0.5)
      .stroke();
 
   // Terms & Conditions below Bank and QR
-  doc.fillColor(COLOR_TEXT)
+  doc.fillColor(COLOR_TEAL)
      .font('Helvetica-Bold')
      .fontSize(isA5 ? 5 : 6.5)
-     .text('Terms & Conditions:', margin + (isA5 ? 6 : 8), curY + (isA5 ? 63 : 78));
+     .text('Terms & Conditions:', margin + (isA5 ? 6 : 8), termsDividerY + (isA5 ? 2.5 : 3.5));
 
   doc.font('Helvetica')
      .fillColor(COLOR_MUTED)
-     .fontSize(isA5 ? 4.5 : 6)
+     .fontSize(isA5 ? 4.5 : 5.8)
      .text(
        quotation.notes || settings.default_terms || '1. Quotation is valid for 7 days from the date of issue.\n2. Goods once sold/dispatched will not be taken back.\n3. Delivery subject to physical stock availability.\n4. GST and Transport charges applicable as mentioned.',
        margin + (isA5 ? 6 : 8),
-       curY + (isA5 ? 71 : 88),
+       termsDividerY + (isA5 ? 9 : 11),
        { width: leftBoxWidth - (isA5 ? 12 : 16), height: isA5 ? 28 : 34, lineGap: 1 }
      );
 
-  // Right Box: Totals & Tax Inclusive Calculation
+  // Right Box: Totals & Tax Inclusive Calculation (Rounded Card)
   const totalsX = margin + leftBoxWidth + (isA5 ? 6 : 8);
-  doc.rect(totalsX, curY, rightBoxWidth, summaryHeight)
+  doc.roundedRect(totalsX, curY, rightBoxWidth, summaryHeight, R_CARD)
      .fillAndStroke('#FFFFFF', COLOR_BORDER);
 
   let ty = curY + (isA5 ? 4 : 6);
@@ -401,9 +426,9 @@ function generateQuotationPdf(quotation, settings, res) {
   doc.moveTo(totalsX + (isA5 ? 6 : 8), ty).lineTo(totalsX + rightBoxWidth - (isA5 ? 6 : 8), ty).strokeColor(COLOR_BORDER).lineWidth(0.5).stroke();
   ty += (isA5 ? 2 : 3);
 
-  // Grand Total Highlight: Crisp High-Contrast Pure White on Dark Teal
+  // Grand Total Highlight: Crisp Rounded Banner with High-Contrast Pure White on Dark Teal
   const gtHeight = isA5 ? 20 : 26;
-  doc.rect(totalsX + (isA5 ? 3 : 4), ty, rightBoxWidth - (isA5 ? 6 : 8), gtHeight).fill(COLOR_TEAL);
+  doc.roundedRect(totalsX + (isA5 ? 3 : 4), ty, rightBoxWidth - (isA5 ? 6 : 8), gtHeight, R_SM).fill(COLOR_TEAL);
   doc.fillColor('#FFFFFF')
      .font('Helvetica-Bold')
      .fontSize(isA5 ? 7.5 : 9.5)
@@ -506,7 +531,7 @@ function generatePriceListPdf(products, sectionName, paperFormat, settings, res)
   ];
 
   function drawHeaderBanner(y) {
-    doc.rect(margin, y, contentWidth, isA5 ? 42 : 50).fill(COLOR_TEAL);
+    doc.roundedRect(margin, y, contentWidth, isA5 ? 42 : 50, isA5 ? 6 : 8).fill(COLOR_TEAL);
 
     let tX = margin + 6;
     if (logoPath) {
