@@ -1,10 +1,37 @@
 const express = require('express');
 const router = express.Router();
 const { WhatsAppService } = require('../integrations/whatsapp/whatsapp.service');
+const { WhatsAppQuotationService } = require('../services/whatsappQuotationService');
 const { handleWebhookVerification, parseIncomingMessage } = require('../integrations/whatsapp/whatsapp.webhook');
 const { db, logAudit } = require('../db/database');
 
 const waService = new WhatsAppService();
+const quotationService = new WhatsAppQuotationService();
+
+// POST /api/whatsapp/message - Official endpoint for n8n to send normalized customer messages
+router.post('/message', async (req, res) => {
+  try {
+    const { customer, message, source, channel } = req.body;
+    const protocol = req.headers['x-forwarded-proto'] || req.protocol || 'http';
+    const host = req.get('host') || 'localhost:5000';
+    const baseUrl = `${protocol}://${host}`;
+
+    const result = await quotationService.processIncomingMessage({
+      customer: customer || {},
+      message: message || {},
+      baseUrl
+    });
+
+    res.json(result);
+  } catch (err) {
+    console.error('[WhatsApp Route] /message error:', err);
+    res.status(500).json({
+      success: false,
+      action: 'system_error',
+      message: 'Internal server error while processing quotation requirement.'
+    });
+  }
+});
 
 // POST /api/whatsapp/parse - Parse unstructured customer WhatsApp message
 router.post('/parse', (req, res) => {

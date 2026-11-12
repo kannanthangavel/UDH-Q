@@ -191,6 +191,40 @@ function initDb() {
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
     CREATE INDEX IF NOT EXISTS idx_search_feedback_norm ON search_feedback(normalized_query);
+
+    -- WhatsApp Inbound Messages & Idempotency Logs
+    CREATE TABLE IF NOT EXISTS whatsapp_messages (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      message_id TEXT UNIQUE NOT NULL,
+      from_phone TEXT NOT NULL,
+      customer_name TEXT,
+      message_type TEXT NOT NULL DEFAULT 'text',
+      raw_text TEXT,
+      normalized_text TEXT,
+      status TEXT NOT NULL DEFAULT 'RECEIVED' CHECK (status IN ('RECEIVED', 'PROCESSING', 'COMPLETED', 'FAILED', 'DUPLICATE')),
+      action TEXT,
+      quotation_id INTEGER REFERENCES quotations(id) ON DELETE SET NULL,
+      quotation_number TEXT,
+      error_message TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_wa_messages_id ON whatsapp_messages(message_id);
+    CREATE INDEX IF NOT EXISTS idx_wa_messages_phone ON whatsapp_messages(from_phone);
+
+    -- WhatsApp Multi-Step Conversation State
+    CREATE TABLE IF NOT EXISTS whatsapp_conversations (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      customer_phone TEXT UNIQUE NOT NULL,
+      customer_name TEXT,
+      state TEXT NOT NULL DEFAULT 'IDLE' CHECK (state IN ('IDLE', 'WAITING_CLARIFICATION')),
+      pending_context TEXT,
+      last_message_id TEXT,
+      expires_at TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_wa_conv_phone ON whatsapp_conversations(customer_phone);
   `);
 
   try {
