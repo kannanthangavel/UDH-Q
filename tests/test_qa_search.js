@@ -1,4 +1,4 @@
-const { searchProductsSmart } = require('../server/src/services/productSearchService');
+const { searchProductsSmart } = require('../backend/src/services/productSearchService');
 
 const testCases = [
   'white',

@@ -1,4 +1,4 @@
-const { processWhatsAppMessage } = require('../server/src/services/smartParser');
+const { processWhatsAppMessage } = require('../backend/src/services/smartParser');
 
 const sampleMsg = `Customer: Ramesh +91 98427 11223
 golden brown 1ltr 5ps

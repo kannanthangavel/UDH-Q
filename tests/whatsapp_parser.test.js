@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { processWhatsAppMessage } = require('../server/src/services/smartParser.js');
+const { processWhatsAppMessage } = require('../backend/src/services/smartParser.js');
 
 test('WhatsApp Order Parser extracts customer and accurately matches messy product strings', () => {
   const rawMessage = `Customer: Ramesh Kumar +91 98427 11223

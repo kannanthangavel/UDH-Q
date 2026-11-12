@@ -2,8 +2,8 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
-const { searchProductsSmart } = require('../server/src/services/productSearchService');
-const { generateQuotationPdf } = require('../server/src/services/pdfService');
+const { searchProductsSmart } = require('../backend/src/services/productSearchService');
+const { generateQuotationPdf } = require('../backend/src/services/pdfService');
 
 test('Never mind - space and hyphen: searches find exact products regardless of formatting', () => {
   // Test Case 1: asac2g20lt vs as ac2g 20lt vs as-ac2g-20lt

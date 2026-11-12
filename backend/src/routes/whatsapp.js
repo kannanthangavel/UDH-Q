@@ -1,7 +1,10 @@
 const express = require('express');
 const router = express.Router();
-const { processWhatsAppMessage } = require('../services/smartParser');
+const { WhatsAppService } = require('../integrations/whatsapp/whatsapp.service');
+const { handleWebhookVerification, parseIncomingMessage } = require('../integrations/whatsapp/whatsapp.webhook');
 const { db, logAudit } = require('../db/database');
+
+const waService = new WhatsAppService();
 
 // POST /api/whatsapp/parse - Parse unstructured customer WhatsApp message
 router.post('/parse', (req, res) => {
@@ -11,7 +14,7 @@ router.post('/parse', (req, res) => {
   }
 
   try {
-    const result = processWhatsAppMessage(message);
+    const result = waService.parseMessage(message);
     res.json(result);
   } catch (err) {
     console.error('Parser error:', err);
@@ -55,6 +58,44 @@ router.post('/config', (req, res) => {
 
   transaction();
   res.json({ success: true, message: 'WhatsApp configuration saved' });
+});
+
+// GET /api/whatsapp/webhook - Webhook Verification for Meta Cloud API
+router.get('/webhook', handleWebhookVerification);
+
+// POST /api/whatsapp/webhook - Incoming webhook from Meta WhatsApp Cloud API / n8n
+router.post('/webhook', (req, res) => {
+  const parsed = parseIncomingMessage(req.body);
+  if (parsed && parsed.text) {
+    console.log(`[WhatsApp Webhook] Received message from ${parsed.from}: "${parsed.text.slice(0, 50)}..."`);
+    // Pass to smart parser for automated parsing
+    try {
+      const matchResult = waService.parseMessage(parsed.text);
+      return res.json({ status: 'received', parsed: matchResult });
+    } catch (e) {
+      console.warn('[WhatsApp Webhook] Auto-parsing error:', e.message);
+    }
+  }
+  res.json({ status: 'received' });
+});
+
+// POST /api/whatsapp/send - Outbound dispatch message
+router.post('/send', async (req, res) => {
+  const { to, message, pdfUrl, quotationNumber } = req.body;
+  if (!to) {
+    return res.status(400).json({ error: 'Recipient phone number is required.' });
+  }
+
+  try {
+    if (pdfUrl) {
+      const sent = await waService.sendQuotationPdf(to, pdfUrl, quotationNumber, message);
+      return res.json({ success: true, result: sent });
+    }
+    const sent = await waService.sendQuotationSummary(to, message);
+    res.json({ success: true, result: sent });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 module.exports = router;

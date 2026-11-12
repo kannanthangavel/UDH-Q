@@ -1,7 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { matchProduct } = require('../server/src/services/product-matching/index');
-const { runEvaluation } = require('../server/src/services/product-matching/evaluation');
+const { matchProduct } = require('../backend/src/services/product-matching/index');
+const { runEvaluation } = require('../backend/src/services/product-matching/evaluation');
 
 test('Product Matching Evaluation Suite achieves >95% Top-1 Accuracy across official catalogue', () => {
   const result = runEvaluation();

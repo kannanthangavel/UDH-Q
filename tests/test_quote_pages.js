@@ -1,5 +1,5 @@
 const fs = require('fs');
-const { generateQuotationPdf } = require('../server/src/services/pdfService');
+const { generateQuotationPdf } = require('../backend/src/services/pdfService');
 
 function testQuotes(count) {
   const items = [];

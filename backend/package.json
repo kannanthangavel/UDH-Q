@@ -1,0 +1,20 @@
+{
+  "name": "ud-qm-backend",
+  "version": "1.0.0",
+  "description": "UD-QM - Udhayam Agencies Quotation Management REST API & Engine",
+  "main": "src/server.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node src/server.js"
+  },
+  "dependencies": {
+    "better-sqlite3": "^13.0.3",
+    "cors": "^2.8.6",
+    "dotenv": "^18.0.8",
+    "express": "^5.3.0",
+    "multer": "^2.4.0",
+    "pdfkit": "^0.20.2",
+    "xlsx": "^0.18.5"
+  }
+}

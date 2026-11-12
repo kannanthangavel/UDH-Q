@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { db } = require('../server/src/db/database');
+const { db } = require('../backend/src/db/database');
 
 test('Quotation Calculation logic produces mathematically exact totals', () => {
   const items = [

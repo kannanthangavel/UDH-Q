@@ -3,9 +3,9 @@ const assert = require('node:assert/strict');
 const path = require('path');
 const fs = require('fs');
 
-const { db, getNextQuotationNumber } = require('../server/src/db/database');
-const { parseWorkbook } = require('../server/src/services/excelService');
-const { numberToIndianWords, formatINR } = require('../server/src/utils/numberToWords');
+const { db, getNextQuotationNumber } = require('../backend/src/db/database');
+const { parseWorkbook } = require('../backend/src/services/excelService');
+const { numberToIndianWords, formatINR } = require('../backend/src/utils/numberToWords');
 
 test('Quotation Number Generator formats properly as UDQ-YYYY-000001', () => {
   const qNum = getNextQuotationNumber();
@@ -23,7 +23,7 @@ test('Number to Indian Words converts amounts correctly', () => {
 });
 
 test('Excel Rate Sheet Parser parses PAINTS and ACCESS sheets correctly', () => {
-  const rateFilePath = path.join(__dirname, '../server/storage/uploads/rates/4. RATES [04.11.2026].xlsx');
+  const rateFilePath = path.join(__dirname, '../backend/storage/uploads/rates/4. RATES [04.11.2026].xlsx');
   assert.ok(fs.existsSync(rateFilePath), 'Official rate file must exist');
 
   const buffer = fs.readFileSync(rateFilePath);

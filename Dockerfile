@@ -15,4 +15,4 @@ ENV PORT=10000
 
 EXPOSE 10000
 
-CMD ["node", "server/src/server.js"]
+CMD ["node", "backend/src/server.js"]

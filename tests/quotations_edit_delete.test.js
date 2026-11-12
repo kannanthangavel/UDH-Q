@@ -1,8 +1,8 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const http = require('http');
-const app = require('../server/src/app');
-const { db } = require('../server/src/db/database');
+const app = require('../backend/src/app');
+const { db } = require('../backend/src/db/database');
 
 let server;
 let baseUrl;

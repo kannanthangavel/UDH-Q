@@ -1,7 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const http = require('http');
-const app = require('../server/src/app');
+const app = require('../backend/src/app');
 
 let server;
 let baseUrl;
