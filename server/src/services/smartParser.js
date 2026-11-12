@@ -1,5 +1,6 @@
 const { db } = require('../db/database');
 const { searchProductsSmart, extractProductSpecs, getSisterSizes, levenshteinDistance } = require('./productSearchService');
+const { matchProduct } = require('./product-matching');
 
 // Comprehensive Indian / Tamil hardware & paint unit standardizations
 const UNIT_MAP = {
@@ -204,101 +205,32 @@ function parseRequirementLine(line) {
 
 /**
  * Intelligent Multi-Candidate Product Matcher
- * Executes search across all 5,300+ indexed catalog products using the searchProductsSmart engine
+ * Executes search across all 5,300+ indexed catalog products using the Advanced Product Matching Engine
  */
 function matchProductsForRequirement(parsedReq) {
-  const { originalLine, cleanSearchQuery, specs, quantity, unit } = parsedReq;
+  const { originalLine, cleanSearchQuery, isQuantityExplicit } = parsedReq;
 
-  // Search through all 5,300+ catalog products with broad candidate discovery
-  const searchResult = searchProductsSmart({
-    search: cleanSearchQuery || originalLine,
-    limit: 30,
-    all: 'true'
-  });
+  // Use the Advanced Multi-Stage Product Keyword Matching Engine
+  const matchResult = matchProduct(cleanSearchQuery || originalLine);
 
-  const matchingProducts = searchResult.products || [];
-
-  if (matchingProducts.length === 0) {
-    return {
-      originalLine,
-      matchedProduct: null,
-      quantity,
-      unit,
-      confidence: 'None',
-      explanation: `No exact product found for "${cleanSearchQuery}". Use the search bar below to pick from catalogue.`,
-      candidates: []
-    };
-  }
-
-  // Top candidate & Sister Pack Sizes (e.g. 500ML, 1LT, 4LT, 10LT, 20LT)
-  const topProduct = matchingProducts[0];
-  const topScore = topProduct.searchScore || 0;
-  const sisterSizes = getSisterSizes(topProduct);
-
-  // Map candidates with full structured details & deduplicate by distinct pack size first
-  const candidatesMap = new Map();
-
-  // 1. Add top matching products
-  matchingProducts.slice(0, 16).forEach(p => {
-    candidatesMap.set(p.id, {
-      id: p.id,
-      s_no: p.s_no,
-      item_name: p.item_name,
-      details: p.details || p.structuredDetails?.summary || '',
-      structuredDetails: p.structuredDetails || null,
-      sale_rate: p.sale_rate || 0,
-      main_unit: p.main_unit || 'Nos',
-      hsn_sac: p.hsn_sac || '',
-      section: p.section || 'PAINTS',
-      score: p.searchScore || 0,
-      packSize: p.specs?.[0] || '',
-      availableSizes: p.availableSizes || sisterSizes,
-      matchReasons: p.matchReasons || []
-    });
-  });
-
-  // 2. Guarantee that ALL available sister pack sizes (e.g. 4LT, 1LT, 20LT) are visible in candidates
-  sisterSizes.forEach(s => {
-    if (!candidatesMap.has(s.id)) {
-      candidatesMap.set(s.id, {
-        id: s.id,
-        s_no: s.s_no,
-        item_name: s.item_name,
-        details: s.details || '',
-        structuredDetails: null,
-        sale_rate: s.sale_rate || 0,
-        main_unit: s.main_unit || 'Nos',
-        hsn_sac: s.hsn_sac || '',
-        section: s.section || 'PAINTS',
-        score: 110,
-        packSize: s.packSize,
-        availableSizes: sisterSizes,
-        matchReasons: [`Sister Pack Size: ${s.packSize}`]
-      });
-    }
-  });
-
-  const candidates = Array.from(candidatesMap.values());
-
-  let confidence = 'Medium';
-  if (topScore >= 120) {
-    confidence = 'High';
-  } else if (topScore < 60) {
-    confidence = 'Low';
-  }
-
-  const primaryMatched = {
-    ...candidates[0],
-    availableSizes: sisterSizes
-  };
+  const matchedProduct = matchResult.matchedProduct;
+  const candidates = matchResult.candidates || [];
+  
+  // Use explicitly parsed quantity from input line if user specified e.g. "3 bags" or "5 nos"
+  const quantity = isQuantityExplicit ? parsedReq.quantity : (matchResult.quantity || parsedReq.quantity || 1);
+  const unit = matchedProduct?.main_unit || parsedReq.unit || matchResult.unit || 'Nos';
 
   return {
     originalLine,
-    matchedProduct: primaryMatched,
-    availableSizes: sisterSizes,
+    matchedProduct,
+    availableSizes: matchedProduct?.availableSizes || [],
     quantity,
-    unit: primaryMatched?.main_unit || unit,
-    confidence,
+    unit,
+    confidence: matchResult.confidence?.tier || 'Medium',
+    confidenceScore: matchResult.confidence?.score || 70,
+    isAmbiguous: matchResult.confidence?.isAmbiguous || false,
+    explanation: matchResult.confidence?.explanation || '',
+    matchReasons: matchResult.confidence?.matchReasons || [],
     candidates
   };
 }

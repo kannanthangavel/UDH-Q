@@ -10,6 +10,7 @@ import QuotationPdfModal from '../components/QuotationPdfModal';
 import WhatsAppShareModal from '../components/WhatsAppShareModal';
 import EmailShareModal from '../components/EmailShareModal';
 import SmartParserModal from '../components/SmartParserModal';
+import ThemedConfirmDialog from '../components/ThemedConfirmDialog';
 import { numberToIndianWords } from '../utils/numberToWords';
 
 const COMMON_UNITS = ['Nos', 'Ltr', 'Kg', 'Box', 'Bag', 'Can', 'Set', 'Drum', 'Roll', 'Meter', 'Pkt', 'Tin'];
@@ -85,7 +86,18 @@ export default function CreateQuotation({ setActivePage, initialCustomer, import
   const [showPdfModal, setShowPdfModal] = useState(false);
   const [showWaModal, setShowWaModal] = useState(false);
   const [showEmailModal, setShowEmailModal] = useState(false);
-  const [recentActionToast, setRecentActionToast] = useState('');
+  const [recentActionToast, setRecentActionToast] = useState(null);
+
+  // Dialog State (replaces native confirm/alert)
+  const [confirmDialog, setConfirmDialog] = useState({
+    isOpen: false,
+    title: '',
+    message: '',
+    confirmText: 'Confirm',
+    cancelText: 'Cancel',
+    type: 'confirm',
+    onConfirm: null
+  });
 
   // Handle outside click to dismiss quick search dropdown
   useEffect(() => {
@@ -278,9 +290,9 @@ export default function CreateQuotation({ setActivePage, initialCustomer, import
     showToast(`Loaded customer: ${cust.name}`);
   }
 
-  function showToast(msg) {
-    setRecentActionToast(msg);
-    setTimeout(() => setRecentActionToast(''), 3500);
+  function showToast(msg, isError = false) {
+    setRecentActionToast({ text: typeof msg === 'string' ? msg : msg.text, isError });
+    setTimeout(() => setRecentActionToast(null), 3800);
   }
 
   const isNameValid = customerName.trim().length > 0;
@@ -515,8 +527,24 @@ export default function CreateQuotation({ setActivePage, initialCustomer, import
   // Reset entire quotation studio
   function handleClearForm() {
     if (items.length > 0 || customerName) {
-      if (!confirm('Clear all items and customer fields to start a new blank quotation?')) return;
+      setConfirmDialog({
+        isOpen: true,
+        title: 'Reset Quotation Studio',
+        message: 'Clear all items, customer fields, and adjustments to start a new blank quotation?',
+        confirmText: 'Clear All',
+        cancelText: 'Keep Editing',
+        type: 'danger',
+        onConfirm: () => {
+          setConfirmDialog(prev => ({ ...prev, isOpen: false }));
+          resetAllStudioFields();
+        }
+      });
+      return;
     }
+    resetAllStudioFields();
+  }
+
+  function resetAllStudioFields() {
     setCustomerName('');
     setCustomerPhone('');
     setCustomerEmail('');
@@ -528,6 +556,7 @@ export default function CreateQuotation({ setActivePage, initialCustomer, import
     setDiscountAmountManual('');
     setDeliveryCharges('');
     setCreatedQuotation(null);
+    showToast('✓ Quotation studio cleared');
   }
 
   // Create Quotation Handler with IDEMPOTENCY & REPEATED CLICK DEFENSE
@@ -612,7 +641,7 @@ export default function CreateQuotation({ setActivePage, initialCustomer, import
         }
       }
     } catch (err) {
-      alert('Error creating quotation: ' + (err.message || 'Failed to save quotation'));
+      showToast('Error creating quotation: ' + (err.message || 'Failed to save quotation'), true);
     } finally {
       setIsSubmitting(false);
     }
@@ -642,15 +671,6 @@ export default function CreateQuotation({ setActivePage, initialCustomer, import
 
   return (
     <div className="space-y-6 pb-24">
-      
-      {/* Action Toast */}
-      {recentActionToast && (
-        <div className="fixed top-20 right-6 z-50 bg-[#00545C] text-[#7DBA00] font-bold text-xs py-2.5 px-4 rounded-xl shadow-xl flex items-center space-x-2 border border-[#7DBA00]/40 animate-in slide-in-from-top duration-200">
-          <CheckCircle2 className="w-4 h-4 text-[#7DBA00] flex-shrink-0" />
-          <span className="text-white">{recentActionToast}</span>
-        </div>
-      )}
-
       {/* STUDIO HEADER */}
       <div className="bg-white rounded-2xl p-4 sm:p-6 shadow-sm border border-slate-200">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
@@ -1048,7 +1068,21 @@ export default function CreateQuotation({ setActivePage, initialCustomer, import
             {items.length > 0 && (
               <button
                 type="button"
-                onClick={() => { if (confirm('Remove all items from this quotation?')) setItems([]); }}
+                onClick={() => {
+                  setConfirmDialog({
+                    isOpen: true,
+                    title: 'Remove All Items',
+                    message: 'Are you sure you want to remove all product items from this quotation?',
+                    confirmText: 'Remove All',
+                    cancelText: 'Keep Items',
+                    type: 'danger',
+                    onConfirm: () => {
+                      setConfirmDialog(prev => ({ ...prev, isOpen: false }));
+                      setItems([]);
+                      showToast('✓ All items removed');
+                    }
+                  });
+                }}
                 className="text-xs font-semibold text-rose-600 hover:text-rose-800 hover:bg-rose-50 px-2 py-1.5 rounded-lg transition-colors cursor-pointer"
               >
                 Clear All
@@ -1923,6 +1957,34 @@ export default function CreateQuotation({ setActivePage, initialCustomer, import
             setShowPdfModal(true);
           }}
         />
+      )}
+
+      {/* Themed Confirmation & Reset Dialog */}
+      <ThemedConfirmDialog
+        isOpen={confirmDialog.isOpen}
+        title={confirmDialog.title}
+        message={confirmDialog.message}
+        confirmText={confirmDialog.confirmText}
+        cancelText={confirmDialog.cancelText}
+        type={confirmDialog.type}
+        onConfirm={confirmDialog.onConfirm}
+        onCancel={() => setConfirmDialog(prev => ({ ...prev, isOpen: false }))}
+      />
+
+      {/* Non-Intrusive Bottom-Right Action Toast */}
+      {recentActionToast && (
+        <div className={`fixed bottom-6 right-6 z-50 font-bold text-xs py-3 px-5 rounded-2xl shadow-2xl flex items-center space-x-2.5 border backdrop-blur-md animate-in slide-in-from-bottom-3 duration-200 ${
+          recentActionToast.isError 
+            ? 'bg-rose-950/95 text-rose-100 border-rose-700/80' 
+            : 'bg-[#00545C]/95 text-[#7DBA00] border-[#7DBA00]/50'
+        }`}>
+          {recentActionToast.isError ? (
+            <AlertCircle className="w-4 h-4 text-rose-400 flex-shrink-0" />
+          ) : (
+            <CheckCircle2 className="w-4 h-4 text-[#7DBA00] flex-shrink-0" />
+          )}
+          <span className="text-white tracking-wide">{recentActionToast.text}</span>
+        </div>
       )}
 
     </div>

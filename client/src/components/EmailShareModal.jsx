@@ -7,6 +7,7 @@ export default function EmailShareModal({ quotation, onClose, onShared }) {
 
   const [email, setEmail] = useState(quotation.customer_email || '');
   const [copied, setCopied] = useState(false);
+  const [errorMsg, setErrorMsg] = useState('');
 
   const subject = `Quotation ${quotation.quotation_number} - UDHAYAM AGENCIES (Paint Division)`;
   const itemsCount = quotation.items ? quotation.items.length : 0;
@@ -42,10 +43,11 @@ UDHAYAM AGENCIES — Paint Division
 Perundurai, Erode - 638052`;
 
   function handleOpenMail() {
-    if (!email) {
-      alert('Please enter a recipient email address.');
+    if (!email || !email.includes('@')) {
+      setErrorMsg('Please enter a valid recipient email address (e.g. name@domain.com)');
       return;
     }
+    setErrorMsg('');
     api.auditShare(quotation.id, 'email', email).catch(console.warn);
     if (onShared) onShared();
 
@@ -81,6 +83,12 @@ Perundurai, Erode - 638052`;
 
         {/* Content */}
         <div className="p-6 space-y-4">
+          {errorMsg && (
+            <div className="bg-rose-50 border border-rose-300 text-rose-900 px-3.5 py-2.5 rounded-xl flex items-center space-x-2 text-xs font-bold animate-in fade-in">
+              <AlertCircle className="w-4 h-4 text-rose-600 flex-shrink-0" />
+              <span>{errorMsg}</span>
+            </div>
+          )}
           <div>
             <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1">
               Recipient Email Address

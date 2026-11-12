@@ -18,23 +18,46 @@ function formatItemsList(items) {
   }).join('\n');
 }
 
+/**
+ * Normalizes Indian mobile number cleanly to 10 digits
+ * Strips non-digits, leading country code +91 / 91, or leading 0
+ */
+export function normalizeIndianPhone(raw) {
+  if (!raw) return '';
+  let digits = String(raw).replace(/\D/g, '');
+  if (digits.length === 11 && digits.startsWith('0')) {
+    digits = digits.slice(1);
+  }
+  if (digits.length === 12 && digits.startsWith('91')) {
+    digits = digits.slice(2);
+  }
+  if (digits.length > 10) {
+    digits = digits.slice(-10);
+  }
+  return digits;
+}
+
 export default function WhatsAppShareModal({ quotation, onClose, onShared }) {
   if (!quotation) return null;
 
   const { settings } = useAuth();
 
   // Normalize phone number to Indian 10 digits
-  const rawPhone = quotation.customer_phone || '';
-  const digitsOnly = rawPhone.replace(/\D/g, '');
-  const tenDigitPhone = digitsOnly.length > 10 ? digitsOnly.slice(-10) : digitsOnly;
-
-  const [phone, setPhone] = useState(tenDigitPhone);
+  const [phone, setPhone] = useState(() => normalizeIndianPhone(quotation.customer_phone));
   const [langTab, setLangTab] = useState('tamil'); // 'tamil' | 'tanglish' | 'english'
   const [copied, setCopied] = useState(false);
   const [isSending, setIsSending] = useState(false);
   const [isDownloadingPdf, setIsDownloadingPdf] = useState(false);
   const [pdfDownloadedNotice, setPdfDownloadedNotice] = useState(false);
   const [shareSuccessNotice, setShareSuccessNotice] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
+
+  // Dynamically sync phone whenever quotation prop updates
+  useEffect(() => {
+    if (quotation?.customer_phone) {
+      setPhone(normalizeIndianPhone(quotation.customer_phone));
+    }
+  }, [quotation?.customer_phone, quotation?.id]);
 
   const itemsCount = quotation.items ? quotation.items.length : 0;
   const subtotalFormatted = Number(quotation.subtotal || 0).toLocaleString('en-IN', {
@@ -191,9 +214,10 @@ Thank you for your business! 🙏🌟`
   async function handleShareWithPdf() {
     if (isSending) return;
     setIsSending(true);
+    setErrorMessage('');
 
-    const cleanPhone = phone.replace(/\D/g, '');
-    const recipient = cleanPhone.length === 10 ? `91${cleanPhone}` : cleanPhone;
+    const tenDigits = normalizeIndianPhone(phone);
+    const recipient = tenDigits.length === 10 ? `91${tenDigits}` : phone.replace(/\D/g, '');
 
     try {
       // 1. Fetch PDF binary blob from backend
@@ -248,6 +272,7 @@ Thank you for your business! 🙏🌟`
   async function handleDownloadPdfOnly() {
     try {
       setIsDownloadingPdf(true);
+      setErrorMessage('');
       const pdfRes = await fetch(`/api/quotations/${quotation.id}/pdf?format=${pdfFormat}&download=true`);
       if (!pdfRes.ok) throw new Error('Failed to fetch quotation PDF');
       const blob = await pdfRes.blob();
@@ -261,7 +286,7 @@ Thank you for your business! 🙏🌟`
       link.remove();
       setPdfDownloadedNotice(true);
     } catch (err) {
-      alert('Error downloading PDF: ' + err.message);
+      setErrorMessage('Error downloading PDF: ' + err.message);
     } finally {
       setIsDownloadingPdf(false);
     }
@@ -296,6 +321,13 @@ Thank you for your business! 🙏🌟`
         <div className="p-6 space-y-4 overflow-y-auto flex-1">
 
           {/* Active Notifications */}
+          {errorMessage && (
+            <div className="bg-rose-50 border border-rose-300 text-rose-900 px-4 py-3 rounded-xl flex items-center space-x-2 text-xs font-bold animate-in fade-in">
+              <AlertCircle className="w-5 h-5 text-rose-600 flex-shrink-0" />
+              <span>{errorMessage}</span>
+            </div>
+          )}
+
           {shareSuccessNotice && (
             <div className="bg-emerald-50 border border-emerald-300 text-emerald-900 px-4 py-3 rounded-xl flex items-center space-x-2 text-xs font-bold animate-in fade-in">
               <CheckCircle2 className="w-5 h-5 text-emerald-600 flex-shrink-0" />

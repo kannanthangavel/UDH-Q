@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { api } from '../api/client';
 import { useAuth } from '../context/AuthContext';
+import ThemedConfirmDialog from '../components/ThemedConfirmDialog';
 
 export default function Settings() {
   const { user, isAdmin, settings: authSettings, refreshSettings, updateLocalSettings } = useAuth();
@@ -60,6 +61,23 @@ export default function Settings() {
   const [apiKeyCopied, setApiKeyCopied] = useState(false);
   const [apiKeySuccessMsg, setApiKeySuccessMsg] = useState('');
   const [apiKeyErrorMsg, setApiKeyErrorMsg] = useState('');
+
+  // Themed Confirm Dialog & Bottom Toast State
+  const [confirmDialog, setConfirmDialog] = useState({
+    isOpen: false,
+    title: '',
+    message: '',
+    confirmText: 'Confirm',
+    cancelText: 'Cancel',
+    type: 'confirm',
+    onConfirm: null
+  });
+  const [toastMsg, setToastMsg] = useState(null);
+
+  function showToast(text, isError = false) {
+    setToastMsg({ text, isError });
+    setTimeout(() => setToastMsg(null), 4000);
+  }
 
   // User Account (Kids) Profile Edit State
   const [profileName, setProfileName] = useState('Kids');
@@ -129,24 +147,32 @@ export default function Settings() {
     }
   }
 
-  async function handleRegenerateApiKey() {
-    if (!confirm('Are you sure you want to regenerate the API Key? Any active n8n workflows using the old key will need to be updated with the new key.')) {
-      return;
-    }
-    try {
-      setIsRegeneratingApiKey(true);
-      setApiKeyErrorMsg('');
-      const res = await api.regenerateApiKey();
-      if (res.success && res.apiKey) {
-        setApiKey(res.apiKey);
-        setApiKeySuccessMsg('New API Key generated successfully!');
-        setTimeout(() => setApiKeySuccessMsg(''), 4000);
+  function handleRegenerateApiKey() {
+    setConfirmDialog({
+      isOpen: true,
+      title: 'Regenerate API Key',
+      message: 'Are you sure you want to regenerate your webhook API Key?\n\nAny active n8n workflows or automated systems using the previous key will immediately stop working until updated with the new key.',
+      confirmText: 'Regenerate Key',
+      cancelText: 'Cancel',
+      type: 'danger',
+      onConfirm: async () => {
+        setConfirmDialog(prev => ({ ...prev, isOpen: false }));
+        try {
+          setIsRegeneratingApiKey(true);
+          setApiKeyErrorMsg('');
+          const res = await api.regenerateApiKey();
+          if (res.success && res.apiKey) {
+            setApiKey(res.apiKey);
+            showToast('✓ New API Key generated successfully!');
+          }
+        } catch (err) {
+          setApiKeyErrorMsg(err.message || 'Failed to regenerate API Key');
+          showToast('Failed to regenerate API Key: ' + err.message, true);
+        } finally {
+          setIsRegeneratingApiKey(false);
+        }
       }
-    } catch (err) {
-      setApiKeyErrorMsg(err.message || 'Failed to regenerate API Key');
-    } finally {
-      setIsRegeneratingApiKey(false);
-    }
+    });
   }
 
   function handleCopyApiKey(text) {
@@ -214,25 +240,34 @@ export default function Settings() {
       setSaveSuccess(true);
       setTimeout(() => setSaveSuccess(false), 4000);
     } catch (err) {
-      alert('Failed to upload logo: ' + err.message);
+      showToast('Failed to upload logo: ' + err.message, true);
     } finally {
       setIsUploadingLogo(false);
     }
   }
 
-  async function handleResetLogo() {
-    if (!confirm('Reset company logo to default official Udhayam Agencies logo?')) return;
-    try {
-      await api.resetLogo();
-      setCompanyLogo('udhayam_logo.png');
-      setLogoFile(null);
-      setLogoPreviewUrl('');
-      await refreshSettings();
-      setSaveSuccess(true);
-      setTimeout(() => setSaveSuccess(false), 4000);
-    } catch (err) {
-      alert('Failed to reset logo: ' + err.message);
-    }
+  function handleResetLogo() {
+    setConfirmDialog({
+      isOpen: true,
+      title: 'Reset Company Logo',
+      message: 'Reset company logo back to default official Udhayam Agencies logo branding?',
+      confirmText: 'Reset Logo',
+      cancelText: 'Cancel',
+      type: 'reset',
+      onConfirm: async () => {
+        setConfirmDialog(prev => ({ ...prev, isOpen: false }));
+        try {
+          await api.resetLogo();
+          setCompanyLogo('udhayam_logo.png');
+          setLogoFile(null);
+          setLogoPreviewUrl('');
+          await refreshSettings();
+          showToast('✓ Company logo reset to official default');
+        } catch (err) {
+          showToast('Failed to reset logo: ' + err.message, true);
+        }
+      }
+    });
   }
 
   // QR Code Upload handlers
@@ -267,19 +302,28 @@ export default function Settings() {
     }
   }
 
-  async function handleResetQr() {
-    if (!confirm('Reset payment QR code to default UDHAYAM AGENCIES official UPI QR?')) return;
-    try {
-      await api.resetQrCode();
-      setPaymentQrCode('default_upi_qr.png');
-      setQrFile(null);
-      setQrPreviewUrl('');
-      await refreshSettings();
-      setQrSuccess('Reset to default official UPI QR code successfully.');
-      setTimeout(() => setQrSuccess(''), 4000);
-    } catch (err) {
-      setQrError('Failed to reset QR code: ' + err.message);
-    }
+  function handleResetQr() {
+    setConfirmDialog({
+      isOpen: true,
+      title: 'Reset UPI Payment QR',
+      message: 'Reset payment QR code back to default UDHAYAM AGENCIES official UPI QR code?',
+      confirmText: 'Reset QR Code',
+      cancelText: 'Cancel',
+      type: 'reset',
+      onConfirm: async () => {
+        setConfirmDialog(prev => ({ ...prev, isOpen: false }));
+        try {
+          await api.resetQrCode();
+          setPaymentQrCode('default_upi_qr.png');
+          setQrFile(null);
+          setQrPreviewUrl('');
+          await refreshSettings();
+          showToast('✓ Payment QR code reset to official default');
+        } catch (err) {
+          showToast('Failed to reset QR code: ' + err.message, true);
+        }
+      }
+    });
   }
 
   // User Profile (Kids / 22499) Save handler
@@ -1327,6 +1371,34 @@ Body (JSON):
               </tbody>
             </table>
           </div>
+        </div>
+      )}
+
+      {/* Themed Confirmation & Reset Dialog */}
+      <ThemedConfirmDialog
+        isOpen={confirmDialog.isOpen}
+        title={confirmDialog.title}
+        message={confirmDialog.message}
+        confirmText={confirmDialog.confirmText}
+        cancelText={confirmDialog.cancelText}
+        type={confirmDialog.type}
+        onConfirm={confirmDialog.onConfirm}
+        onCancel={() => setConfirmDialog(prev => ({ ...prev, isOpen: false }))}
+      />
+
+      {/* Non-Intrusive Bottom-Right Action Toast */}
+      {toastMsg && (
+        <div className={`fixed bottom-6 right-6 z-50 font-bold text-xs py-3 px-5 rounded-2xl shadow-2xl flex items-center space-x-2.5 border backdrop-blur-md animate-in slide-in-from-bottom-3 duration-200 ${
+          toastMsg.isError 
+            ? 'bg-rose-950/95 text-rose-100 border-rose-700/80' 
+            : 'bg-[#00545C]/95 text-[#7DBA00] border-[#7DBA00]/50'
+        }`}>
+          {toastMsg.isError ? (
+            <AlertCircle className="w-4 h-4 text-rose-400 flex-shrink-0" />
+          ) : (
+            <CheckCircle2 className="w-4 h-4 text-[#7DBA00] flex-shrink-0" />
+          )}
+          <span className="text-white tracking-wide">{toastMsg.text}</span>
         </div>
       )}
 

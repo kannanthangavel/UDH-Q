@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { api } from '../api/client';
 import { useAuth } from '../context/AuthContext';
+import ThemedConfirmDialog from '../components/ThemedConfirmDialog';
 
 export default function PriceListAndCatalogue({ onAddToQuote }) {
   const { isAdmin } = useAuth();
@@ -56,6 +57,23 @@ export default function PriceListAndCatalogue({ onAddToQuote }) {
   const [importError, setImportError] = useState('');
   const [importHistory, setImportHistory] = useState([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
+
+  // Themed Confirm Dialog & Bottom Toast State
+  const [confirmDialog, setConfirmDialog] = useState({
+    isOpen: false,
+    title: '',
+    message: '',
+    confirmText: 'Confirm',
+    cancelText: 'Cancel',
+    type: 'confirm',
+    onConfirm: null
+  });
+  const [toastMsg, setToastMsg] = useState(null);
+
+  function showToast(text, isError = false) {
+    setToastMsg({ text, isError });
+    setTimeout(() => setToastMsg(null), 4000);
+  }
 
   // Load product counts on mount
   useEffect(() => {
@@ -230,22 +248,31 @@ export default function PriceListAndCatalogue({ onAddToQuote }) {
     }
   }
 
-  async function handleSeedOfficial() {
-    if (!confirm('This will load all 5,300+ authentic products from the official rate sheet 4. RATES [04.11.2026].xlsx. Continue?')) {
-      return;
-    }
-    try {
-      setIsCommitting(true);
-      const res = await api.seedOfficialRates();
-      setImportResult(res);
-      loadCounts();
-      loadHistory();
-      loadProducts();
-    } catch (err) {
-      alert('Error seeding official rates: ' + err.message);
-    } finally {
-      setIsCommitting(false);
-    }
+  function handleSeedOfficial() {
+    setConfirmDialog({
+      isOpen: true,
+      title: 'Import Official Rate Sheet',
+      message: 'This will load all 5,300+ authentic products directly from the official Udhayam Agencies rate sheet "4. RATES [04.11.2026].xlsx".\n\nExisting products will be synchronized with live master rates.',
+      confirmText: 'Import Official Rates',
+      cancelText: 'Cancel',
+      type: 'confirm',
+      onConfirm: async () => {
+        setConfirmDialog(prev => ({ ...prev, isOpen: false }));
+        try {
+          setIsCommitting(true);
+          const res = await api.seedOfficialRates();
+          setImportResult(res);
+          loadCounts();
+          loadHistory();
+          loadProducts();
+          showToast(`✓ Successfully synchronized ${res.rows_imported || 5331} authentic products!`);
+        } catch (err) {
+          showToast('Error seeding official rates: ' + err.message, true);
+        } finally {
+          setIsCommitting(false);
+        }
+      }
+    });
   }
 
   function handleDirectPrint() {
@@ -1050,6 +1077,34 @@ export default function PriceListAndCatalogue({ onAddToQuote }) {
             </form>
 
           </div>
+        </div>
+      )}
+
+      {/* Themed Confirmation Dialog */}
+      <ThemedConfirmDialog
+        isOpen={confirmDialog.isOpen}
+        title={confirmDialog.title}
+        message={confirmDialog.message}
+        confirmText={confirmDialog.confirmText}
+        cancelText={confirmDialog.cancelText}
+        type={confirmDialog.type}
+        onConfirm={confirmDialog.onConfirm}
+        onCancel={() => setConfirmDialog(prev => ({ ...prev, isOpen: false }))}
+      />
+
+      {/* Non-Intrusive Bottom-Right Action Toast */}
+      {toastMsg && (
+        <div className={`fixed bottom-6 right-6 z-50 font-bold text-xs py-3 px-5 rounded-2xl shadow-2xl flex items-center space-x-2.5 border backdrop-blur-md animate-in slide-in-from-bottom-3 duration-200 ${
+          toastMsg.isError 
+            ? 'bg-rose-950/95 text-rose-100 border-rose-700/80' 
+            : 'bg-[#00545C]/95 text-[#7DBA00] border-[#7DBA00]/50'
+        }`}>
+          {toastMsg.isError ? (
+            <AlertTriangle className="w-4 h-4 text-rose-400 flex-shrink-0" />
+          ) : (
+            <CheckCircle2 className="w-4 h-4 text-[#7DBA00] flex-shrink-0" />
+          )}
+          <span className="text-white tracking-wide">{toastMsg.text}</span>
         </div>
       )}
 

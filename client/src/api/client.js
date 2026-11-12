@@ -59,6 +59,7 @@ export const api = {
   createProduct: (data) => request('/products', { method: 'POST', body: JSON.stringify(data) }),
   updateProduct: (id, data) => request(`/products/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   deleteProduct: (id) => request(`/products/${id}`, { method: 'DELETE' }),
+  recordProductFeedback: (query, productId, action = 'selected') => request('/products/feedback', { method: 'POST', body: JSON.stringify({ query, productId, action }) }),
 
   // WhatsApp Smart Parser & Config
   parseWhatsAppMessage: (message) => request('/whatsapp/parse', { method: 'POST', body: JSON.stringify({ message }) }),

@@ -8,6 +8,7 @@ import { api } from '../api/client';
 import QuotationPdfModal from '../components/QuotationPdfModal';
 import WhatsAppShareModal from '../components/WhatsAppShareModal';
 import EmailShareModal from '../components/EmailShareModal';
+import ThemedConfirmDialog from '../components/ThemedConfirmDialog';
 
 export default function Quotations({ setActivePage, onEditQuotation }) {
   const [quotations, setQuotations] = useState([]);
@@ -23,6 +24,25 @@ export default function Quotations({ setActivePage, onEditQuotation }) {
   const [selectedQuoteForWa, setSelectedQuoteForWa] = useState(null);
   const [selectedQuoteForEmail, setSelectedQuoteForEmail] = useState(null);
   const [viewQuoteDetail, setViewQuoteDetail] = useState(null);
+
+  // Dialog State (replaces native confirm/alert)
+  const [dialogConfig, setDialogConfig] = useState({
+    isOpen: false,
+    title: '',
+    message: '',
+    confirmText: 'Confirm',
+    cancelText: 'Cancel',
+    type: 'confirm',
+    onConfirm: null
+  });
+
+  // Toast State (bottom-right notification)
+  const [toastMsg, setToastMsg] = useState(null);
+
+  function showToast(text, isError = false) {
+    setToastMsg({ text, isError });
+    setTimeout(() => setToastMsg(null), 4000);
+  }
 
   useEffect(() => {
     loadQuotations();
@@ -42,6 +62,7 @@ export default function Quotations({ setActivePage, onEditQuotation }) {
       setTotalCount(res.total || 0);
     } catch (err) {
       console.warn('Failed to load quotations:', err);
+      showToast('Failed to load quotations: ' + err.message, true);
     } finally {
       setLoading(false);
     }
@@ -50,21 +71,32 @@ export default function Quotations({ setActivePage, onEditQuotation }) {
   async function handleStatusChange(id, newStatus) {
     try {
       await api.updateQuotationStatus(id, newStatus);
+      showToast(`✓ Quotation status updated to ${newStatus}`);
       loadQuotations();
     } catch (err) {
-      alert('Failed to update status: ' + err.message);
+      showToast('Failed to update status: ' + err.message, true);
     }
   }
 
-  async function handleDuplicate(id) {
-    if (!confirm('Duplicate this quotation with a new sequential quotation number?')) return;
-    try {
-      const res = await api.duplicateQuotation(id);
-      alert(`Created duplicate quotation ${res.quotation_number}`);
-      loadQuotations();
-    } catch (err) {
-      alert('Failed to duplicate quotation: ' + err.message);
-    }
+  function handleDuplicate(quote) {
+    setDialogConfig({
+      isOpen: true,
+      title: 'Duplicate Quotation',
+      message: `Create a new duplicate of quotation "${quote.quotation_number}" for ${quote.customer_name}?\n\nThis will generate a new sequential quotation number while copying all products and rates.`,
+      confirmText: 'Duplicate Now',
+      cancelText: 'Cancel',
+      type: 'duplicate',
+      onConfirm: async () => {
+        setDialogConfig(prev => ({ ...prev, isOpen: false }));
+        try {
+          const res = await api.duplicateQuotation(quote.id);
+          showToast(`✓ Created duplicate quotation ${res.quotation_number}`);
+          loadQuotations();
+        } catch (err) {
+          showToast('Failed to duplicate quotation: ' + err.message, true);
+        }
+      }
+    });
   }
 
   async function handleEdit(quote) {
@@ -76,19 +108,29 @@ export default function Quotations({ setActivePage, onEditQuotation }) {
         setActivePage('create-quotation');
       }
     } catch (err) {
-      alert('Failed to load quotation for editing: ' + (err.message || 'Error'));
+      showToast('Failed to load quotation for editing: ' + (err.message || 'Error'), true);
     }
   }
 
-  async function handleDelete(quote) {
-    const confirmMsg = `Are you sure you want to delete quotation ${quote.quotation_number} for "${quote.customer_name}"?\n\nThis will permanently remove the quotation.`;
-    if (!confirm(confirmMsg)) return;
-    try {
-      await api.deleteQuotation(quote.id);
-      loadQuotations();
-    } catch (err) {
-      alert('Failed to delete quotation: ' + (err.message || 'Error occurred'));
-    }
+  function handleDelete(quote) {
+    setDialogConfig({
+      isOpen: true,
+      title: 'Delete Quotation',
+      message: `Are you sure you want to permanently delete quotation "${quote.quotation_number}" for "${quote.customer_name}"?\n\nThis action cannot be undone.`,
+      confirmText: 'Delete Permanently',
+      cancelText: 'Keep Quotation',
+      type: 'danger',
+      onConfirm: async () => {
+        setDialogConfig(prev => ({ ...prev, isOpen: false }));
+        try {
+          await api.deleteQuotation(quote.id);
+          showToast(`✓ Deleted quotation ${quote.quotation_number}`);
+          loadQuotations();
+        } catch (err) {
+          showToast('Failed to delete quotation: ' + (err.message || 'Error occurred'), true);
+        }
+      }
+    });
   }
 
   async function openPdf(quote) {
@@ -309,7 +351,7 @@ export default function Quotations({ setActivePage, onEditQuotation }) {
                         </button>
 
                         <button
-                          onClick={() => handleDuplicate(quote.id)}
+                          onClick={() => handleDuplicate(quote)}
                           className="p-1.5 text-slate-600 hover:text-purple-600 hover:bg-purple-50 rounded-lg transition-colors border border-slate-200"
                           title="Duplicate Quotation"
                         >
@@ -406,6 +448,34 @@ export default function Quotations({ setActivePage, onEditQuotation }) {
             await handleDelete(q);
           }}
         />
+      )}
+
+      {/* Themed Confirmation & Action Dialog */}
+      <ThemedConfirmDialog
+        isOpen={dialogConfig.isOpen}
+        title={dialogConfig.title}
+        message={dialogConfig.message}
+        confirmText={dialogConfig.confirmText}
+        cancelText={dialogConfig.cancelText}
+        type={dialogConfig.type}
+        onConfirm={dialogConfig.onConfirm}
+        onCancel={() => setDialogConfig(prev => ({ ...prev, isOpen: false }))}
+      />
+
+      {/* Modern Bottom-Right Toast Notification (replaces top alerts) */}
+      {toastMsg && (
+        <div className={`fixed bottom-6 right-6 z-50 font-bold text-xs py-3 px-5 rounded-2xl shadow-2xl flex items-center space-x-2.5 border backdrop-blur-md animate-in slide-in-from-bottom-3 duration-200 ${
+          toastMsg.isError 
+            ? 'bg-rose-950/95 text-rose-100 border-rose-700/80' 
+            : 'bg-[#00545C]/95 text-[#7DBA00] border-[#7DBA00]/50'
+        }`}>
+          {toastMsg.isError ? (
+            <AlertCircle className="w-4 h-4 text-rose-400 flex-shrink-0" />
+          ) : (
+            <CheckCircle2 className="w-4 h-4 text-[#7DBA00] flex-shrink-0" />
+          )}
+          <span className="text-white tracking-wide">{toastMsg.text}</span>
+        </div>
       )}
 
     </div>

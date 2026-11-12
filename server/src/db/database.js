@@ -166,6 +166,28 @@ function initDb() {
     CREATE INDEX IF NOT EXISTS idx_quotations_created ON quotations(created_at);
     CREATE INDEX IF NOT EXISTS idx_quotation_items_quote ON quotation_items(quotation_id);
     CREATE INDEX IF NOT EXISTS idx_audit_timestamp ON audit_logs(timestamp);
+
+    -- Product Aliases & Intelligent Keyword Learning
+    CREATE TABLE IF NOT EXISTS product_aliases (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      product_id INTEGER NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+      alias TEXT NOT NULL,
+      normalized_alias TEXT NOT NULL,
+      confidence_boost REAL DEFAULT 100,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_product_aliases_norm ON product_aliases(normalized_alias);
+
+    -- Search Feedback & Training System Table
+    CREATE TABLE IF NOT EXISTS search_feedback (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      raw_query TEXT NOT NULL,
+      normalized_query TEXT NOT NULL,
+      selected_product_id INTEGER NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+      user_action TEXT NOT NULL DEFAULT 'selected',
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_search_feedback_norm ON search_feedback(normalized_query);
   `);
 
   try {

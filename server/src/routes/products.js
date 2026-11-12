@@ -201,6 +201,22 @@ router.put('/:id', (req, res) => {
   res.json({ success: true, product: updated });
 });
 
+// POST /api/products/feedback - Active Learning & Keyword Training
+router.post('/feedback', (req, res) => {
+  const { query, productId, action = 'selected' } = req.body;
+  if (!query || !productId) {
+    return res.status(400).json({ error: 'Query and productId are required' });
+  }
+
+  const { recordSearchFeedback } = require('../services/product-matching');
+  recordSearchFeedback(query, parseInt(productId, 10), action);
+
+  res.json({
+    success: true,
+    message: 'Training signal recorded and product alias updated.'
+  });
+});
+
 // DELETE /api/products/:id - Delete product
 router.delete('/:id', (req, res) => {
   db.prepare('UPDATE products SET is_active = 0 WHERE id = ?').run(req.params.id);

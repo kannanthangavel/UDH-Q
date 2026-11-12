@@ -30,6 +30,7 @@ export default function SmartParserModal({ onClose, onApplyToQuotation, onTransf
   const [rowSearchQueries, setRowSearchQueries] = useState({});
   const [rowSearchResults, setRowSearchResults] = useState({});
   const [isRowSearching, setIsRowSearching] = useState({});
+  const [transferError, setTransferError] = useState('');
 
   const transferCallback = onTransferToQuotation || onApplyToQuotation;
 
@@ -97,6 +98,10 @@ Red Oxide Primer 4lt`);
   }
 
   function handleProductSelect(itemIdx, product) {
+    if (items[itemIdx]?.originalLine && product?.id) {
+      api.recordProductFeedback(items[itemIdx].originalLine, product.id, 'selected').catch(() => {});
+    }
+
     setItems(prev => {
       const updated = [...prev];
       const existingSizes = updated[itemIdx].availableSizes || [];
@@ -214,9 +219,10 @@ Red Oxide Primer 4lt`);
   function handleTransferToQuote() {
     const validItems = items.filter(it => it.selectedProduct);
     if (validItems.length === 0) {
-      alert('Please match at least one product before transferring.');
+      setTransferError('Please select or match at least one product before transferring to quotation.');
       return;
     }
+    setTransferError('');
 
     const quotationData = {
       customer: {
@@ -279,6 +285,12 @@ Red Oxide Primer 4lt`);
 
         {/* Modal Body */}
         <div className="p-6 overflow-y-auto space-y-5 flex-1">
+          {transferError && (
+            <div className="bg-rose-50 border border-rose-300 text-rose-900 px-4 py-3 rounded-xl flex items-center space-x-2 text-xs font-bold animate-in fade-in">
+              <AlertCircle className="w-5 h-5 text-rose-600 flex-shrink-0" />
+              <span>{transferError}</span>
+            </div>
+          )}
                 
                 {/* Input Area */}
                 <div>
