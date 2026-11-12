@@ -303,15 +303,29 @@ Thank you for your business! 🙏🌟`
             </div>
           )}
 
-          {pdfDownloadedNotice && (
-            <div className="bg-teal-50 border border-teal-300 text-teal-950 p-3.5 rounded-xl text-xs space-y-1.5 animate-in fade-in">
-              <div className="flex items-center space-x-2 font-bold text-[#00545C]">
-                <FileText className="w-4 h-4 text-[#7DBA00]" />
-                <span>PDF Document Downloaded: {quotation.quotation_number}.pdf</span>
+          {pdfDownloadedNotice ? (
+            <div className="bg-gradient-to-r from-emerald-50 to-teal-50 border-2 border-emerald-400 text-emerald-950 p-4 rounded-xl text-xs space-y-2 animate-in fade-in shadow-sm">
+              <div className="flex items-center space-x-2 font-black text-emerald-900 text-sm">
+                <CheckCircle2 className="w-5 h-5 text-emerald-600 flex-shrink-0" />
+                <span>PDF Document Ready: {quotation.quotation_number}.pdf</span>
               </div>
-              <p className="text-[11px] text-slate-600 leading-relaxed">
-                👉 Simply drag and drop the downloaded PDF file into your WhatsApp Web chat to send as an attachment. The message text also contains the direct document link!
+              <p className="text-xs text-emerald-800 leading-relaxed font-semibold">
+                📥 The official PDF document has been downloaded to your computer!
               </p>
+              <div className="bg-white/80 p-2.5 rounded-lg border border-emerald-200 text-[11px] text-slate-700 space-y-1">
+                <p className="font-bold text-slate-900">👉 How to attach in WhatsApp Web:</p>
+                <p>1. Drag and drop the downloaded <strong>{quotation.quotation_number}.pdf</strong> file directly into WhatsApp Web chat.</p>
+                <p>2. Or in WhatsApp, click the <strong>📎 (Attach)</strong> icon → choose <strong>Document</strong> → select the downloaded file.</p>
+                <p>3. The message text also contains the direct cloud download link for the customer!</p>
+              </div>
+            </div>
+          ) : (
+            <div className="bg-slate-50 border border-slate-200 p-3 rounded-xl flex items-start space-x-2.5 text-xs text-slate-600">
+              <FileText className="w-4 h-4 text-[#00545C] mt-0.5 flex-shrink-0" />
+              <div className="text-[11px] leading-relaxed">
+                <span className="font-bold text-slate-800 block">WhatsApp Document Sharing Guide:</span>
+                Clicking the green button downloads the official PDF document (<span className="font-mono font-bold text-[#00545C]">{quotation.quotation_number}.pdf</span>) and opens WhatsApp Web with the complete formatted quotation. Simply drag & drop the PDF into the chat or attach via 📎!
+              </div>
             </div>
           )}
           

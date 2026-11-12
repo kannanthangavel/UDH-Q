@@ -1,5 +1,5 @@
 const { db } = require('../db/database');
-const { searchProductsSmart, extractProductSpecs, levenshteinDistance } = require('./productSearchService');
+const { searchProductsSmart, extractProductSpecs, getSisterSizes, levenshteinDistance } = require('./productSearchService');
 
 // Comprehensive Indian / Tamil hardware & paint unit standardizations
 const UNIT_MAP = {
@@ -209,10 +209,10 @@ function parseRequirementLine(line) {
 function matchProductsForRequirement(parsedReq) {
   const { originalLine, cleanSearchQuery, specs, quantity, unit } = parsedReq;
 
-  // Search through all 5,300+ catalog products
+  // Search through all 5,300+ catalog products with broad candidate discovery
   const searchResult = searchProductsSmart({
     search: cleanSearchQuery || originalLine,
-    limit: 10,
+    limit: 30,
     all: 'true'
   });
 
@@ -230,24 +230,55 @@ function matchProductsForRequirement(parsedReq) {
     };
   }
 
-  // Top candidate
+  // Top candidate & Sister Pack Sizes (e.g. 500ML, 1LT, 4LT, 10LT, 20LT)
   const topProduct = matchingProducts[0];
   const topScore = topProduct.searchScore || 0;
+  const sisterSizes = getSisterSizes(topProduct);
 
-  // Map candidates with full structured details
-  const candidates = matchingProducts.slice(0, 6).map(p => ({
-    id: p.id,
-    s_no: p.s_no,
-    item_name: p.item_name,
-    details: p.details || p.structuredDetails?.summary || '',
-    structuredDetails: p.structuredDetails || null,
-    sale_rate: p.sale_rate || 0,
-    main_unit: p.main_unit || 'Nos',
-    hsn_sac: p.hsn_sac || '',
-    section: p.section || 'PAINTS',
-    score: p.searchScore || 0,
-    matchReasons: p.matchReasons || []
-  }));
+  // Map candidates with full structured details & deduplicate by distinct pack size first
+  const candidatesMap = new Map();
+
+  // 1. Add top matching products
+  matchingProducts.slice(0, 16).forEach(p => {
+    candidatesMap.set(p.id, {
+      id: p.id,
+      s_no: p.s_no,
+      item_name: p.item_name,
+      details: p.details || p.structuredDetails?.summary || '',
+      structuredDetails: p.structuredDetails || null,
+      sale_rate: p.sale_rate || 0,
+      main_unit: p.main_unit || 'Nos',
+      hsn_sac: p.hsn_sac || '',
+      section: p.section || 'PAINTS',
+      score: p.searchScore || 0,
+      packSize: p.specs?.[0] || '',
+      availableSizes: p.availableSizes || sisterSizes,
+      matchReasons: p.matchReasons || []
+    });
+  });
+
+  // 2. Guarantee that ALL available sister pack sizes (e.g. 4LT, 1LT, 20LT) are visible in candidates
+  sisterSizes.forEach(s => {
+    if (!candidatesMap.has(s.id)) {
+      candidatesMap.set(s.id, {
+        id: s.id,
+        s_no: s.s_no,
+        item_name: s.item_name,
+        details: s.details || '',
+        structuredDetails: null,
+        sale_rate: s.sale_rate || 0,
+        main_unit: s.main_unit || 'Nos',
+        hsn_sac: s.hsn_sac || '',
+        section: s.section || 'PAINTS',
+        score: 110,
+        packSize: s.packSize,
+        availableSizes: sisterSizes,
+        matchReasons: [`Sister Pack Size: ${s.packSize}`]
+      });
+    }
+  });
+
+  const candidates = Array.from(candidatesMap.values());
 
   let confidence = 'Medium';
   if (topScore >= 120) {
@@ -256,11 +287,17 @@ function matchProductsForRequirement(parsedReq) {
     confidence = 'Low';
   }
 
+  const primaryMatched = {
+    ...candidates[0],
+    availableSizes: sisterSizes
+  };
+
   return {
     originalLine,
-    matchedProduct: candidates[0],
+    matchedProduct: primaryMatched,
+    availableSizes: sisterSizes,
     quantity,
-    unit: candidates[0]?.main_unit || unit,
+    unit: primaryMatched?.main_unit || unit,
     confidence,
     candidates
   };

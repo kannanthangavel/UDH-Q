@@ -376,6 +376,70 @@ function getIndexedProducts() {
   }
 }
 
+const SIZE_ORDER = [
+  '50ML', '100ML', '200ML', '500ML', '1LT', '2LT', '4LT', '10LT', '20LT',
+  '500GM', '1KG', '2KG', '5KG', '10KG', '20KG', '25KG', '40KG',
+  '1"', '1 1/2"', '2"', '2 1/2"', '3"', '4"', '5"', '6"'
+];
+
+/**
+ * Intelligent Sister Pack Sizes Finder
+ * Discovers all sister volumes/weights/dimensions for a given product line
+ * e.g., for UDHAYAM MANJAL 10LT -> 500ML (₹80), 1LT (₹150), 4LT (₹580), 10LT (₹1450), 20LT (₹2900)
+ */
+function getSisterSizes(prod) {
+  if (!prod) return [];
+  const catalog = getIndexedProducts();
+  const currentSize = (prod.specs && prod.specs.length > 0) ? prod.specs[0] : '';
+  
+  // Clean product base name by stripping volume/weight/inch specs and clean words
+  const baseNorm = (prod.normName || cleanNorm(prod.item_name || ''))
+    .replace(/(\d+(?:\.\d+)?)(lt|ltr|ml|kg|gm|inch)/g, '')
+    .replace(/(gst|spl|nrml|k)/g, '');
+
+  if (baseNorm.length < 3) return [];
+
+  const sisters = [];
+  const seenSizes = new Set();
+
+  for (const p of catalog) {
+    if (p.section !== prod.section) continue;
+    if (!p.specs || p.specs.length === 0) continue;
+    const pSize = p.specs[0];
+
+    const pBaseNorm = (p.normName || cleanNorm(p.item_name || ''))
+      .replace(/(\d+(?:\.\d+)?)(lt|ltr|ml|kg|gm|inch)/g, '')
+      .replace(/(gst|spl|nrml|k)/g, '');
+
+    if (pBaseNorm.includes(baseNorm) || baseNorm.includes(pBaseNorm)) {
+      if (!seenSizes.has(pSize)) {
+        seenSizes.add(pSize);
+        sisters.push({
+          id: p.id,
+          s_no: p.s_no,
+          item_name: p.item_name,
+          details: p.details || p.structuredDetails?.summary || '',
+          packSize: pSize,
+          sale_rate: p.sale_rate,
+          main_unit: p.main_unit || 'Nos',
+          hsn_sac: p.hsn_sac || '',
+          section: p.section,
+          isCurrent: p.id === prod.id || pSize === currentSize
+        });
+      }
+    }
+  }
+
+  sisters.sort((a, b) => {
+    const idxA = SIZE_ORDER.indexOf(a.packSize);
+    const idxB = SIZE_ORDER.indexOf(b.packSize);
+    if (idxA !== -1 && idxB !== -1) return idxA - idxB;
+    return a.sale_rate - b.sale_rate;
+  });
+
+  return sisters;
+}
+
 /**
  * Normalizes input query and extracts specs, colors, types, and keywords
  */
@@ -742,6 +806,12 @@ function searchProductsSmart({ search = '', section, limit = null, page = 1, isA
     returnProducts = scored.slice(start, start + limitNum);
   }
 
+  // Attach sister sizes for 1-click pack size switching
+  returnProducts = returnProducts.map(p => ({
+    ...p,
+    availableSizes: getSisterSizes(p)
+  }));
+
   return {
     products: returnProducts,
     total: scored.length,
@@ -767,6 +837,7 @@ module.exports = {
   extractProductSpecs,
   extractStructuredDetails,
   getIndexedProducts,
+  getSisterSizes,
   levenshteinDistance,
   invalidateProductCache
 };

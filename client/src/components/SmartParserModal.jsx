@@ -23,6 +23,9 @@ export default function SmartParserModal({ onClose, onApplyToQuotation, onTransf
   // Expanded suggestions toggle per item index
   const [expandedRowSuggestions, setExpandedRowSuggestions] = useState({});
 
+  // Size filter tab per item index in suggestions
+  const [selectedSizeFilter, setSelectedSizeFilter] = useState({});
+
   // In-row live catalog search state
   const [rowSearchQueries, setRowSearchQueries] = useState({});
   const [rowSearchResults, setRowSearchResults] = useState({});
@@ -35,6 +38,7 @@ export default function SmartParserModal({ onClose, onApplyToQuotation, onTransf
 Asian Paints Apex 20lt - 2 cans
 Birla Putty 40kg 5 bags
 Brush 2 inch 3 nos
+Udhayam Manjal 4lt
 Dr Fixit 302 1lt 2
 Golden Brown 1lt 5ps
 Red Oxide Primer 4lt`);
@@ -63,6 +67,7 @@ Red Oxide Primer 4lt`);
         unit: it.unit || it.matchedProduct?.main_unit || 'Nos',
         sale_rate: it.matchedProduct?.sale_rate || 0,
         candidates: it.candidates || [],
+        availableSizes: it.availableSizes || it.matchedProduct?.availableSizes || [],
         confidence: it.confidence || 'Medium'
       }));
 
@@ -94,11 +99,15 @@ Red Oxide Primer 4lt`);
   function handleProductSelect(itemIdx, product) {
     setItems(prev => {
       const updated = [...prev];
+      const existingSizes = updated[itemIdx].availableSizes || [];
+      const newSizes = product.availableSizes && product.availableSizes.length > 0 ? product.availableSizes : existingSizes;
+
       updated[itemIdx] = {
         ...updated[itemIdx],
         selectedProduct: product,
         sale_rate: product.sale_rate || 0,
         unit: product.main_unit || updated[itemIdx].unit || 'Nos',
+        availableSizes: newSizes,
         confidence: 'High'
       };
       return updated;
@@ -106,6 +115,34 @@ Red Oxide Primer 4lt`);
 
     // Close the suggestion drawer after selection
     setExpandedRowSuggestions(prev => ({ ...prev, [itemIdx]: false }));
+  }
+
+  // 1-Click Pack Size Switcher (e.g. 1LT -> 4LT -> 10LT -> 20LT)
+  function handleSwitchPackSize(itemIdx, sizeOption) {
+    setItems(prev => {
+      const updated = [...prev];
+      const current = updated[itemIdx];
+      const candMatch = (current.candidates || []).find(c => c.id === sizeOption.id);
+      const chosenProduct = candMatch || {
+        ...current.selectedProduct,
+        id: sizeOption.id,
+        item_name: sizeOption.item_name,
+        details: sizeOption.details || current.selectedProduct?.details || '',
+        sale_rate: sizeOption.sale_rate,
+        main_unit: sizeOption.main_unit || current.unit || 'Nos',
+        hsn_sac: sizeOption.hsn_sac || current.selectedProduct?.hsn_sac || '',
+        availableSizes: current.availableSizes
+      };
+
+      updated[itemIdx] = {
+        ...current,
+        selectedProduct: chosenProduct,
+        sale_rate: sizeOption.sale_rate,
+        unit: sizeOption.main_unit || current.unit || 'Nos',
+        confidence: 'High'
+      };
+      return updated;
+    });
   }
 
   async function handleRowLiveSearch(itemIdx, query) {
@@ -117,7 +154,7 @@ Red Oxide Primer 4lt`);
 
     try {
       setIsRowSearching(prev => ({ ...prev, [itemIdx]: true }));
-      const res = await api.getProducts({ search: query.trim(), limit: 8, all: 'true' });
+      const res = await api.getProducts({ search: query.trim(), limit: 16, all: 'true' });
       setRowSearchResults(prev => ({ ...prev, [itemIdx]: res.products || [] }));
     } catch (err) {
       console.warn('Row search error:', err);
@@ -180,6 +217,7 @@ Red Oxide Primer 4lt`);
         quantity: it.quantity,
         sale_rate: it.sale_rate,
         catalog_rate: it.selectedProduct.sale_rate || it.sale_rate,
+        availableSizes: it.availableSizes || [],
         line_total: Math.round(it.quantity * it.sale_rate * 100) / 100
       }))
     };
@@ -409,6 +447,44 @@ Red Oxide Primer 4lt`);
                                         </span>
                                       )}
                                     </div>
+
+                                    {/* 1-Click Pack Size Switcher Pills */}
+                                    {it.availableSizes && it.availableSizes.length > 0 && (
+                                      <div className="mt-2.5 pt-2 border-t border-slate-100">
+                                        <div className="flex items-center space-x-1.5 mb-1.5">
+                                          <span className="text-[10px] font-black uppercase tracking-wider text-slate-500">
+                                            Pack Sizes ({it.availableSizes.length} Available):
+                                          </span>
+                                          <span className="text-[10px] text-[#00545C] font-semibold">
+                                            Click to switch size
+                                          </span>
+                                        </div>
+                                        <div className="flex flex-wrap items-center gap-1.5">
+                                          {it.availableSizes.map(sz => {
+                                            const isSelected = sz.id === it.selectedProduct?.id || sz.item_name === it.selectedProduct?.item_name || sz.packSize === specs?.packSize;
+                                            return (
+                                              <button
+                                                key={sz.id}
+                                                type="button"
+                                                onClick={() => handleSwitchPackSize(idx, sz)}
+                                                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center space-x-1.5 cursor-pointer ${
+                                                  isSelected
+                                                    ? 'bg-[#00545C] text-white shadow-sm ring-2 ring-[#00545C]/30 scale-[1.02]'
+                                                    : 'bg-white hover:bg-slate-100 text-slate-800 border border-slate-200 hover:border-[#00545C]'
+                                                }`}
+                                                title={`Switch to ${sz.item_name} (₹${sz.sale_rate})`}
+                                              >
+                                                <span className="font-extrabold">{sz.packSize}</span>
+                                                <span className={`text-[11px] font-mono ${isSelected ? 'text-emerald-200' : 'text-slate-500'}`}>
+                                                  ₹{sz.sale_rate}
+                                                </span>
+                                                {isSelected && <Check className="w-3 h-3 text-emerald-300" />}
+                                              </button>
+                                            );
+                                          })}
+                                        </div>
+                                      </div>
+                                    )}
                                   </>
                                 ) : (
                                   <div className="p-2 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-800 font-bold">
@@ -502,48 +578,99 @@ Red Oxide Primer 4lt`);
                             </div>
 
                             {/* EXPANDED SUGGESTIONS & INLINE CATALOG REPLACEMENT DRAWER */}
-                            {isExpanded && (
-                              <div className="bg-slate-50/80 p-3 rounded-xl border border-slate-200 space-y-3 mt-2 animate-in fade-in duration-200">
-                                
-                                {/* 1. Alternative Candidates from AI Matcher */}
-                                {candidates.length > 0 && (
-                                  <div>
-                                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1.5">
-                                      Closest Matching Alternatives:
-                                    </span>
-                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                                      {candidates.map(cand => {
-                                        const isCurrent = it.selectedProduct?.id === cand.id;
-                                        return (
-                                          <div
-                                            key={cand.id}
-                                            onClick={() => handleProductSelect(idx, cand)}
-                                            className={`p-2.5 rounded-lg border text-xs cursor-pointer transition-all flex items-center justify-between gap-2 ${
-                                              isCurrent 
-                                                ? 'bg-teal-50 border-[#00545C] text-[#00545C] font-bold shadow-2xs' 
-                                                : 'bg-white border-slate-200 hover:border-[#00545C] hover:bg-slate-50 text-slate-800'
-                                            }`}
-                                          >
-                                            <div className="min-w-0 flex-1">
-                                              <p className="truncate font-semibold">{cand.item_name}</p>
-                                              {cand.details && (
-                                                <p className="text-[10px] text-slate-500 truncate mt-0.5">{cand.details}</p>
-                                              )}
-                                            </div>
-                                            <div className="text-right flex-shrink-0">
-                                              <div className="font-mono font-bold text-xs text-[#00545C]">₹{cand.sale_rate}</div>
-                                              {isCurrent ? (
-                                                <span className="text-[9px] font-bold text-emerald-700">✓ Selected</span>
-                                              ) : (
-                                                <span className="text-[9px] text-slate-400 hover:text-[#00545C]">Use this</span>
-                                              )}
-                                            </div>
+                            {isExpanded && (() => {
+                              const sizeFilter = selectedSizeFilter[idx] || 'ALL';
+                              
+                              // Extract distinct pack sizes from candidates and available sizes
+                              const candidateSizes = ['ALL', ...Array.from(new Set([
+                                ...(it.availableSizes || []).map(s => s.packSize),
+                                ...candidates.map(c => c.packSize || c.item_name.match(/(\d+(?:\.\d+)?\s*(?:LT|L|ML|KG|GM|NOS|INCH|MM|FT))\b/i)?.[1]?.toUpperCase())
+                              ].filter(Boolean)))];
+
+                              const filteredCandidates = sizeFilter === 'ALL'
+                                ? candidates
+                                : candidates.filter(c => {
+                                    const cSize = (c.packSize || c.item_name.match(/(\d+(?:\.\d+)?\s*(?:LT|L|ML|KG|GM|NOS|INCH|MM|FT))\b/i)?.[1]?.toUpperCase());
+                                    return cSize === sizeFilter || c.item_name.toUpperCase().includes(sizeFilter);
+                                  });
+
+                              return (
+                                <div className="bg-slate-50/90 p-3.5 rounded-xl border border-slate-200 space-y-3 mt-2 animate-in fade-in duration-200">
+                                  
+                                  {/* 1. Alternative Candidates from AI Matcher */}
+                                  {candidates.length > 0 && (
+                                    <div>
+                                      <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+                                        <div className="flex items-center space-x-1.5">
+                                          <Sparkles className="w-3.5 h-3.5 text-amber-500" />
+                                          <span className="text-[11px] font-black text-slate-700 uppercase tracking-wider">
+                                            Matching Products & Pack Sizes ({candidates.length})
+                                          </span>
+                                        </div>
+
+                                        {/* Pack Size Filter Tabs */}
+                                        {candidateSizes.length > 2 && (
+                                          <div className="flex flex-wrap items-center gap-1">
+                                            {candidateSizes.map(sz => (
+                                              <button
+                                                key={sz}
+                                                type="button"
+                                                onClick={() => setSelectedSizeFilter(prev => ({ ...prev, [idx]: sz }))}
+                                                className={`px-2 py-0.5 rounded-md text-[10px] font-bold cursor-pointer transition-colors ${
+                                                  sizeFilter === sz
+                                                    ? 'bg-[#00545C] text-white shadow-2xs'
+                                                    : 'bg-white hover:bg-slate-200 text-slate-600 border border-slate-200'
+                                                }`}
+                                              >
+                                                {sz === 'ALL' ? `All (${candidates.length})` : sz}
+                                              </button>
+                                            ))}
                                           </div>
-                                        );
-                                      })}
+                                        )}
+                                      </div>
+
+                                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-64 overflow-y-auto pr-1">
+                                        {filteredCandidates.map(cand => {
+                                          const isCurrent = it.selectedProduct?.id === cand.id || it.selectedProduct?.item_name === cand.item_name;
+                                          const candSize = cand.packSize || cand.item_name.match(/(\d+(?:\.\d+)?\s*(?:LT|L|ML|KG|GM|NOS|INCH|MM|FT))\b/i)?.[1]?.toUpperCase();
+
+                                          return (
+                                            <div
+                                              key={cand.id}
+                                              onClick={() => handleProductSelect(idx, cand)}
+                                              className={`p-2.5 rounded-xl border text-xs cursor-pointer transition-all flex items-center justify-between gap-2 ${
+                                                isCurrent 
+                                                  ? 'bg-teal-50/90 border-[#00545C] text-[#00545C] font-bold shadow-xs ring-1 ring-[#00545C]' 
+                                                  : 'bg-white border-slate-200 hover:border-[#00545C] hover:bg-slate-50 text-slate-800'
+                                              }`}
+                                            >
+                                              <div className="min-w-0 flex-1">
+                                                <div className="flex items-center space-x-1.5 flex-wrap">
+                                                  <p className="truncate font-bold text-slate-900">{cand.item_name}</p>
+                                                  {candSize && (
+                                                    <span className="px-1.5 py-0.5 rounded bg-teal-100 text-[#00545C] font-black text-[9px] flex-shrink-0">
+                                                      {candSize}
+                                                    </span>
+                                                  )}
+                                                </div>
+                                                {cand.details && (
+                                                  <p className="text-[10px] text-slate-500 truncate mt-0.5">{cand.details}</p>
+                                                )}
+                                              </div>
+                                              <div className="text-right flex-shrink-0">
+                                                <div className="font-mono font-bold text-xs text-[#00545C]">₹{cand.sale_rate}</div>
+                                                {isCurrent ? (
+                                                  <span className="text-[9px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded">✓ Selected</span>
+                                                ) : (
+                                                  <span className="text-[9px] text-[#00545C] font-semibold hover:underline">Use this</span>
+                                                )}
+                                              </div>
+                                            </div>
+                                          );
+                                        })}
+                                      </div>
                                     </div>
-                                  </div>
-                                )}
+                                  )}
 
                                 {/* 2. Live In-Row Search: If item missed in suggestions, search entire 5,300+ catalog */}
                                 <div className="pt-2 border-t border-slate-200">
@@ -589,9 +716,9 @@ Red Oxide Primer 4lt`);
                                     </div>
                                   )}
                                 </div>
-
                               </div>
-                            )}
+                            );
+                          })()}
 
                           </div>
                         );

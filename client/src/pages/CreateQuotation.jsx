@@ -268,7 +268,8 @@ export default function CreateQuotation({ setActivePage, initialCustomer, import
           sale_rate: rate,
           catalog_rate: rate,
           line_total: Math.round(qty * rate * 100) / 100,
-          is_overridden: false
+          is_overridden: false,
+          availableSizes: it.availableSizes || []
         });
 
         if (pId) seenIds.add(pId);
@@ -334,7 +335,8 @@ export default function CreateQuotation({ setActivePage, initialCustomer, import
       catalog_rate: product.sale_rate,
       line_total: product.sale_rate,
       is_overridden: false,
-      structuredDetails: product.structuredDetails || null
+      structuredDetails: product.structuredDetails || null,
+      availableSizes: product.availableSizes || []
     };
 
     setItems(prev => [...prev, newItem]);
@@ -429,6 +431,26 @@ export default function CreateQuotation({ setActivePage, initialCustomer, import
       next[index] = item;
       return next;
     });
+  }
+
+  // 1-Click Pack Size Switcher for Line Items in Quotation Table
+  function handleSwitchRowPackSize(index, sizeOption) {
+    setItems(prev => {
+      const next = [...prev];
+      const cur = { ...next[index] };
+      const newRate = sizeOption.sale_rate != null ? sizeOption.sale_rate : cur.sale_rate;
+      const qty = parseFloat(cur.quantity) || 1;
+      cur.product_id = sizeOption.id || cur.product_id;
+      cur.item_name = sizeOption.item_name || cur.item_name;
+      if (sizeOption.details) cur.details = sizeOption.details;
+      cur.sale_rate = newRate;
+      cur.catalog_rate = newRate;
+      cur.unit = sizeOption.main_unit || cur.unit || 'Nos';
+      cur.line_total = Math.round(qty * newRate * 100) / 100;
+      next[index] = cur;
+      return next;
+    });
+    showToast(`✓ Switched to ${sizeOption.packSize || sizeOption.item_name} (₹${sizeOption.sale_rate})`);
   }
 
   // Unit Update
@@ -1191,6 +1213,34 @@ export default function CreateQuotation({ setActivePage, initialCustomer, import
                           <span className="block font-mono text-[10px] text-slate-400 mt-0.5">
                             HSN/SAC: {item.hsn_sac}
                           </span>
+                        )}
+                        {item.availableSizes && item.availableSizes.length > 1 && (
+                          <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                              Sizes:
+                            </span>
+                            {item.availableSizes.map(sz => {
+                              const isCurrentSize = sz.id === item.product_id || sz.item_name === item.item_name;
+                              return (
+                                <button
+                                  key={sz.id}
+                                  type="button"
+                                  onClick={() => handleSwitchRowPackSize(idx, sz)}
+                                  className={`px-2 py-0.5 rounded text-[10px] font-bold transition-all cursor-pointer flex items-center space-x-1 ${
+                                    isCurrentSize
+                                      ? 'bg-[#00545C] text-white shadow-2xs'
+                                      : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200'
+                                  }`}
+                                  title={`Switch to ${sz.item_name} (₹${sz.sale_rate})`}
+                                >
+                                  <span>{sz.packSize}</span>
+                                  <span className={`font-mono text-[9px] ${isCurrentSize ? 'text-teal-200' : 'text-slate-500'}`}>
+                                    ₹{sz.sale_rate}
+                                  </span>
+                                </button>
+                              );
+                            })}
+                          </div>
                         )}
                       </td>
 
