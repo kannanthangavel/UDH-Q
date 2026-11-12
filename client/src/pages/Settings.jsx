@@ -94,7 +94,6 @@ export default function Settings() {
 
   useEffect(() => {
     loadSettingsData();
-    loadWaConfig();
   }, []);
 
   useEffect(() => {
