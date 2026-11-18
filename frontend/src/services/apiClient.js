@@ -7,13 +7,17 @@
  */
 
 const CUSTOM_API_STORAGE_KEY = 'udqm_api_base_url';
-const DEFAULT_PRODUCTION_API_ORIGIN = 'https://ud-qm-backend.onrender.com';
 
-function isLocalhostHost() {
-  if (typeof window === 'undefined') return false;
-  const host = window.location.hostname;
-  return host === 'localhost' || host === '127.0.0.1' || host === '::1';
-}
+// Clear any stale direct onrender.com override from localStorage so browsers always use
+// the reliable same-origin /api proxy (Vercel rewrite -> Render, or Vite proxy -> localhost:5000).
+try {
+  if (typeof window !== 'undefined') {
+    const saved = localStorage.getItem(CUSTOM_API_STORAGE_KEY);
+    if (saved && saved.includes('onrender.com')) {
+      localStorage.removeItem(CUSTOM_API_STORAGE_KEY);
+    }
+  }
+} catch (e) {}
 
 export function getApiOrigin() {
   try {
@@ -28,13 +32,11 @@ export function getApiOrigin() {
     return envUrl.trim().replace(/\/+$/, '');
   }
 
-  // In local dev, return '' so Vite's /api proxy routes directly to http://localhost:5000
-  if (isLocalhostHost()) {
-    return '';
-  }
-
-  // In production cloud deployments (e.g. udh-q.vercel.app), automatically connect to Render backend
-  return DEFAULT_PRODUCTION_API_ORIGIN;
+  // Always prefer same-origin ('') so:
+  // - Locally: Vite proxies /api and /uploads to http://localhost:5000
+  // - On Vercel (udh-q.vercel.app): Vercel rewrites /api and /uploads server-side to Render,
+  //   avoiding CORS issues and Indian ISP blocks on *.onrender.com domains!
+  return '';
 }
 
 export function setCustomApiBaseUrl(url) {
