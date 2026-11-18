@@ -7,6 +7,13 @@
  */
 
 const CUSTOM_API_STORAGE_KEY = 'udqm_api_base_url';
+const DEFAULT_PRODUCTION_API_ORIGIN = 'https://ud-qm-backend.onrender.com';
+
+function isLocalhostHost() {
+  if (typeof window === 'undefined') return false;
+  const host = window.location.hostname;
+  return host === 'localhost' || host === '127.0.0.1' || host === '::1';
+}
 
 export function getApiOrigin() {
   try {
@@ -17,7 +24,17 @@ export function getApiOrigin() {
   } catch (e) {}
 
   const envUrl = import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_API_URL || '';
-  return envUrl ? envUrl.trim().replace(/\/+$/, '') : '';
+  if (envUrl && envUrl.trim()) {
+    return envUrl.trim().replace(/\/+$/, '');
+  }
+
+  // In local dev, return '' so Vite's /api proxy routes directly to http://localhost:5000
+  if (isLocalhostHost()) {
+    return '';
+  }
+
+  // In production cloud deployments (e.g. udh-q.vercel.app), automatically connect to Render backend
+  return DEFAULT_PRODUCTION_API_ORIGIN;
 }
 
 export function setCustomApiBaseUrl(url) {
@@ -78,7 +95,7 @@ export async function checkBackendHealth(customOrigin = null) {
     : getApiBase();
 
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 12000);
+  const timer = setTimeout(() => controller.abort(), 35000);
 
   try {
     const res = await fetch(`${base}/health`, {
