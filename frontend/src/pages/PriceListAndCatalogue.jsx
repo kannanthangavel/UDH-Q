@@ -4,7 +4,7 @@ import {
   Layers, CheckCircle2, AlertTriangle, FileText, RefreshCw,
   Clock, Shield, ArrowRight, Eye, Sparkles, Plus, X, Check
 } from 'lucide-react';
-import { api } from '../api/client';
+import { api, getApiUrl } from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import ThemedConfirmDialog from '../components/ThemedConfirmDialog';
 
@@ -100,7 +100,13 @@ export default function PriceListAndCatalogue({ onAddToQuote }) {
   async function loadCounts() {
     try {
       const res = await api.getProductCounts();
-      setCounts(res);
+      if (res && typeof res.total === 'number') {
+        setCounts({
+          total: Number(res.total) || 0,
+          paints: Number(res.paints) || 0,
+          access: Number(res.access) || 0
+        });
+      }
     } catch (e) {}
   }
 
@@ -276,7 +282,7 @@ export default function PriceListAndCatalogue({ onAddToQuote }) {
   }
 
   function handleDirectPrint() {
-    const url = `/api/price-list/pdf?section=${pdfSection}&format=${pdfFormat}`;
+    const url = getApiUrl(`/price-list/pdf?section=${pdfSection}&format=${pdfFormat}`);
     const win = window.open(url, '_blank');
     if (win) win.focus();
   }
@@ -360,7 +366,7 @@ export default function PriceListAndCatalogue({ onAddToQuote }) {
                     : 'text-slate-600 hover:text-slate-900'
                 }`}
               >
-                PAINTS SECTION ({counts.paints.toLocaleString()})
+                PAINTS SECTION ({(counts?.paints ?? 0).toLocaleString()})
               </button>
               <button
                 type="button"
@@ -371,7 +377,7 @@ export default function PriceListAndCatalogue({ onAddToQuote }) {
                     : 'text-slate-600 hover:text-slate-900'
                 }`}
               >
-                ACCESSORIES SECTION ({counts.access.toLocaleString()})
+                ACCESSORIES SECTION ({(counts?.access ?? 0).toLocaleString()})
               </button>
             </div>
 
@@ -586,7 +592,7 @@ export default function PriceListAndCatalogue({ onAddToQuote }) {
               </button>
 
               <a
-                href={`/api/price-list/pdf?section=${pdfSection}&format=${pdfFormat}&download=true`}
+                href={getApiUrl(`/price-list/pdf?section=${pdfSection}&format=${pdfFormat}&download=true`)}
                 download
                 className="flex items-center space-x-1.5 px-4 py-2 rounded-xl bg-[#7DBA00] hover:bg-[#8ee000] text-[#003B40] font-black text-xs shadow transition-all active:scale-95 cursor-pointer"
               >

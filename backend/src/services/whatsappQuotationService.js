@@ -94,12 +94,18 @@ class WhatsAppQuotationService {
       const finalCustomerName = parseResult.customerName || customerName;
       const finalCustomerPhone = parseResult.customerPhone || cleanPhone;
 
-      // 4. Inspect Items for Ambiguity
+      // 4. Inspect Items for Ambiguity and Confidence
       const itemsToClarify = [];
       const confirmedItems = [];
 
       for (let i = 0; i < parseResult.items.length; i++) {
         const item = parseResult.items[i];
+
+        // Strict Confidence Threshold: If confidence is Low/None or score < 60%, reject match to avoid hallucinating products
+        if (item.confidence === 'Low' || item.confidence === 'None' || (item.confidenceScore && item.confidenceScore < 60)) {
+          continue;
+        }
+
         const ambiguity = this.detectItemAmbiguity(item, rawText);
 
         if (ambiguity.isAmbiguous) {
@@ -232,6 +238,10 @@ class WhatsAppQuotationService {
     const top1 = candidates[0];
     const top2 = candidates[1];
 
+    if (!top1 || top1.score < 150) {
+      return { isAmbiguous: false, options: [], question: '' };
+    }
+
     // Check if score gap is narrow (<= 15% score difference) or identical score
     const scoreDiff = Math.abs(top1.score - top2.score);
     const scoreRatio = top1.score > 0 ? scoreDiff / top1.score : 0;
@@ -295,8 +305,19 @@ class WhatsAppQuotationService {
       return null;
     }
 
-    // Check if input is a number matching options
+    // Check if customer wants to cancel or start over
     const inputTrim = customerInput.trim();
+    const inputLower = inputTrim.toLowerCase();
+
+    if (inputLower === 'cancel' || inputLower === 'stop' || inputLower === 'reset' || inputLower === 'no') {
+      db.prepare("UPDATE whatsapp_conversations SET state = 'IDLE', pending_context = NULL, updated_at = datetime('now') WHERE customer_phone = ?").run(cleanPhone);
+      return {
+        success: true,
+        action: 'conversation_reset',
+        message: 'Your previous request has been cancelled. What product would you like to enquire about?'
+      };
+    }
+
     let selectedOption = null;
 
     if (/^\d+$/.test(inputTrim)) {
@@ -306,7 +327,6 @@ class WhatsAppQuotationService {
       }
     } else {
       // Fuzzy / keyword match against options
-      const inputLower = inputTrim.toLowerCase();
       selectedOption = currentClarification.options.find(opt =>
         opt.label.toLowerCase().includes(inputLower) ||
         (opt.brand && opt.brand.toLowerCase().includes(inputLower))
@@ -314,6 +334,12 @@ class WhatsAppQuotationService {
     }
 
     if (!selectedOption) {
+      // If user typed a completely new product query (length > 10 chars or multiple words), cancel old session and fall through to fresh parser
+      if (inputTrim.split(/\s+/).length >= 2 || inputTrim.length > 12) {
+        db.prepare("UPDATE whatsapp_conversations SET state = 'IDLE', pending_context = NULL, updated_at = datetime('now') WHERE customer_phone = ?").run(cleanPhone);
+        return null; // Fall through to fresh message processing
+      }
+
       // Invalid option replied
       const optionLines = currentClarification.options.map((opt, idx) => `${idx + 1}. ${opt.label}`).join('\n');
       return {

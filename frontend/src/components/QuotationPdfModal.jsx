@@ -4,6 +4,7 @@ import {
   Building2, Edit3, Trash2, ArrowRight, MessageSquare, Plus 
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { getApiUrl, getUploadUrl } from '../api/client';
 import { numberToIndianWords } from '../utils/numberToWords';
 
 export default function QuotationPdfModal({ quotation, onClose, onEdit, onDelete, onGoToQuotes, onNewQuotation, onShareWhatsApp }) {
@@ -12,9 +13,11 @@ export default function QuotationPdfModal({ quotation, onClose, onEdit, onDelete
   const { settings } = useAuth();
   const [paperFormat, setPaperFormat] = useState(quotation.paper_format || 'A4');
 
-  const logoUrl = settings?.company_logo 
-    ? `/uploads/logos/${settings.company_logo}` 
-    : '/uploads/logos/udhayam_logo.png';
+  const logoUrl = getUploadUrl(
+    settings?.company_logo
+      ? `/uploads/logos/${settings.company_logo}`
+      : '/uploads/logos/udhayam_logo.png'
+  );
 
   const isA5 = paperFormat === 'A5';
 
@@ -93,7 +96,7 @@ export default function QuotationPdfModal({ quotation, onClose, onEdit, onDelete
 
             {/* Download Button */}
             <a
-              href={`/api/quotations/${quotation.id}/pdf?download=true&format=${paperFormat}`}
+              href={getApiUrl(`/quotations/${quotation.id}/pdf?download=true&format=${paperFormat}`)}
               download
               className="flex items-center space-x-1 px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white text-xs font-bold border border-white/20 transition-colors"
             >
@@ -349,12 +352,12 @@ export default function QuotationPdfModal({ quotation, onClose, onEdit, onDelete
                       {/* UPI QR Code Container with Frame */}
                       <div className="flex flex-col items-center flex-shrink-0 bg-white p-1 rounded-xl border border-slate-200 shadow-2xs">
                         <img
-                          src={`/uploads/qr/${settings?.payment_qr_code || 'default_upi_qr.png'}`}
+                          src={getUploadUrl(`/uploads/qr/${settings?.payment_qr_code || 'default_upi_qr.png'}`)}
                           alt="UPI QR Code"
                           className={`${isA5 ? 'w-12 h-12' : 'w-16 h-16 sm:w-18 sm:h-18'} object-contain rounded-md`}
                           onError={(e) => {
                             e.target.onerror = null;
-                            e.target.src = '/uploads/qr/default_upi_qr.png';
+                            e.target.src = getUploadUrl('/uploads/qr/default_upi_qr.png');
                           }}
                         />
                         <span className={`${isA5 ? 'text-[7px]' : 'text-[8px]'} font-black text-[#00545C] mt-0.5 uppercase tracking-wider`}>

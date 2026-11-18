@@ -4,7 +4,7 @@ import {
   FileText, Download, Share2, CheckCircle2, ArrowRight, Loader2, Sparkles,
   Smartphone, Monitor, HelpCircle
 } from 'lucide-react';
-import { api } from '../api/client';
+import { api, getApiUrl, getAbsoluteApiUrl } from '../api/client';
 import { useAuth } from '../context/AuthContext';
 
 function formatItemsList(items) {
@@ -92,9 +92,8 @@ export default function WhatsAppShareModal({ quotation, onClose, onShared }) {
   const gpayNumber = settings?.gpay_number || '+91 97156 22499';
   const itemsText = formatItemsList(quotation.items);
 
-  const origin = typeof window !== 'undefined' ? window.location.origin : '';
   const pdfFormat = quotation.paper_format || 'A4';
-  const pdfDownloadUrl = `${origin}/api/quotations/${quotation.id}/pdf?format=${pdfFormat}&download=true`;
+  const pdfDownloadUrl = getAbsoluteApiUrl(`/quotations/${quotation.id}/pdf?format=${pdfFormat}&download=true`);
 
   // 1. URL-Safe Concise Summaries (< 400 chars raw, < 1,200 bytes encoded)
   // This guarantees WhatsApp Web never drops the phone parameter or exceeds URL buffers!
@@ -311,7 +310,7 @@ Thank you for your business! 🙏🌟`
     // 2. Trigger instant PDF download without delaying or blocking window.open
     try {
       const downloadLink = document.createElement('a');
-      downloadLink.href = `/api/quotations/${quotation.id}/pdf?format=${pdfFormat}&download=true`;
+      downloadLink.href = getApiUrl(`/quotations/${quotation.id}/pdf?format=${pdfFormat}&download=true`);
       downloadLink.download = `${quotation.quotation_number}.pdf`;
       document.body.appendChild(downloadLink);
       downloadLink.click();
@@ -330,8 +329,11 @@ Thank you for your business! 🙏🌟`
     try {
       setIsDownloadingPdf(true);
       setErrorMessage('');
-      const pdfRes = await fetch(`/api/quotations/${quotation.id}/pdf?format=${pdfFormat}&download=true`);
-      if (!pdfRes.ok) throw new Error('Failed to fetch quotation PDF');
+      const pdfRes = await fetch(getApiUrl(`/quotations/${quotation.id}/pdf?format=${pdfFormat}&download=true`));
+      const contentType = pdfRes.headers.get('content-type') || '';
+      if (!pdfRes.ok || !contentType.includes('application/pdf')) {
+        throw new Error('Failed to fetch quotation PDF. Please verify backend server connection.');
+      }
       const blob = await pdfRes.blob();
       const downloadUrl = window.URL.createObjectURL(blob);
       const link = document.createElement('a');

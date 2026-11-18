@@ -5,13 +5,16 @@ import {
   ChevronRight, Shield, CheckCircle2
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { getUploadUrl } from '../api/client';
 
 export default function Sidebar({ activePage, setActivePage, onOpenWhatsAppParser, mobileOpen, setMobileOpen }) {
   const { user, settings } = useAuth();
 
-  const logoUrl = settings?.company_logo 
-    ? `/uploads/logos/${settings.company_logo}` 
-    : '/uploads/logos/udhayam_logo.png';
+  const logoUrl = getUploadUrl(
+    settings?.company_logo
+      ? `/uploads/logos/${settings.company_logo}`
+      : '/uploads/logos/udhayam_logo.png'
+  );
 
   const navItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },

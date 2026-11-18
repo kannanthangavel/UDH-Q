@@ -59,25 +59,29 @@ app.use('/api/settings', settingRoutes);
 app.use('/api/audit', auditRoutes);
 app.use('/api/whatsapp', whatsappRoutes);
 
-// Health check endpoint
-app.get('/api/health', (req, res) => {
+// Health check endpoints (supports both /health and /api/health for Render & uptime checks)
+const healthResponse = (req, res) => {
   res.json({
     status: 'ok',
     app: 'UD-QM - Udhayam Agencies Quotation Management',
     timestamp: new Date().toISOString()
   });
-});
+};
+app.get('/health', healthResponse);
+app.get('/api/health', healthResponse);
 
-// Serve frontend in production if built
-const clientDist = path.join(__dirname, '../../client/dist');
-if (fs.existsSync(clientDist)) {
-  app.use(express.static(clientDist));
+// Serve frontend in production if built alongside backend
+const frontendDist = path.join(__dirname, '../../../frontend/dist');
+if (fs.existsSync(frontendDist)) {
+  app.use(express.static(frontendDist));
   app.use((req, res, next) => {
     if (req.method === 'GET' && !req.path.startsWith('/api') && !req.path.startsWith('/uploads')) {
-      return res.sendFile(path.join(clientDist, 'index.html'));
+      return res.sendFile(path.join(frontendDist, 'index.html'));
     }
     next();
   });
+} else {
+  app.get('/', healthResponse);
 }
 
 // 404 handler for API routes

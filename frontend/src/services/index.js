@@ -1,4 +1,15 @@
-import { request, getUploadUrl, API_BASE, getStoredToken } from './apiClient';
+import {
+  request,
+  getUploadUrl,
+  getApiOrigin,
+  setCustomApiBaseUrl,
+  getApiBase,
+  getApiUrl,
+  getAbsoluteApiUrl,
+  checkBackendHealth,
+  API_BASE,
+  getStoredToken
+} from './apiClient';
 import { authApi } from './authApi';
 import { customerApi } from './customerApi';
 import { productApi } from './productApi';
@@ -9,6 +20,12 @@ import { settingsApi, dashboardApi, importsApi, auditApi } from './settingsApi';
 export {
   request,
   getUploadUrl,
+  getApiOrigin,
+  setCustomApiBaseUrl,
+  getApiBase,
+  getApiUrl,
+  getAbsoluteApiUrl,
+  checkBackendHealth,
   API_BASE,
   getStoredToken,
   authApi,

@@ -9,6 +9,8 @@ import PriceListAndCatalogue from './pages/PriceListAndCatalogue';
 import Customers from './pages/Customers';
 import Settings from './pages/Settings';
 import SmartParserModal from './components/SmartParserModal';
+import ErrorBoundary from './components/ErrorBoundary';
+import BackendStatusBanner from './components/BackendStatusBanner';
 
 export default function App() {
   const [activePage, setActivePage] = useState('dashboard');
@@ -36,29 +38,33 @@ export default function App() {
   }
 
   return (
-    <AuthProvider>
-      <div className="min-h-screen flex bg-[#F5F8F5] text-slate-900 selection:bg-[#7DBA00] selection:text-[#003B40]">
-        
-        {/* Left Vertical Modern Sidebar (Desktop Persistent + Mobile Drawer) */}
-        <Sidebar 
-          activePage={activePage} 
-          setActivePage={setActivePage} 
-          onOpenWhatsAppParser={() => setShowGlobalParser(true)}
-          mobileOpen={mobileSidebarOpen}
-          setMobileOpen={setMobileSidebarOpen}
-        />
-
-        {/* Right Main Content Column */}
-        <div className="flex-1 flex flex-col min-w-0 min-h-screen">
+    <ErrorBoundary onReset={() => setActivePage('dashboard')}>
+      <AuthProvider>
+        <div className="min-h-screen flex bg-[#F5F8F5] text-slate-900 selection:bg-[#7DBA00] selection:text-[#003B40]">
           
-          {/* Top Header with Breadcrumbs, Brand division, and WhatsApp Action */}
-          <TopHeader 
-            activePage={activePage}
-            onToggleMobileSidebar={() => setMobileSidebarOpen(prev => !prev)}
+          {/* Left Vertical Modern Sidebar (Desktop Persistent + Mobile Drawer) */}
+          <Sidebar 
+            activePage={activePage} 
+            setActivePage={setActivePage} 
             onOpenWhatsAppParser={() => setShowGlobalParser(true)}
+            mobileOpen={mobileSidebarOpen}
+            setMobileOpen={setMobileSidebarOpen}
           />
 
-          {/* Main Workspace Container */}
+          {/* Right Main Content Column */}
+          <div className="flex-1 flex flex-col min-w-0 min-h-screen">
+            
+            {/* Top Header with Breadcrumbs, Brand division, and WhatsApp Action */}
+            <TopHeader 
+              activePage={activePage}
+              onToggleMobileSidebar={() => setMobileSidebarOpen(prev => !prev)}
+              onOpenWhatsAppParser={() => setShowGlobalParser(true)}
+            />
+
+            {/* Live Backend Connectivity Banner (only visible when backend is unreachable) */}
+            <BackendStatusBanner />
+
+            {/* Main Workspace Container */}
           <main className="flex-1 p-4 sm:p-6 lg:p-8 max-w-7xl w-full mx-auto">
             {activePage === 'dashboard' && (
               <Dashboard 
@@ -132,5 +138,6 @@ export default function App() {
 
       </div>
     </AuthProvider>
+    </ErrorBoundary>
   );
 }

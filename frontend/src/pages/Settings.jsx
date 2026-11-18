@@ -5,7 +5,7 @@ import {
   Users, Plus, FileText, MessageSquare, Key, Lock, CheckCircle2,
   QrCode
 } from 'lucide-react';
-import { api } from '../api/client';
+import { api, getUploadUrl } from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import ThemedConfirmDialog from '../components/ThemedConfirmDialog';
 
@@ -357,8 +357,8 @@ export default function Settings() {
     }
   }
 
-  const currentLogoSrc = logoPreviewUrl || `/uploads/logos/${companyLogo}`;
-  const currentQrSrc = qrPreviewUrl || `/uploads/qr/${paymentQrCode || 'default_upi_qr.png'}`;
+  const currentLogoSrc = logoPreviewUrl || getUploadUrl(`/uploads/logos/${companyLogo}`);
+  const currentQrSrc = qrPreviewUrl || getUploadUrl(`/uploads/qr/${paymentQrCode || 'default_upi_qr.png'}`);
 
   return (
     <div className="space-y-6">

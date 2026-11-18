@@ -4,7 +4,7 @@ import {
   Mail, AlertCircle, Sparkles, Building2, Phone, MapPin, Tag, 
   MessageSquare, Edit3, X, QrCode, ArrowRight, CheckCircle2, ChevronDown, Layers, Loader2
 } from 'lucide-react';
-import { api } from '../api/client';
+import { api, getUploadUrl } from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import QuotationPdfModal from '../components/QuotationPdfModal';
 import WhatsAppShareModal from '../components/WhatsAppShareModal';
@@ -217,7 +217,13 @@ export default function CreateQuotation({ setActivePage, initialCustomer, import
   async function loadProductCounts() {
     try {
       const res = await api.getProductCounts();
-      if (res) setProductCounts(res);
+      if (res && typeof res.total === 'number') {
+        setProductCounts({
+          total: Number(res.total) || 0,
+          paints: Number(res.paints) || 0,
+          access: Number(res.access) || 0
+        });
+      }
     } catch (e) {}
   }
 
@@ -726,7 +732,7 @@ export default function CreateQuotation({ setActivePage, initialCustomer, import
               className="flex items-center space-x-1.5 px-3.5 py-2 rounded-xl bg-[#00545C] hover:bg-[#0A6D77] text-white text-xs font-bold shadow-xs active:scale-95 cursor-pointer transition-all"
             >
               <Layers className="w-3.5 h-3.5 text-[#7DBA00]" />
-              <span>Browse Catalogue ({productCounts.total.toLocaleString()})</span>
+              <span>Browse Catalogue ({(productCounts?.total ?? 0).toLocaleString()})</span>
             </button>
 
             <button
@@ -1484,12 +1490,12 @@ export default function CreateQuotation({ setActivePage, initialCustomer, import
             <div className="flex items-center space-x-4 pt-3">
               <div className="w-20 h-20 bg-slate-50 border border-slate-200 rounded-xl p-1 flex items-center justify-center flex-shrink-0">
                 <img
-                  src={`/uploads/qr/${settings?.payment_qr_code || 'default_upi_qr.png'}`}
+                  src={getUploadUrl(`/uploads/qr/${settings?.payment_qr_code || 'default_upi_qr.png'}`)}
                   alt="UPI QR Code"
                   className="max-h-full max-w-full object-contain"
                   onError={(e) => {
                     e.target.onerror = null;
-                    e.target.src = '/uploads/qr/default_upi_qr.png';
+                    e.target.src = getUploadUrl('/uploads/qr/default_upi_qr.png');
                   }}
                 />
               </div>
@@ -1770,7 +1776,7 @@ export default function CreateQuotation({ setActivePage, initialCustomer, import
                     catalogSection === 'PAINTS' ? 'bg-[#00545C] text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'
                   }`}
                 >
-                  PAINTS ({productCounts.paints.toLocaleString()})
+                  PAINTS ({(productCounts?.paints ?? 0).toLocaleString()})
                 </button>
                 <button
                   type="button"
@@ -1779,7 +1785,7 @@ export default function CreateQuotation({ setActivePage, initialCustomer, import
                     catalogSection === 'ACCESS' ? 'bg-[#00545C] text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'
                   }`}
                 >
-                  ACCESSORIES ({productCounts.access.toLocaleString()})
+                  ACCESSORIES ({(productCounts?.access ?? 0).toLocaleString()})
                 </button>
               </div>
 
@@ -1869,14 +1875,14 @@ export default function CreateQuotation({ setActivePage, initialCustomer, import
               )}
 
               {/* Optional Load All Button for browsing entire section without searching */}
-              {catalogProducts.length < (productCounts[catalogSection.toLowerCase()] || 0) && !catalogSearch.trim() && (
+              {catalogProducts.length < (productCounts?.[catalogSection.toLowerCase()] || 0) && !catalogSearch.trim() && (
                 <div className="p-4 text-center bg-slate-50 border-t border-slate-200">
                   <button
                     type="button"
                     onClick={() => fetchCatalogProducts(true)}
                     className="px-4 py-2 rounded-xl bg-white border border-[#00545C] text-[#00545C] hover:bg-[#00545C] hover:text-white text-xs font-bold transition-all shadow-xs cursor-pointer"
                   >
-                    Load all {productCounts[catalogSection.toLowerCase()].toLocaleString()} {catalogSection} products &darr;
+                    Load all {(productCounts?.[catalogSection.toLowerCase()] ?? 0).toLocaleString()} {catalogSection} products &darr;
                   </button>
                 </div>
               )}

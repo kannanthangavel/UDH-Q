@@ -24,7 +24,9 @@ export default function Dashboard({ setActivePage, onStartQuoteWithImport }) {
     try {
       setLoading(true);
       const res = await api.getDashboard();
-      setData(res);
+      if (res && res.metrics) {
+        setData(res);
+      }
     } catch (err) {
       console.error('Failed to load dashboard:', err);
     } finally {
@@ -289,8 +291,12 @@ export default function Dashboard({ setActivePage, onStartQuoteWithImport }) {
                         <div className="flex items-center justify-end space-x-1.5">
                           <button
                             onClick={async () => {
-                              const res = await api.getQuotation(quote.id);
-                              setSelectedQuoteForPdf(res.quotation);
+                              try {
+                                const res = await api.getQuotation(quote.id);
+                                if (res?.quotation) setSelectedQuoteForPdf(res.quotation);
+                              } catch (err) {
+                                console.warn('Failed to open PDF:', err);
+                              }
                             }}
                             className="p-1.5 text-slate-600 hover:text-[#00545C] hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
                             title="View / Print PDF"
@@ -299,8 +305,12 @@ export default function Dashboard({ setActivePage, onStartQuoteWithImport }) {
                           </button>
                           <button
                             onClick={async () => {
-                              const res = await api.getQuotation(quote.id);
-                              setSelectedQuoteForWa(res.quotation);
+                              try {
+                                const res = await api.getQuotation(quote.id);
+                                if (res?.quotation) setSelectedQuoteForWa(res.quotation);
+                              } catch (err) {
+                                console.warn('Failed to open WhatsApp share:', err);
+                              }
                             }}
                             className="p-1.5 text-slate-600 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors cursor-pointer"
                             title="Share on WhatsApp"

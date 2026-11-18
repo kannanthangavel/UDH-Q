@@ -134,23 +134,39 @@ export default function Quotations({ setActivePage, onEditQuotation }) {
   }
 
   async function openPdf(quote) {
-    const full = await api.getQuotation(quote.id);
-    setSelectedQuoteForPdf(full.quotation);
+    try {
+      const full = await api.getQuotation(quote.id);
+      if (full?.quotation) setSelectedQuoteForPdf(full.quotation);
+    } catch (err) {
+      showToast('Failed to load quotation PDF: ' + err.message, true);
+    }
   }
 
   async function openWhatsApp(quote) {
-    const full = await api.getQuotation(quote.id);
-    setSelectedQuoteForWa(full.quotation);
+    try {
+      const full = await api.getQuotation(quote.id);
+      if (full?.quotation) setSelectedQuoteForWa(full.quotation);
+    } catch (err) {
+      showToast('Failed to load quotation for WhatsApp: ' + err.message, true);
+    }
   }
 
   async function openEmail(quote) {
-    const full = await api.getQuotation(quote.id);
-    setSelectedQuoteForEmail(full.quotation);
+    try {
+      const full = await api.getQuotation(quote.id);
+      if (full?.quotation) setSelectedQuoteForEmail(full.quotation);
+    } catch (err) {
+      showToast('Failed to load quotation for Email: ' + err.message, true);
+    }
   }
 
   async function openDetail(quote) {
-    const full = await api.getQuotation(quote.id);
-    setViewQuoteDetail(full.quotation);
+    try {
+      const full = await api.getQuotation(quote.id);
+      if (full?.quotation) setViewQuoteDetail(full.quotation);
+    } catch (err) {
+      showToast('Failed to load quotation details: ' + err.message, true);
+    }
   }
 
   function formatCurrency(val) {
