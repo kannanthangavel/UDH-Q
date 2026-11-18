@@ -6,15 +6,12 @@ const fs = require('fs');
 const crypto = require('crypto');
 const { db, logAudit } = require('../db/database');
 const { requireAdmin } = require('../middleware/auth');
+const { getUploadsSubdir } = require('../utils/storagePaths');
 
 // Multer storage for logo / company profile image upload
 const logoStorage = multer.diskStorage({
   destination: (req, file, cb) => {
-    const dir = path.join(__dirname, '../../storage/uploads/logos');
-    if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true });
-    }
-    cb(null, dir);
+    cb(null, getUploadsSubdir('logos'));
   },
   filename: (req, file, cb) => {
     const ext = path.extname(file.originalname).toLowerCase();
@@ -40,11 +37,7 @@ const uploadLogo = multer({
 // Multer storage for manual UPI payment QR code upload
 const qrStorage = multer.diskStorage({
   destination: (req, file, cb) => {
-    const dir = path.join(__dirname, '../../storage/uploads/qr');
-    if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true });
-    }
-    cb(null, dir);
+    cb(null, getUploadsSubdir('qr'));
   },
   filename: (req, file, cb) => {
     const ext = path.extname(file.originalname).toLowerCase();

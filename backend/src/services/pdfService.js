@@ -2,6 +2,7 @@ const PDFDocument = require('pdfkit');
 const path = require('path');
 const fs = require('fs');
 const { numberToIndianWords, formatINR } = require('../utils/numberToWords');
+const { resolveUploadedFile } = require('../utils/storagePaths');
 
 // Brand Colors
 const COLOR_TEAL = '#00545C';
@@ -12,23 +13,11 @@ const COLOR_MUTED = '#64748B';
 const COLOR_BORDER = '#CBD5E1';
 
 function getLogoPath(companyLogoSetting) {
-  if (companyLogoSetting) {
-    const fullPath = path.join(__dirname, '../../storage/uploads/logos', companyLogoSetting);
-    if (fs.existsSync(fullPath)) return fullPath;
-  }
-  const defaultPath = path.join(__dirname, '../../storage/uploads/logos/udhayam_logo.png');
-  if (fs.existsSync(defaultPath)) return defaultPath;
-  return null;
+  return resolveUploadedFile('logos', companyLogoSetting, 'udhayam_logo.png');
 }
 
 function getQrCodePath(paymentQrSetting) {
-  if (paymentQrSetting) {
-    const customPath = path.join(__dirname, '../../storage/uploads/qr', paymentQrSetting);
-    if (fs.existsSync(customPath)) return customPath;
-  }
-  const defaultPath = path.join(__dirname, '../../storage/uploads/qr/default_upi_qr.png');
-  if (fs.existsSync(defaultPath)) return defaultPath;
-  return null;
+  return resolveUploadedFile('qr', paymentQrSetting, 'default_upi_qr.png');
 }
 
 /**

@@ -27,21 +27,12 @@ app.use(cors({
 app.use(express.json({ limit: '15mb' }));
 app.use(express.urlencoded({ extended: true, limit: '15mb' }));
 
-// Static uploads directory for logos and files
-const storageDirEnv = process.env.STORAGE_DIR;
-const isVercel = process.env.VERCEL === '1' || process.env.VERCEL === true || Boolean(process.env.VERCEL);
-const defaultUploads = path.join(__dirname, '../storage/uploads');
-const uploadsDir = storageDirEnv ? path.join(storageDirEnv, 'uploads') : (isVercel ? '/tmp/uploads' : defaultUploads);
-if (!fs.existsSync(uploadsDir)) {
-  try {
-    fs.mkdirSync(uploadsDir, { recursive: true });
-  } catch (e) {}
-}
-if (fs.existsSync(defaultUploads)) {
-  app.use('/uploads', express.static(defaultUploads));
-}
-if (uploadsDir !== defaultUploads && fs.existsSync(uploadsDir)) {
-  app.use('/uploads', express.static(uploadsDir));
+// Static uploads directory for logos, QR codes, and rate files (active writable dir takes priority over bundled)
+const { activeUploadsDir, bundledUploadsDir, ensureDir } = require('./utils/storagePaths');
+ensureDir(activeUploadsDir);
+app.use('/uploads', express.static(activeUploadsDir));
+if (bundledUploadsDir !== activeUploadsDir && fs.existsSync(bundledUploadsDir)) {
+  app.use('/uploads', express.static(bundledUploadsDir));
 }
 
 // Attach Auth Middleware
