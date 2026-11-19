@@ -742,4 +742,57 @@ router.post('/:id/audit-share', (req, res) => {
   res.json({ success: true, status: 'Shared' });
 });
 
+// Multer memory storage for Optech PDF quotation document parsing
+const multer = require('multer');
+const { processOptechPdf } = require('../services/optechPdfParser');
+
+const pdfUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 15 * 1024 * 1024 }, // 15MB max
+  fileFilter: (req, file, cb) => {
+    if (file.mimetype === 'application/pdf' || file.originalname.toLowerCase().endsWith('.pdf')) {
+      cb(null, true);
+    } else {
+      cb(new Error('Only PDF quotation documents are supported.'));
+    }
+  }
+});
+
+// POST /api/quotations/upload-optech-pdf - Parse Optech software quote PDF and auto-match products
+router.post('/upload-optech-pdf', (req, res, next) => {
+  pdfUpload.single('file')(req, res, (err) => {
+    if (err) {
+      return res.status(400).json({ error: err.message });
+    }
+    next();
+  });
+}, async (req, res) => {
+  try {
+    if (!req.file || !req.file.buffer) {
+      return res.status(400).json({ error: 'Please upload an Optech Quotation PDF file.' });
+    }
+
+    const parsedData = await processOptechPdf(req.file.buffer);
+
+    logAudit(
+      req.user?.id || 1,
+      req.user?.email || 'admin@udhayam.com',
+      req.user?.role || 'admin',
+      'PARSE_OPTECH_PDF',
+      'QUOTATION',
+      null,
+      `Parsed Optech PDF "${req.file.originalname}" with ${parsedData.items.length} line items for ${parsedData.customer?.name || 'Customer'}`
+    );
+
+    res.json({
+      success: true,
+      filename: req.file.originalname,
+      ...parsedData
+    });
+  } catch (error) {
+    console.error('[Optech PDF Upload Error]:', error);
+    res.status(500).json({ error: error.message || 'Failed to process Optech Quotation PDF.' });
+  }
+});
+
 module.exports = router;

@@ -190,7 +190,10 @@ export async function request(endpoint, options = {}) {
       const errorData = await response.json().catch(() => ({}));
       throw new Error(errorData.error || `Request failed with status ${response.status}`);
     }
-    throw new Error(`Server error (${response.status}). The backend API may be restarting or unavailable.`);
+    if (response.status === 502 || response.status === 503 || response.status === 504 || response.status === 405) {
+      throw new Error('Backend server is waking up or updating (HTTP ' + response.status + '). Please try again in 10-15 seconds.');
+    }
+    throw new Error(`Server response error (${response.status}). The backend API may be restarting.`);
   }
 
   if (options.rawResponse) {
@@ -199,7 +202,7 @@ export async function request(endpoint, options = {}) {
 
   if (!contentType.includes('application/json')) {
     throw new Error(
-      'Backend API is not connected (received HTML instead of JSON). Please configure VITE_API_BASE_URL to your Render backend URL.'
+      'Backend server is currently starting up (received HTML instead of JSON). Please wait 15 seconds and retry.'
     );
   }
 

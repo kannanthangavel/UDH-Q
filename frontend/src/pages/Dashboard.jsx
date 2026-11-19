@@ -2,12 +2,13 @@ import React, { useState, useEffect } from 'react';
 import { 
   PlusCircle, FileText, CheckCircle2, Clock, 
   Layers, Users, ArrowUpRight, MessageCircle, Printer, Eye,
-  RefreshCw, TrendingUp, Sparkles, MessageSquare, ArrowRight
+  RefreshCw, TrendingUp, Sparkles, MessageSquare, ArrowRight, Upload
 } from 'lucide-react';
 import { api } from '../api/client';
 import QuotationPdfModal from '../components/QuotationPdfModal';
 import WhatsAppShareModal from '../components/WhatsAppShareModal';
 import SmartParserModal from '../components/SmartParserModal';
+import OptechPdfUploadModal from '../components/OptechPdfUploadModal';
 
 export default function Dashboard({ setActivePage, onStartQuoteWithImport }) {
   const [data, setData] = useState(null);
@@ -15,6 +16,7 @@ export default function Dashboard({ setActivePage, onStartQuoteWithImport }) {
   const [selectedQuoteForPdf, setSelectedQuoteForPdf] = useState(null);
   const [selectedQuoteForWa, setSelectedQuoteForWa] = useState(null);
   const [showParserModal, setShowParserModal] = useState(false);
+  const [showOptechModal, setShowOptechModal] = useState(false);
 
   useEffect(() => {
     loadDashboard();
@@ -82,6 +84,13 @@ export default function Dashboard({ setActivePage, onStartQuoteWithImport }) {
               <span>+ Create Quotation</span>
             </button>
             <button
+              onClick={() => setShowOptechModal(true)}
+              className="flex items-center space-x-2 px-4 py-3 rounded-xl bg-white/20 hover:bg-white/30 backdrop-blur-sm border border-white/30 text-white font-black text-sm shadow transition-all transform active:scale-95 cursor-pointer"
+            >
+              <FileText className="w-5 h-5 text-[#7DBA00]" />
+              <span>📄 Import Optech PDF</span>
+            </button>
+            <button
               onClick={() => setShowParserModal(true)}
               className="flex items-center space-x-2 px-4 py-3 rounded-xl bg-[#25D366] hover:bg-[#20ba59] text-white font-black text-sm shadow transition-all transform active:scale-95 cursor-pointer"
             >
@@ -95,34 +104,67 @@ export default function Dashboard({ setActivePage, onStartQuoteWithImport }) {
         <div className="absolute -right-12 -bottom-16 w-64 h-64 rounded-full bg-white/5 pointer-events-none"></div>
       </div>
 
-      {/* WhatsApp Smart Parser Showcase Card (User Request: "automation is missing and whatsapp intergration is failed...") */}
-      <div className="bg-gradient-to-br from-emerald-50 to-teal-50 border border-emerald-200/80 rounded-2xl p-5 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div className="flex items-start space-x-3.5">
-          <div className="w-12 h-12 rounded-2xl bg-[#25D366] text-white flex items-center justify-center flex-shrink-0 shadow-sm mt-0.5">
-            <MessageSquare className="w-6 h-6" />
-          </div>
-          <div>
-            <div className="flex items-center space-x-2">
-              <h3 className="text-sm sm:text-base font-extrabold text-slate-900">
-                WhatsApp Order AI Parser & Auto-Matcher
-              </h3>
-              <span className="bg-[#25D366] text-white text-[10px] font-black px-2 py-0.5 rounded-full uppercase">
-                Active
-              </span>
+      {/* Quick Action Cards Grid (Optech PDF Converter + WhatsApp Parser) */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {/* Optech PDF Converter Card */}
+        <div className="bg-gradient-to-br from-cyan-50 to-teal-50 border border-teal-200/80 rounded-2xl p-5 shadow-sm flex flex-col justify-between gap-4">
+          <div className="flex items-start space-x-3.5">
+            <div className="w-12 h-12 rounded-2xl bg-[#00545C] text-[#7DBA00] flex items-center justify-center flex-shrink-0 shadow-sm mt-0.5 font-black">
+              <FileText className="w-6 h-6" />
             </div>
-            <p className="text-xs text-slate-600 mt-0.5 max-w-xl">
-              Paste informal customer messages with typos or shorthand (e.g. <span className="font-mono font-bold text-slate-800">"golden brown 1ltr 5ps, putty powder 40kg, brush 2" 1ps"</span>) — UD-QM automatically matches authentic Excel products and builds quotations in 1 click!
-            </p>
+            <div>
+              <div className="flex items-center space-x-2">
+                <h3 className="text-sm sm:text-base font-extrabold text-slate-900">
+                  Optech PDF Quotation Ingestion
+                </h3>
+                <span className="bg-[#7DBA00] text-[#003B40] text-[10px] font-black px-2 py-0.5 rounded-full uppercase">
+                  New
+                </span>
+              </div>
+              <p className="text-xs text-slate-600 mt-0.5">
+                Upload Optech retail estimate PDFs — automatically matches Asian Paints, Berger & hardware products against the official 5,331-item catalogue with instant UD-QM A4/A5 PDF download and WhatsApp sharing!
+              </p>
+            </div>
           </div>
+
+          <button
+            onClick={() => setShowOptechModal(true)}
+            className="flex items-center justify-between px-5 py-2.5 rounded-xl bg-[#00545C] hover:bg-[#0A6D77] text-white font-black text-xs shadow-md transition-all transform active:scale-95 cursor-pointer"
+          >
+            <span>Upload Optech Quote PDF</span>
+            <ArrowRight className="w-4 h-4 text-[#7DBA00]" />
+          </button>
         </div>
 
-        <button
-          onClick={() => setShowParserModal(true)}
-          className="flex items-center space-x-1.5 px-5 py-2.5 rounded-xl bg-[#00545C] hover:bg-[#0A6D77] text-white font-black text-xs shadow-md transition-all transform active:scale-95 whitespace-nowrap cursor-pointer self-start md:self-auto"
-        >
-          <span>Launch WhatsApp Parser</span>
-          <ArrowRight className="w-4 h-4 text-[#7DBA00]" />
-        </button>
+        {/* WhatsApp Smart Parser Showcase Card */}
+        <div className="bg-gradient-to-br from-emerald-50 to-teal-50 border border-emerald-200/80 rounded-2xl p-5 shadow-sm flex flex-col justify-between gap-4">
+          <div className="flex items-start space-x-3.5">
+            <div className="w-12 h-12 rounded-2xl bg-[#25D366] text-white flex items-center justify-center flex-shrink-0 shadow-sm mt-0.5">
+              <MessageSquare className="w-6 h-6" />
+            </div>
+            <div>
+              <div className="flex items-center space-x-2">
+                <h3 className="text-sm sm:text-base font-extrabold text-slate-900">
+                  WhatsApp Order AI Parser
+                </h3>
+                <span className="bg-[#25D366] text-white text-[10px] font-black px-2 py-0.5 rounded-full uppercase">
+                  Active
+                </span>
+              </div>
+              <p className="text-xs text-slate-600 mt-0.5">
+                Paste informal customer messages with typos or shorthand (e.g. <span className="font-mono font-bold text-slate-800">"golden brown 1ltr 5ps, putty powder 40kg"</span>) — builds quotations in 1 click!
+              </p>
+            </div>
+          </div>
+
+          <button
+            onClick={() => setShowParserModal(true)}
+            className="flex items-center justify-between px-5 py-2.5 rounded-xl bg-[#25D366] hover:bg-[#20ba59] text-white font-black text-xs shadow-md transition-all transform active:scale-95 cursor-pointer"
+          >
+            <span>Launch WhatsApp Parser</span>
+            <ArrowRight className="w-4 h-4 text-white" />
+          </button>
+        </div>
       </div>
 
       {/* Summary KPI Cards */}
@@ -327,6 +369,27 @@ export default function Dashboard({ setActivePage, onStartQuoteWithImport }) {
           </div>
         )}
       </div>
+
+      {/* Optech Software PDF Upload & Auto-Convert Modal */}
+      {showOptechModal && (
+        <OptechPdfUploadModal
+          isOpen={showOptechModal}
+          onClose={() => setShowOptechModal(false)}
+          onApplyToStudio={(importData) => {
+            setShowOptechModal(false);
+            if (onStartQuoteWithImport) {
+              onStartQuoteWithImport(importData);
+            } else {
+              setActivePage('create-quotation');
+            }
+          }}
+          onQuotationCreated={(newQuote) => {
+            setShowOptechModal(false);
+            loadDashboard();
+            setSelectedQuoteForPdf(newQuote);
+          }}
+        />
+      )}
 
       {/* WhatsApp Smart Parser Modal */}
       {showParserModal && (

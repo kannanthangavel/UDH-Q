@@ -5,11 +5,11 @@
   "rewrites": [
     {
       "source": "/api/(.*)",
-      "destination": "/api/index.js"
+      "destination": "https://ud-qm-backend.onrender.com/api/$1"
     },
     {
       "source": "/uploads/(.*)",
-      "destination": "/api/index.js"
+      "destination": "https://ud-qm-backend.onrender.com/uploads/$1"
     },
     {
       "source": "/(.*)",

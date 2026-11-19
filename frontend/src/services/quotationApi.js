@@ -11,5 +11,6 @@ export const quotationApi = {
   getQuotation: (id) => request(`/quotations/${id}`),
   updateQuotationStatus: (id, status) => request(`/quotations/${id}/status`, { method: 'PATCH', body: JSON.stringify({ status }) }),
   duplicateQuotation: (id) => request(`/quotations/${id}/duplicate`, { method: 'POST' }),
+  uploadOptechPdf: (formData) => request('/quotations/upload-optech-pdf', { method: 'POST', body: formData }),
   auditShare: (id, channel, recipient) => request(`/quotations/${id}/audit-share`, { method: 'POST', body: JSON.stringify({ channel, recipient }) })
 };

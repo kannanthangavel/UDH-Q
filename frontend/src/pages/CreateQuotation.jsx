@@ -10,6 +10,7 @@ import QuotationPdfModal from '../components/QuotationPdfModal';
 import WhatsAppShareModal from '../components/WhatsAppShareModal';
 import EmailShareModal from '../components/EmailShareModal';
 import SmartParserModal from '../components/SmartParserModal';
+import OptechPdfUploadModal from '../components/OptechPdfUploadModal';
 import ThemedConfirmDialog from '../components/ThemedConfirmDialog';
 import { numberToIndianWords } from '../utils/numberToWords';
 
@@ -17,6 +18,9 @@ const COMMON_UNITS = ['Nos', 'Ltr', 'Kg', 'Box', 'Bag', 'Can', 'Set', 'Drum', 'R
 
 export default function CreateQuotation({ setActivePage, initialCustomer, importData, onClearImportData, editingQuote, onCancelEdit }) {
   const { settings } = useAuth();
+
+  // Optech Software PDF Converter Modal
+  const [showOptechModal, setShowOptechModal] = useState(false);
 
   // WhatsApp Smart Parser Modal
   const [showSmartParser, setShowSmartParser] = useState(false);
@@ -718,6 +722,16 @@ export default function CreateQuotation({ setActivePage, initialCustomer, import
 
             <button
               type="button"
+              onClick={() => setShowOptechModal(true)}
+              className="flex items-center space-x-1.5 px-3.5 py-2 rounded-xl bg-teal-800 hover:bg-teal-900 text-white text-xs font-bold shadow-xs active:scale-95 cursor-pointer transition-all"
+              title="Upload Optech software quotation PDF to automatically convert to UD-QM format"
+            >
+              <FileText className="w-3.5 h-3.5 text-[#7DBA00]" />
+              <span>📄 Import Optech PDF</span>
+            </button>
+
+            <button
+              type="button"
               onClick={() => setShowSmartParser(true)}
               className="flex items-center space-x-1.5 px-3.5 py-2 rounded-xl bg-[#25D366] hover:bg-[#20ba59] text-white text-xs font-bold shadow-xs active:scale-95 cursor-pointer transition-all"
               title="Paste WhatsApp text or customer messages to auto-match products"
@@ -1246,6 +1260,13 @@ export default function CreateQuotation({ setActivePage, initialCustomer, import
                 className="px-4 py-2 rounded-xl bg-[#00545C] hover:bg-[#0A6D77] text-white text-xs font-bold shadow-xs cursor-pointer"
               >
                 + Browse Official Catalogue
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowOptechModal(true)}
+                className="px-4 py-2 rounded-xl bg-teal-800 hover:bg-teal-900 text-white text-xs font-bold shadow-xs cursor-pointer"
+              >
+                📄 Import Optech PDF
               </button>
               <button
                 type="button"
@@ -1904,6 +1925,23 @@ export default function CreateQuotation({ setActivePage, initialCustomer, import
 
           </div>
         </div>
+      )}
+
+      {/* OPTECH PDF CONVERTER MODAL */}
+      {showOptechModal && (
+        <OptechPdfUploadModal
+          isOpen={showOptechModal}
+          onClose={() => setShowOptechModal(false)}
+          onApplyToStudio={(data) => {
+            setShowOptechModal(false);
+            applyImportData(data);
+          }}
+          onQuotationCreated={(newQuote) => {
+            setShowOptechModal(false);
+            setCreatedQuotation(newQuote);
+            setShowPdfModal(true);
+          }}
+        />
       )}
 
       {/* WHATSAPP SMART PARSER MODAL */}
