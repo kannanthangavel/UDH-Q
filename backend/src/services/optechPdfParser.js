@@ -251,15 +251,31 @@ function parseOptechText(rawText) {
       const m = line.match(itemRegex);
       if (m) {
         if (currentItem) rawItems.push(currentItem);
+        const qty = parseFloat(m[4]);
+        const rate = parseFloat(m[6]);
+        const valA = parseFloat(m[7]);
+        const valB = parseFloat(m[8]);
+
+        // In Optech: columns in text stream can be Rate Amount Tax% or Rate Tax% Amount
+        let amount = valA;
+        let taxPercent = valB;
+        if (valA <= 28 && (valB > 28 || Math.abs((qty * rate) - valB) < Math.abs((qty * rate) - valA))) {
+          taxPercent = valA;
+          amount = valB;
+        } else {
+          amount = valA;
+          taxPercent = valB;
+        }
+
         currentItem = {
           sNo: parseInt(m[1], 10),
           desc: m[2].trim(),
           hsn: m[3],
-          qty: parseFloat(m[4]),
+          qty: qty,
           unit: m[5] || 'Nos',
-          rate: parseFloat(m[6]),
-          taxPercent: parseFloat(m[7]),
-          amount: parseFloat(m[8])
+          rate: rate,
+          taxPercent: taxPercent,
+          amount: amount
         };
         continue;
       }
@@ -268,15 +284,30 @@ function parseOptechText(rawText) {
       const altM = line.match(altItemRegex);
       if (altM && !line.match(/^(?:Total|Taxable|GSTIN|Payment|Date|BANK)/i)) {
         if (currentItem) rawItems.push(currentItem);
+        const qty = parseFloat(altM[3]);
+        const rate = parseFloat(altM[5]);
+        const valA = parseFloat(altM[6]);
+        const valB = parseFloat(altM[7]);
+
+        let amount = valA;
+        let taxPercent = valB;
+        if (valA <= 28 && (valB > 28 || Math.abs((qty * rate) - valB) < Math.abs((qty * rate) - valA))) {
+          taxPercent = valA;
+          amount = valB;
+        } else {
+          amount = valA;
+          taxPercent = valB;
+        }
+
         currentItem = {
           sNo: parseInt(altM[1], 10),
           desc: altM[2].trim(),
           hsn: '3209',
-          qty: parseFloat(altM[3]),
+          qty: qty,
           unit: altM[4] || 'Nos',
-          rate: parseFloat(altM[5]),
-          taxPercent: parseFloat(altM[6]),
-          amount: parseFloat(altM[7])
+          rate: rate,
+          taxPercent: taxPercent,
+          amount: amount
         };
         continue;
       }
