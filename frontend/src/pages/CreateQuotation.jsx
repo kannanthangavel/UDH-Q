@@ -36,6 +36,10 @@ export default function CreateQuotation({ setActivePage, initialCustomer, import
   const [customerPhone, setCustomerPhone] = useState('');
   const [customerEmail, setCustomerEmail] = useState('');
   const [customerAddress, setCustomerAddress] = useState('');
+  const [customerGstin, setCustomerGstin] = useState('');
+  const [referenceNo, setReferenceNo] = useState('');
+  const [paymentTerms, setPaymentTerms] = useState('Cash');
+  const [isTaxInclusive, setIsTaxInclusive] = useState(true);
   const [customerError, setCustomerError] = useState('');
   const [customerNameTouched, setCustomerNameTouched] = useState(false);
   const [customerPhoneTouched, setCustomerPhoneTouched] = useState(false);
@@ -141,6 +145,12 @@ export default function CreateQuotation({ setActivePage, initialCustomer, import
       setCustomerPhone(editingQuote.customer_phone || '');
       setCustomerEmail(editingQuote.customer_email || '');
       setCustomerAddress(editingQuote.customer_address || '');
+      setCustomerGstin(editingQuote.customer_gstin || '');
+      setReferenceNo(editingQuote.reference_no || '');
+      setPaymentTerms(editingQuote.payment_terms || 'Cash');
+      if (editingQuote.is_tax_inclusive !== undefined) {
+        setIsTaxInclusive(Boolean(editingQuote.is_tax_inclusive));
+      }
       setPaperFormat(editingQuote.paper_format || 'A4');
       if (editingQuote.validity_date) setValidityDate(editingQuote.validity_date);
       if (editingQuote.notes != null) setNotes(editingQuote.notes);
@@ -254,11 +264,20 @@ export default function CreateQuotation({ setActivePage, initialCustomer, import
     const phone = data.customer?.phone || data.customer_phone || '';
     const email = data.customer?.email || data.customer_email || '';
     const address = data.customer?.address || data.customer_address || '';
+    const gstin = data.customer?.gstin || data.customer_gstin || '';
+    const refNo = data.reference_no || data.estimateNumber || '';
+    const terms = data.payment_terms || 'Cash';
 
     if (name) setCustomerName(name);
     if (phone) setCustomerPhone(phone);
     if (email) setCustomerEmail(email);
     if (address) setCustomerAddress(address);
+    if (gstin) setCustomerGstin(gstin);
+    if (refNo) setReferenceNo(refNo);
+    if (terms) setPaymentTerms(terms);
+    if (data.is_tax_inclusive !== undefined) {
+      setIsTaxInclusive(Boolean(data.is_tax_inclusive));
+    }
 
     if (data.items && data.items.length > 0) {
       const formattedItems = data.items.map((it, idx) => {
@@ -266,6 +285,7 @@ export default function CreateQuotation({ setActivePage, initialCustomer, import
         const qty = parseFloat(it.quantity) || 1;
         const rate = parseFloat(it.sale_rate || it.saleRate || 0);
         const customerReq = it.details || it.rawText || it.originalLine || '';
+        const taxPct = parseFloat(it.tax_percent || it.taxPercent || 18);
 
         return {
           id: Date.now() + Math.random() + idx,
@@ -277,6 +297,7 @@ export default function CreateQuotation({ setActivePage, initialCustomer, import
           quantity: qty,
           sale_rate: rate,
           catalog_rate: rate,
+          tax_percent: taxPct,
           line_total: Math.round(qty * rate * 100) / 100,
           is_overridden: false,
           availableSizes: it.availableSizes || []
@@ -559,6 +580,10 @@ export default function CreateQuotation({ setActivePage, initialCustomer, import
     setCustomerPhone('');
     setCustomerEmail('');
     setCustomerAddress('');
+    setCustomerGstin('');
+    setReferenceNo('');
+    setPaymentTerms('Cash');
+    setIsTaxInclusive(true);
     setSelectedCustomerId(null);
     setCustomerError('');
     setItems([]);
@@ -580,9 +605,10 @@ export default function CreateQuotation({ setActivePage, initialCustomer, import
       document.getElementById('customer-name-input')?.focus();
       return;
     }
-    if (customerPhone.replace(/\D/g, '').length < 10) {
+    const cleanPhoneDigits = customerPhone.replace(/\D/g, '');
+    if (!customerGstin.trim() && cleanPhoneDigits.length < 10) {
       setCustomerPhoneTouched(true);
-      setCustomerError('A valid 10-digit mobile number is required for quotation sharing.');
+      setCustomerError('A valid 10-digit mobile number or Customer GSTIN is required.');
       document.getElementById('customer-phone-input')?.focus();
       return;
     }
@@ -610,7 +636,10 @@ export default function CreateQuotation({ setActivePage, initialCustomer, import
         customer_phone: customerPhone.trim(),
         customer_email: customerEmail.trim(),
         customer_address: customerAddress.trim(),
-        is_tax_inclusive: true,
+        customer_gstin: customerGstin.trim(),
+        reference_no: referenceNo.trim(),
+        payment_terms: paymentTerms.trim(),
+        is_tax_inclusive: isTaxInclusive,
         items: items.map(it => {
           let finalDetails = it.details || '';
           if (it.customer_req && it.customer_req.trim() && !finalDetails.includes(it.customer_req.trim())) {
@@ -623,7 +652,9 @@ export default function CreateQuotation({ setActivePage, initialCustomer, import
             hsn_sac: it.hsn_sac,
             unit: it.unit || 'Nos',
             quantity: Math.max(0.01, parseFloat(it.quantity) || 1),
-            sale_rate: parseFloat(it.sale_rate) || 0
+            sale_rate: parseFloat(it.sale_rate) || 0,
+            tax_percent: parseFloat(it.tax_percent) || gstRateVal || 18,
+            line_total: it.line_total
           };
         }),
         discount_percent: discountMode === 'percent' ? (parseFloat(discountPercent) || 0) : 0,
@@ -1001,14 +1032,14 @@ export default function CreateQuotation({ setActivePage, initialCustomer, import
 
           <div>
             <label className="block font-bold text-slate-700 mb-1">
-              Email Address <span className="font-normal text-slate-400">(Optional)</span>
+              Customer GSTIN <span className="font-normal text-slate-400">(Optional / B2B)</span>
             </label>
             <input
-              type="email"
-              value={customerEmail}
-              onChange={(e) => setCustomerEmail(e.target.value)}
-              placeholder="client@gmail.com"
-              className="w-full px-3 py-2 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#00545C]/20 focus:border-[#00545C]"
+              type="text"
+              value={customerGstin}
+              onChange={(e) => setCustomerGstin(e.target.value.toUpperCase())}
+              placeholder="e.g. 33AAJCM3448G1ZI"
+              className="w-full px-3 py-2 border border-slate-300 rounded-xl font-mono uppercase focus:outline-none focus:ring-2 focus:ring-[#00545C]/20 focus:border-[#00545C]"
             />
           </div>
 
@@ -1024,7 +1055,46 @@ export default function CreateQuotation({ setActivePage, initialCustomer, import
             />
           </div>
 
-          <div className="sm:col-span-2 lg:col-span-4">
+          <div>
+            <label className="block font-bold text-slate-700 mb-1">
+              Email Address <span className="font-normal text-slate-400">(Optional)</span>
+            </label>
+            <input
+              type="email"
+              value={customerEmail}
+              onChange={(e) => setCustomerEmail(e.target.value)}
+              placeholder="client@gmail.com"
+              className="w-full px-3 py-2 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#00545C]/20 focus:border-[#00545C]"
+            />
+          </div>
+
+          <div>
+            <label className="block font-bold text-slate-700 mb-1">
+              Ref / Optech # <span className="font-normal text-slate-400">(Optional)</span>
+            </label>
+            <input
+              type="text"
+              value={referenceNo}
+              onChange={(e) => setReferenceNo(e.target.value)}
+              placeholder="e.g. 1182"
+              className="w-full px-3 py-2 border border-slate-300 rounded-xl font-mono focus:outline-none focus:ring-2 focus:ring-[#00545C]/20 focus:border-[#00545C]"
+            />
+          </div>
+
+          <div>
+            <label className="block font-bold text-slate-700 mb-1">
+              Payment Terms
+            </label>
+            <input
+              type="text"
+              value={paymentTerms}
+              onChange={(e) => setPaymentTerms(e.target.value)}
+              placeholder="e.g. Cash / Immediate / 30 Days"
+              className="w-full px-3 py-2 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#00545C]/20 focus:border-[#00545C]"
+            />
+          </div>
+
+          <div className="sm:col-span-2 lg:col-span-3">
             <label className="block font-bold text-slate-700 mb-1">
               Site / Delivery Address <span className="font-normal text-slate-400">(Printed on Quotation PDF)</span>
             </label>

@@ -230,6 +230,13 @@ function initDb() {
   try {
     db.exec("ALTER TABLE quotation_items ADD COLUMN details TEXT DEFAULT ''");
   } catch (e) {}
+  try { db.exec("ALTER TABLE quotations ADD COLUMN customer_gstin TEXT"); } catch (e) {}
+  try { db.exec("ALTER TABLE quotations ADD COLUMN reference_no TEXT"); } catch (e) {}
+  try { db.exec("ALTER TABLE quotations ADD COLUMN payment_terms TEXT"); } catch (e) {}
+  try { db.exec("ALTER TABLE quotations ADD COLUMN rounded_off REAL DEFAULT 0"); } catch (e) {}
+  try { db.exec("ALTER TABLE quotations ADD COLUMN is_tax_inclusive INTEGER DEFAULT 1"); } catch (e) {}
+  try { db.exec("ALTER TABLE quotation_items ADD COLUMN tax_percent REAL DEFAULT 18"); } catch (e) {}
+  try { db.exec("ALTER TABLE customers ADD COLUMN gstin TEXT"); } catch (e) {}
 
   seedInitialData();
 }

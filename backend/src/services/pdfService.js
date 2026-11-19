@@ -24,7 +24,7 @@ function getQrCodePath(paymentQrSetting) {
  * Generate Quotation PDF in A4 or A5 layout
  * Guaranteed 1-page fit for standard quotations (up to 12 items)
  */
-function generateQuotationPdf(quotation, settings, res) {
+function generateQuotationPdf(quotation, settings = {}, res = null) {
   const isA5 = quotation.paper_format === 'A5';
 
   const doc = new PDFDocument({
@@ -44,7 +44,17 @@ function generateQuotationPdf(quotation, settings, res) {
     }
   });
 
-  doc.pipe(res);
+  let bufferPromise = null;
+  if (res && typeof res.on === 'function') {
+    doc.pipe(res);
+  } else {
+    bufferPromise = new Promise((resolve, reject) => {
+      const chunks = [];
+      doc.on('data', chunk => chunks.push(chunk));
+      doc.on('end', () => resolve(Buffer.concat(chunks)));
+      doc.on('error', reject);
+    });
+  }
 
   const margin = isA5 ? 16 : 28;
   const pageWidth = doc.page.width;
@@ -127,13 +137,30 @@ function generateQuotationPdf(quotation, settings, res) {
   doc.fillColor(COLOR_TEXT)
      .font('Helvetica-Bold')
      .fontSize(isA5 ? 7.5 : 9.5)
-     .text(quotation.customer_name || 'Valued Customer', margin + 6, curY + (isA5 ? 13 : 17));
+     .text(quotation.customer_name || 'Valued Customer', margin + 6, curY + (isA5 ? 12 : 16));
 
-  doc.font('Helvetica')
-     .fontSize(isA5 ? 6 : 7.5)
-     .fillColor(COLOR_MUTED)
-     .text(`Phone: ${quotation.customer_phone || '-'}`, margin + 6, curY + (isA5 ? 23 : 29))
-     .text(`Address: ${quotation.customer_address || '-'}`, margin + 6, curY + (isA5 ? 32 : 39), { width: colWidth, height: 14, ellipsis: true });
+  let custDetailsY = curY + (isA5 ? 20 : 26);
+  if (quotation.customer_address) {
+    doc.font('Helvetica')
+       .fontSize(isA5 ? 5.5 : 7)
+       .fillColor(COLOR_MUTED)
+       .text(`Address: ${quotation.customer_address}`, margin + 6, custDetailsY, { width: colWidth, height: 12, ellipsis: true });
+    custDetailsY += (isA5 ? 9 : 11);
+  }
+
+  const contactParts = [];
+  if (quotation.customer_phone && quotation.customer_phone !== '-') {
+    contactParts.push(`Phone: ${quotation.customer_phone}`);
+  }
+  if (quotation.customer_gstin) {
+    contactParts.push(`GSTIN: ${quotation.customer_gstin}`);
+  }
+  if (contactParts.length > 0) {
+    doc.font('Helvetica-Bold')
+       .fontSize(isA5 ? 5.5 : 7)
+       .fillColor(COLOR_TEXT)
+       .text(contactParts.join('  |  '), margin + 6, custDetailsY, { width: colWidth, height: 11, ellipsis: true });
+  }
 
   // Vertical subtle divider between Customer & Quote details
   doc.moveTo(margin + colWidth + 4, curY + 6)
@@ -149,15 +176,22 @@ function generateQuotationPdf(quotation, settings, res) {
      .fontSize(isA5 ? 6.5 : 8)
      .text('QUOTATION DETAILS:', rightX, curY + (isA5 ? 4 : 6));
 
+  const quoteNoDisplay = quotation.reference_no
+    ? `${quotation.quotation_number} (Ref: ${quotation.reference_no})`
+    : quotation.quotation_number;
+
   doc.font('Helvetica')
      .fontSize(isA5 ? 6 : 7.5)
      .fillColor(COLOR_TEXT)
-     .text(`Quote No: `, rightX, curY + (isA5 ? 13 : 17), { continued: true })
-     .font('Helvetica-Bold').text(quotation.quotation_number)
-     .font('Helvetica').text(`Date: `, rightX, curY + (isA5 ? 23 : 28), { continued: true })
-     .font('Helvetica-Bold').text(quotation.quotation_date)
-     .font('Helvetica').text(`Valid Until: `, rightX, curY + (isA5 ? 32 : 39), { continued: true })
-     .font('Helvetica-Bold').text(quotation.validity_date || '7 days from issue');
+     .text(`Quote No: `, rightX, curY + (isA5 ? 12 : 16), { continued: true })
+     .font('Helvetica-Bold').text(quoteNoDisplay)
+     .font('Helvetica').text(`Date: `, rightX, curY + (isA5 ? 20 : 26), { continued: true })
+     .font('Helvetica-Bold').text(quotation.quotation_date);
+
+  const metaLine3 = quotation.payment_terms
+    ? `Terms: ${quotation.payment_terms}`
+    : `Valid Until: ${quotation.validity_date || '7 days'}`;
+  doc.font('Helvetica').text(metaLine3, rightX, curY + (isA5 ? 29 : 36));
 
   curY += infoBoxHeight + (isA5 ? 4 : 6);
 
@@ -169,15 +203,16 @@ function generateQuotationPdf(quotation, settings, res) {
   const tableBottomY = targetSummaryY - (isA5 ? 4 : 6);
   const tableHeaderHeight = isA5 ? 16 : 20;
 
-  // Line Items Table Columns with clean (Rs.) currency labels
+  // Line Items Table Columns with clean (Rs.) currency labels in Optech Layout Design
+  // Columns: S.No | Item Description & Specifications | HSN/SAC | Qty | Rate (Rs.) | Tax % | Amount (Rs.)
   const colDef = [
-    { label: 'S.No', width: isA5 ? 22 : 30, align: 'center' },
-    { label: 'Item Description & Specifications', width: isA5 ? (contentWidth - 212) : (contentWidth - 280), align: 'left' },
-    { label: 'HSN/SAC', width: isA5 ? 38 : 52, align: 'center' },
-    { label: 'Unit', width: isA5 ? 26 : 36, align: 'center' },
-    { label: 'Qty', width: isA5 ? 28 : 38, align: 'center' },
-    { label: 'Rate (Rs.)', width: isA5 ? 48 : 56, align: 'right' },
-    { label: 'Total (Rs.)', width: isA5 ? 50 : 68, align: 'right' }
+    { label: 'S.No', width: isA5 ? 20 : 28, align: 'center' },
+    { label: 'Item Description & Specifications', width: isA5 ? 165 : 235, align: 'left' },
+    { label: 'HSN/SAC', width: isA5 ? 42 : 56, align: 'center' },
+    { label: 'Qty', width: isA5 ? 38 : 50, align: 'center' },
+    { label: 'Rate (Rs.)', width: isA5 ? 44 : 58, align: 'right' },
+    { label: 'Tax %', width: isA5 ? 30 : 42, align: 'center' },
+    { label: 'Amount (Rs.)', width: isA5 ? 48 : 70, align: 'right' }
   ];
 
   function drawTableHeader(y) {
@@ -264,26 +299,29 @@ function generateQuotationPdf(quotation, settings, res) {
     }
     x += colDef[1].width;
 
-    // HSN
+    // HSN/SAC
     doc.font('Helvetica')
        .text(item.hsn_sac || '-', x + 2, curY + (isA5 ? 3 : 4.5), { width: colDef[2].width - 4, align: 'center' });
     x += colDef[2].width;
 
-    // Unit
-    doc.text(item.unit || 'Nos', x + 2, curY + (isA5 ? 3 : 4.5), { width: colDef[3].width - 4, align: 'center' });
+    // Qty (combined quantity and unit, matching Optech layout)
+    const qtyText = `${item.quantity} ${item.unit || 'Nos'}`;
+    doc.font('Helvetica-Bold')
+       .text(qtyText, x + 2, curY + (isA5 ? 3 : 4.5), { width: colDef[3].width - 4, align: 'center' });
     x += colDef[3].width;
 
-    // Qty
-    doc.font('Helvetica-Bold')
-       .text(String(item.quantity), x + 2, curY + (isA5 ? 3 : 4.5), { width: colDef[4].width - 4, align: 'center' });
+    // Rate (Rs.)
+    doc.font('Helvetica')
+       .text(Number(item.sale_rate).toFixed(2), x + 2, curY + (isA5 ? 3 : 4.5), { width: colDef[4].width - 4, align: 'right' });
     x += colDef[4].width;
 
-    // Rate
+    // Tax %
+    const taxVal = item.tax_percent != null ? item.tax_percent : (quotation.gst_rate || 18);
     doc.font('Helvetica')
-       .text(Number(item.sale_rate).toFixed(2), x + 2, curY + (isA5 ? 3 : 4.5), { width: colDef[5].width - 4, align: 'right' });
+       .text(`${taxVal}%`, x + 2, curY + (isA5 ? 3 : 4.5), { width: colDef[5].width - 4, align: 'center' });
     x += colDef[5].width;
 
-    // Total
+    // Amount (Rs.)
     doc.font('Helvetica-Bold')
        .text(Number(item.line_total).toFixed(2), x + 2, curY + (isA5 ? 3 : 4.5), { width: colDef[6].width - 4, align: 'right' });
 
@@ -392,23 +430,43 @@ function generateQuotationPdf(quotation, settings, res) {
     ty += isA5 ? 9.5 : 13;
   }
 
-  drawSummaryRow('Subtotal (MRP/Rates):', formatINR(quotation.subtotal));
+  const isTaxExclusive = quotation.is_tax_inclusive === 0 || quotation.is_tax_inclusive === false || quotation.is_tax_exclusive === true;
 
-  if (quotation.discount_percent > 0 || quotation.discount_amount > 0) {
-    drawSummaryRow(`Discount (${quotation.discount_percent}%):`, `- ${formatINR(quotation.discount_amount)}`);
-  }
+  if (isTaxExclusive) {
+    const totalQty = (quotation.items || []).reduce((acc, it) => acc + (parseFloat(it.quantity) || 0), 0);
+    drawSummaryRow('Total Quantity:', `${totalQty} Nos`);
+    drawSummaryRow('Taxable Value:', formatINR(quotation.subtotal));
 
-  // Tax Inclusive breakdown
-  const gstRateVal = Number(quotation.gst_rate) || 18;
-  const netBeforeTax = quotation.subtotal - (quotation.discount_amount || 0);
-  const taxableAmt = gstRateVal > 0 ? Math.round((netBeforeTax / (1 + (gstRateVal / 100))) * 100) / 100 : netBeforeTax;
-  const gstAmt = Math.round((netBeforeTax - taxableAmt) * 100) / 100;
+    const totalTax = quotation.gst_amount || 0;
+    const halfTax = Math.round((totalTax / 2) * 100) / 100;
+    const halfRate = (quotation.gst_rate ? quotation.gst_rate / 2 : 9.0).toFixed(2);
 
-  drawSummaryRow('Taxable Amount (Base):', formatINR(taxableAmt));
-  drawSummaryRow(`Total GST Included (${gstRateVal}%):`, formatINR(gstAmt));
+    drawSummaryRow(`CGST (${halfRate}%):`, `+ ${formatINR(halfTax)}`);
+    drawSummaryRow(`SGST (${halfRate}%):`, `+ ${formatINR(halfTax)}`);
+    drawSummaryRow(`Total Tax Amount:`, formatINR(totalTax));
 
-  if (quotation.delivery_charges > 0) {
-    drawSummaryRow('Delivery / Freight:', `+ ${formatINR(quotation.delivery_charges)}`);
+    if (quotation.rounded_off && Math.abs(quotation.rounded_off) > 0.001) {
+      drawSummaryRow('Rounded Off:', formatINR(quotation.rounded_off));
+    }
+  } else {
+    drawSummaryRow('Subtotal (MRP/Rates):', formatINR(quotation.subtotal));
+
+    if (quotation.discount_percent > 0 || quotation.discount_amount > 0) {
+      drawSummaryRow(`Discount (${quotation.discount_percent}%):`, `- ${formatINR(quotation.discount_amount)}`);
+    }
+
+    // Tax Inclusive breakdown
+    const gstRateVal = Number(quotation.gst_rate) || 18;
+    const netBeforeTax = quotation.subtotal - (quotation.discount_amount || 0);
+    const taxableAmt = gstRateVal > 0 ? Math.round((netBeforeTax / (1 + (gstRateVal / 100))) * 100) / 100 : netBeforeTax;
+    const gstAmt = Math.round((netBeforeTax - taxableAmt) * 100) / 100;
+
+    drawSummaryRow('Taxable Amount (Base):', formatINR(taxableAmt));
+    drawSummaryRow(`Total GST Included (${gstRateVal}%):`, formatINR(gstAmt));
+
+    if (quotation.delivery_charges > 0) {
+      drawSummaryRow('Delivery / Freight:', `+ ${formatINR(quotation.delivery_charges)}`);
+    }
   }
 
   // Divider
@@ -474,6 +532,7 @@ function generateQuotationPdf(quotation, settings, res) {
   }
 
   doc.end();
+  return bufferPromise;
 }
 
 /**
@@ -501,7 +560,17 @@ function generatePriceListPdf(products, sectionName, paperFormat, settings, res)
     }
   });
 
-  doc.pipe(res);
+  let bufferPromise = null;
+  if (res && typeof res.on === 'function') {
+    doc.pipe(res);
+  } else {
+    bufferPromise = new Promise((resolve, reject) => {
+      const chunks = [];
+      doc.on('data', chunk => chunks.push(chunk));
+      doc.on('end', () => resolve(Buffer.concat(chunks)));
+      doc.on('error', reject);
+    });
+  }
 
   const margin = isA5 ? 16 : 24;
   const pageWidth = doc.page.width;
@@ -638,6 +707,7 @@ function generatePriceListPdf(products, sectionName, paperFormat, settings, res)
   }
 
   doc.end();
+  return bufferPromise;
 }
 
 module.exports = {

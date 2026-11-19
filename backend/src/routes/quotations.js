@@ -8,15 +8,20 @@ router.post('/', (req, res) => {
   const {
     customer_id,
     customer_name,
-    customer_phone,
+    customer_phone = '',
     customer_email = '',
     customer_address = '',
+    customer_gstin = '',
+    reference_no = '',
+    payment_terms = 'Cash',
+    rounded_off = 0,
     items = [],
     discount_percent = 0,
     gst_rate = 18,
     is_tax_inclusive = true,
     delivery_charges = 0,
     paper_format = 'A4',
+    quotation_date,
     validity_date,
     notes = '',
     status = 'Created'
@@ -26,8 +31,9 @@ router.post('/', (req, res) => {
   if (!customer_name || !customer_name.trim()) {
     return res.status(400).json({ error: 'Customer name is required' });
   }
-  if (!customer_phone || !customer_phone.trim()) {
-    return res.status(400).json({ error: 'Customer phone number is required' });
+  const cleanPhone = (customer_phone || '').trim();
+  if (!cleanPhone && !customer_gstin && !customer_address) {
+    return res.status(400).json({ error: 'Customer phone number or GSTIN is required' });
   }
   if (!items || items.length === 0) {
     return res.status(400).json({ error: 'At least one product item is required to create a quotation' });
@@ -42,14 +48,19 @@ router.post('/', (req, res) => {
 
   // Handle customer persistence / auto-link
   if (!finalCustomerId) {
-    const existingCust = db.prepare('SELECT id FROM customers WHERE phone = ?').get(customer_phone.trim());
+    let existingCust = null;
+    if (cleanPhone) {
+      existingCust = db.prepare('SELECT id FROM customers WHERE phone = ?').get(cleanPhone);
+    } else if (customer_gstin) {
+      existingCust = db.prepare('SELECT id FROM customers WHERE gstin = ?').get(customer_gstin.trim());
+    }
     if (existingCust) {
       finalCustomerId = existingCust.id;
     } else {
       const newCust = db.prepare(`
-        INSERT INTO customers (name, phone, email, address)
-        VALUES (?, ?, ?, ?)
-      `).run(customer_name.trim(), customer_phone.trim(), customer_email.trim(), customer_address.trim());
+        INSERT INTO customers (name, phone, email, address, gstin)
+        VALUES (?, ?, ?, ?, ?)
+      `).run(customer_name.trim(), cleanPhone, customer_email.trim(), customer_address.trim(), (customer_gstin || '').trim());
       finalCustomerId = newCust.lastInsertRowid;
     }
   }
@@ -121,14 +132,15 @@ router.post('/', (req, res) => {
       unit: it.unit || originalProduct?.main_unit || 'Nos',
       quantity: qty,
       sale_rate: finalSaleRate,
+      tax_percent: it.tax_percent || gst_rate || 18,
       line_total: lineTotal,
       is_price_overridden: isOverridden,
       original_sale_rate: catalogRate
     });
   }
 
-  // Summary Calculations (Tax Inclusive by Default for Udhayam rate sheet)
-  const subtotal = Math.round(calculatedSubtotal * 100) / 100;
+  // Summary Calculations
+  let subtotal = Math.round(calculatedSubtotal * 100) / 100;
   const discPercent = Math.min(100, Math.max(0, parseFloat(discount_percent) || 0));
   const discountAmount = Math.round((subtotal * discPercent / 100) * 100) / 100;
   const discountedNet = Math.max(0, subtotal - discountAmount);
@@ -151,13 +163,14 @@ router.post('/', (req, res) => {
     }
     grandTotal = Math.round((discountedNet + deliveryVal) * 100) / 100;
   } else {
-    // Tax Exclusive: GST is added on top
-    taxableValue = discountedNet;
-    gstAmount = Math.round((discountedNet * gstRateVal / 100) * 100) / 100;
-    grandTotal = Math.round((discountedNet + gstAmount + deliveryVal) * 100) / 100;
+    // Tax Exclusive: GST is added on top (Optech standard)
+    taxableValue = req.body.subtotal != null ? parseFloat(req.body.subtotal) : discountedNet;
+    subtotal = taxableValue;
+    gstAmount = req.body.gst_amount != null ? parseFloat(req.body.gst_amount) : Math.round((discountedNet * gstRateVal / 100) * 100) / 100;
+    grandTotal = req.body.grand_total != null ? parseFloat(req.body.grand_total) : Math.round((discountedNet + gstAmount + deliveryVal + (parseFloat(rounded_off) || 0)) * 100) / 100;
   }
 
-  const todayStr = new Date().toISOString().split('T')[0];
+  const todayStr = quotation_date || new Date().toISOString().split('T')[0];
   const validUntilStr = validity_date || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
 
   let quotationId = null;
@@ -169,18 +182,24 @@ router.post('/', (req, res) => {
     const insertQuote = db.prepare(`
       INSERT INTO quotations (
         quotation_number, customer_id, customer_name, customer_phone, customer_email, customer_address,
+        customer_gstin, reference_no, payment_terms, rounded_off, is_tax_inclusive,
         created_by, quotation_date, validity_date, status, subtotal, discount_percent, discount_amount,
         gst_rate, gst_amount, delivery_charges, grand_total, paper_format, notes
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     const result = insertQuote.run(
       quoteNumber,
       finalCustomerId,
       customer_name.trim(),
-      customer_phone.trim(),
+      cleanPhone,
       customer_email.trim(),
       customer_address.trim(),
+      (customer_gstin || '').trim(),
+      (reference_no || '').trim(),
+      (payment_terms || 'Cash').trim(),
+      Number(rounded_off) || 0,
+      is_tax_inclusive ? 1 : 0,
       userName,
       todayStr,
       validUntilStr,
@@ -200,8 +219,8 @@ router.post('/', (req, res) => {
 
     const insertItem = db.prepare(`
       INSERT INTO quotation_items (
-        quotation_id, product_id, item_name, details, hsn_sac, unit, quantity, sale_rate, line_total, is_price_overridden, original_sale_rate
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        quotation_id, product_id, item_name, details, hsn_sac, unit, quantity, sale_rate, tax_percent, line_total, is_price_overridden, original_sale_rate
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     for (const item of processedItems) {
@@ -214,6 +233,7 @@ router.post('/', (req, res) => {
         item.unit,
         item.quantity,
         item.sale_rate,
+        item.tax_percent || gstRateVal || 18,
         item.line_total,
         item.is_price_overridden,
         item.original_sale_rate
@@ -338,13 +358,17 @@ router.put('/:id', (req, res) => {
   const {
     customer_id,
     customer_name,
-    customer_phone,
+    customer_phone = '',
     customer_email = '',
     customer_address = '',
+    customer_gstin = quote.customer_gstin || '',
+    reference_no = quote.reference_no || '',
+    payment_terms = quote.payment_terms || 'Cash',
+    rounded_off = quote.rounded_off || 0,
     items = [],
     discount_percent = 0,
     gst_rate = 18,
-    is_tax_inclusive = true,
+    is_tax_inclusive = quote.is_tax_inclusive !== undefined ? Boolean(quote.is_tax_inclusive) : true,
     delivery_charges = 0,
     paper_format = 'A4',
     validity_date,
@@ -355,8 +379,9 @@ router.put('/:id', (req, res) => {
   if (!customer_name || !customer_name.trim()) {
     return res.status(400).json({ error: 'Customer name is required' });
   }
-  if (!customer_phone || !customer_phone.trim()) {
-    return res.status(400).json({ error: 'Customer phone number is required' });
+  const cleanPhone = (customer_phone || '').trim();
+  if (!cleanPhone && !customer_gstin && !customer_address) {
+    return res.status(400).json({ error: 'Customer phone number or GSTIN is required' });
   }
   if (!items || items.length === 0) {
     return res.status(400).json({ error: 'At least one product item is required to update a quotation' });
@@ -369,14 +394,19 @@ router.put('/:id', (req, res) => {
 
   let finalCustomerId = customer_id;
   if (!finalCustomerId) {
-    const existingCust = db.prepare('SELECT id FROM customers WHERE phone = ?').get(customer_phone.trim());
+    let existingCust = null;
+    if (cleanPhone) {
+      existingCust = db.prepare('SELECT id FROM customers WHERE phone = ?').get(cleanPhone);
+    } else if (customer_gstin) {
+      existingCust = db.prepare('SELECT id FROM customers WHERE gstin = ?').get(customer_gstin.trim());
+    }
     if (existingCust) {
       finalCustomerId = existingCust.id;
     } else {
       const newCust = db.prepare(`
-        INSERT INTO customers (name, phone, email, address)
-        VALUES (?, ?, ?, ?)
-      `).run(customer_name.trim(), customer_phone.trim(), customer_email.trim(), customer_address.trim());
+        INSERT INTO customers (name, phone, email, address, gstin)
+        VALUES (?, ?, ?, ?, ?)
+      `).run(customer_name.trim(), cleanPhone, customer_email.trim(), customer_address.trim(), (customer_gstin || '').trim());
       finalCustomerId = newCust.lastInsertRowid;
     }
   }
@@ -490,6 +520,11 @@ router.put('/:id', (req, res) => {
         customer_phone = ?,
         customer_email = ?,
         customer_address = ?,
+        customer_gstin = ?,
+        reference_no = ?,
+        payment_terms = ?,
+        rounded_off = ?,
+        is_tax_inclusive = ?,
         validity_date = ?,
         status = ?,
         subtotal = ?,
@@ -506,9 +541,14 @@ router.put('/:id', (req, res) => {
     `).run(
       finalCustomerId,
       customer_name.trim(),
-      customer_phone.trim(),
+      cleanPhone,
       customer_email.trim(),
       customer_address.trim(),
+      (customer_gstin || '').trim(),
+      (reference_no || '').trim(),
+      (payment_terms || 'Cash').trim(),
+      Number(rounded_off) || 0,
+      is_tax_inclusive ? 1 : 0,
       validUntilStr,
       status,
       subtotal,
@@ -528,8 +568,8 @@ router.put('/:id', (req, res) => {
 
     const insertItem = db.prepare(`
       INSERT INTO quotation_items (
-        quotation_id, product_id, item_name, details, hsn_sac, unit, quantity, sale_rate, line_total, is_price_overridden, original_sale_rate
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        quotation_id, product_id, item_name, details, hsn_sac, unit, quantity, sale_rate, tax_percent, line_total, is_price_overridden, original_sale_rate
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     for (const item of processedItems) {
@@ -542,6 +582,7 @@ router.put('/:id', (req, res) => {
         item.unit,
         item.quantity,
         item.sale_rate,
+        item.tax_percent || gstRateVal || 18,
         item.line_total,
         item.is_price_overridden,
         item.original_sale_rate

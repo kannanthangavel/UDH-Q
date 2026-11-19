@@ -4,10 +4,11 @@
  * (widely used by Asian Paints & Berger retail dealers across Tamil Nadu).
  * 
  * Extracts:
- * - Customer Details (Name, Phone, Address)
- * - Quotation Date & Estimate Number
- * - Line items (Item description, pack size, quantity, rate, amount)
- * - Matches extracted items against the 5,331 UD-QM catalogue using the 11-stage AI matching engine
+ * - Customer Details (Name, Phone, Address, GSTIN)
+ * - Quotation Date, Payment Terms & Estimate Number
+ * - Line items (Item description, multi-line notes, HSN/SAC, quantity, unit, rate, tax%, amount)
+ * - Exact tax breakdown (Taxable Value, CGST, SGST, Total Tax, Round Off, Grand Total, Amount in Words)
+ * - Matches extracted items against catalogue while preserving authentic Optech rates and quantities
  */
 
 const pdfParse = require('pdf-parse');
@@ -40,34 +41,30 @@ async function extractTextFromPdf(buffer) {
 }
 
 /**
- * Standardize pack size units
- */
-function normalizePackUnit(unit) {
-  if (!unit) return 'Nos';
-  const u = unit.trim().toUpperCase();
-  if (['LT', 'LTR', 'LTRS', 'LITRE', 'LITRES', 'L'].includes(u)) return 'L';
-  if (['ML', 'MILLILITRE'].includes(u)) return 'ML';
-  if (['KG', 'KGS', 'KILO', 'KILOS'].includes(u)) return 'KG';
-  if (['GM', 'GMS', 'GRAM', 'GRAMS'].includes(u)) return 'GM';
-  if (['NOS', 'NO', 'PCS', 'PC', 'NUMBERS'].includes(u)) return 'Nos';
-  if (['BOX', 'BOXES'].includes(u)) return 'Box';
-  if (['BAG', 'BAGS'].includes(u)) return 'Bags';
-  if (['ROLL', 'ROLLS'].includes(u)) return 'Roll';
-  if (['SET', 'SETS'].includes(u)) return 'Set';
-  return unit;
-}
-
-/**
  * Parse Optech Quotation Text into Structured UD-QM Format
  */
 function parseOptechText(rawText) {
   if (!rawText || !rawText.trim()) {
     return {
-      customer: { name: '', phone: '', address: '' },
+      customer: { name: '', phone: '', address: '', gstin: '' },
       estimateNumber: '',
-      date: new Date().toISOString().split('T')[0],
+      quotationNumber: '',
+      referenceNo: '',
+      paymentTerms: 'Cash',
+      quotationDate: new Date().toISOString().split('T')[0],
       items: [],
-      totals: { subtotal: 0, taxAmount: 0, grandTotal: 0 }
+      totals: {
+        totalQty: 0,
+        taxableValue: 0,
+        cgstPercent: 9,
+        cgstAmount: 0,
+        sgstPercent: 9,
+        sgstAmount: 0,
+        totalTaxAmount: 0,
+        roundedOff: 0,
+        grandTotal: 0,
+        amountInWords: ''
+      }
     };
   }
 
@@ -76,160 +73,241 @@ function parseOptechText(rawText) {
     .map(l => l.trim())
     .filter(Boolean);
 
-  // 1. Extract Customer Info
   let customerName = '';
+  const customerAddressParts = [];
+  let customerGstin = '';
   let customerPhone = '';
-  let customerAddress = '';
+  let paymentTerms = 'Cash';
   let estimateNumber = '';
   let quotationDate = '';
 
-  for (let i = 0; i < Math.min(lines.length, 30); i++) {
-    const line = lines[i];
+  let inToBlock = false;
+  let inTableBlock = false;
+  const rawItems = [];
+  let currentItem = null;
 
-    // Phone / Mobile detection (10 digits)
-    if (!customerPhone) {
-      const phoneMatch = line.match(/(?:Ph(?:one)?|Mob(?:ile)?|Cell)[\s.:]*([6-9]\d{9})\b/i) ||
-                         line.match(/\b([6-9]\d{4}\s*[0-9]{5})\b/) ||
-                         line.match(/\b([6-9]\d{9})\b/);
-      if (phoneMatch) {
-        customerPhone = phoneMatch[1].replace(/\s+/g, '');
-      }
-    }
+  let totalQty = 0;
+  let taxableValue = 0;
+  let cgstAmount = 0;
+  let sgstAmount = 0;
+  let totalTaxAmount = 0;
+  let roundedOff = 0;
+  let netAmount = 0;
+  let amountInWords = '';
 
-    // Estimate / Quotation Number
-    if (!estimateNumber) {
-      const estMatch = line.match(/(?:Estimate|Quote|Quotation|Bill|Inv(?:oice)?)\s*(?:No|#)[\s.:]*([A-Z0-9\-_/]+)/i);
-      if (estMatch && estMatch[1] && !/^(date|dated|to|for|of)$/i.test(estMatch[1])) {
-        estimateNumber = estMatch[1].trim();
-      }
-    }
+  // Standard Optech Item regex:
+  // Starts with S.No (1-999), then description, HSN (4-8 digits), Qty (int/dec), Unit (Nos/etc), Rate (float), Tax% (int/float), Amount (float)
+  const itemRegex = /^\s*(\d{1,3})\s+(.+?)\s+(\d{4,8})\s+(\d+(?:\.\d+)?)\s*([A-Za-z]+)?\s+(\d+(?:\.\d+)?)\s+(\d+(?:\.\d+)?)\s+(\d+(?:\.\d+)?)\s*$/;
 
-    // Date
-    if (!quotationDate) {
-      const dateMatch = line.match(/(?:Date|Dated)[\s.:]*(\d{1,2}[-/.](?:\d{1,2}|[A-Za-z]{3})[-/.]\d{2,4})/i) ||
-                        line.match(/\b(\d{1,2}[-/.](?:\d{1,2}|[A-Za-z]{3})[-/.]\d{4})\b/);
-      if (dateMatch) {
-        quotationDate = dateMatch[1];
-      }
-    }
-
-    // Customer Address
-    if (!customerAddress) {
-      const addrPrefix = line.match(/(?:Address|Place|City|Location)\s*[:\s]*([A-Za-z0-9\s,.-]+)/i);
-      if (addrPrefix && addrPrefix[1]) {
-        customerAddress = addrPrefix[1].trim();
-      } else if (customerName && !line.match(/(?:phone|mobile|date|gstin|pan|estimate|quote|s\.?no|udhayam)/i) && line !== customerName) {
-        if (/\b(?:road|street|nagar|colony|perundurai|erode|salem|coimbatore|tirupur|chennai|madurai|bhavani|nadu)\b/i.test(line)) {
-          customerAddress = line.trim();
-        }
-      }
-    }
-
-    // Customer Name (M/s. ..., To: ..., Customer: ...)
-    if (!customerName) {
-      const nameMatch = line.match(/(?:M\/s\.?|To\s*:|Customer\s*:|Client\s*:|Party\s*:)\s*([A-Za-z0-9\s.&'-]+)/i);
-      if (nameMatch && nameMatch[1]) {
-        const candidate = nameMatch[1].replace(/\b(?:GSTIN|PAN|Ph|Mobile|Date).*$/i, '').trim();
-        if (candidate.length > 2 && !/^(udhayam|cash|estimate|quotation|agencies|invoice)/i.test(candidate)) {
-          customerName = candidate;
-        }
-      }
-    }
-  }
-
-  // 2. Identify Table Lines
-  // Filter out boilerplate headers and footers
-  const ignorePatterns = [
-    /^(?:s\.?no|sl\.?no|item|description|particulars|hsn|qty|rate|amount|disc|tax|total|net)\b/i,
-    /^(?:terms|conditions|bank|ifsc|account|for\s+udhayam|authorised|signatory|e\.?\s*&\s*o\.?e)/i,
-    /^(?:amount\s+in\s+words|rupees\s+|grand\s+total|round\s+off|sub\s*total)/i,
-    /^(?:page\s+\d+|--\s*\d+\s*of\s*\d+\s*--)/i
-  ];
-
-  const parsedItems = [];
+  // Alternate regex for formats where HSN is omitted or on next line
+  const altItemRegex = /^\s*(\d{1,3})\s+(.+?)\s+(\d+(?:\.\d+)?)\s*([A-Za-z]+)?\s+(\d+(?:\.\d+)?)\s+(\d+(?:\.\d+)?)\s+(\d+(?:\.\d+)?)\s*$/;
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
 
-    // Check if line is header/footer noise
-    if (ignorePatterns.some(p => p.test(line))) {
+    // Detect Customer "To." or "To:" block (e.g. "To. MILKY MIST DIARY FOOD PVT LTD")
+    const toMatch = line.match(/^To[.:\s]+(.+)$/i);
+    if (toMatch) {
+      customerName = toMatch[1].trim();
+      inToBlock = true;
       continue;
     }
 
-    // Typical Optech Table row formats:
-    // Format A: "1  APEX ULTIMA WHITE 20LT  20 LT  2.00  3250.00  6500.00"
-    // Format B: "1  ROYALE SHYNE 1 LT  5  540.00  2700.00"
-    // Format C: "APEX ULTIMA 20 LTR - 2 Nos @ 3200 = 6400"
-    // Format D: "BIRLA WHITE PUTTY 40KG  10  950.00  9500.00"
-
-    // Number columns usually sit at the end: Quantity, Rate, Amount
-    // Regex for numbers at end of line: [qty] [rate] [total]
-    const numericTailRegex = /(?:(\d+(?:\.\d+)?)\s*(?:nos|nos\.|ltr|lt|kg|box|bag|set|m|ft)?\s+)?(\d+(?:\.\d+)?)\s+(\d{1,3}(?:,\d{3})*(?:\.\d+)?|\d+(?:\.\d+)?)\s+(\d{1,3}(?:,\d{3})*(?:\.\d+)?|\d+(?:\.\d+)?)$/i;
-
-    const match = line.match(numericTailRegex);
-
-    if (match) {
-      let qty = parseFloat(match[2]);
-      let rate = parseFloat(match[3].replace(/,/g, ''));
-      let amount = parseFloat(match[4].replace(/,/g, ''));
-
-      // If rate & amount make sense
-      if (qty > 0 && (rate > 0 || amount > 0)) {
-        if (!rate && amount) rate = Math.round((amount / qty) * 100) / 100;
-        if (!amount && rate) amount = Math.round(qty * rate * 100) / 100;
-
-        // Extract item text before the numbers
-        let itemPart = line.substring(0, line.length - match[0].length).trim();
-        // Remove leading S.No (e.g. "1.", "1 ", "1)")
-        itemPart = itemPart.replace(/^\d+[\s.)-]+/, '').trim();
-
-        if (itemPart.length > 2) {
-          // Extract pack size if present inside item text (e.g., "20 LT", "1LTR", "40 KG", "500 ML")
-          const packMatch = itemPart.match(/\b(\d+(?:\.\d+)?\s*(?:LT|LTR|L|KG|ML|GM|NOS|INCH|MM))\b/i);
-          const detectedPack = packMatch ? packMatch[1].toUpperCase() : '';
-
-          parsedItems.push({
-            rawText: line,
-            itemName: itemPart,
-            packSize: detectedPack,
-            quantity: qty,
-            rate: rate,
-            amount: amount
-          });
+    // Also detect "M/s." or "M/s" or "Customer:"
+    if (!customerName && !inTableBlock) {
+      const msMatch = line.match(/^(?:M\/s\.?|Customer\s*:|Client\s*:|Party\s*:)\s*([A-Za-z0-9\s.&'-]+)/i);
+      if (msMatch && msMatch[1]) {
+        const candidate = msMatch[1].replace(/\b(?:GSTIN|PAN|Ph|Mobile|Date).*$/i, '').trim();
+        if (candidate.length > 2 && !/^(udhayam|cash|estimate|quotation|agencies|invoice)/i.test(candidate)) {
+          customerName = candidate;
+          inToBlock = true;
           continue;
         }
       }
     }
 
-    // Alternate Format: Look for line with HSN and quantity/rate
-    const hsnMatch = line.match(/(?:HSN|SAC)?\s*[:\s]*(\d{4,8})\s+(\d+(?:\.\d+)?)\s+(\d+(?:\.\d+)?)/i);
-    if (hsnMatch && i > 0) {
-      const prevLine = lines[i - 1].replace(/^\d+[\s.)-]+/, '').trim();
-      if (prevLine.length > 2 && !ignorePatterns.some(p => p.test(prevLine))) {
-        const qty = parseFloat(hsnMatch[2]) || 1;
-        const rate = parseFloat(hsnMatch[3]) || 0;
-        parsedItems.push({
-          rawText: `${prevLine} ${line}`,
-          itemName: prevLine,
-          packSize: '',
-          quantity: qty,
-          rate: rate,
-          amount: Math.round(qty * rate * 100) / 100
-        });
+    if (inToBlock) {
+      // Customer GSTIN
+      const gstinMatch = line.match(/^GSTIN\s*[:\s]*([0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1})/i);
+      if (gstinMatch) {
+        customerGstin = gstinMatch[1];
+        continue;
+      }
+
+      // Customer Phone if explicitly in customer block
+      const custPhoneMatch = line.match(/(?:Ph(?:one)?|Mob(?:ile)?|Cell)[\s.:]*([6-9]\d{9})\b/i);
+      if (custPhoneMatch) {
+        // Ensure not shop phone
+        const p = custPhoneMatch[1];
+        if (p !== '9715622499' && p !== '9715722499') {
+          customerPhone = p;
+        }
+        continue;
+      }
+
+      // Check if To block ended by finding metadata or table start
+      if (line.match(/^(?:Payment\s+Terms|No\s*:|Date\s*:|S\.?No|Total|Taxable)/i)) {
+        inToBlock = false;
+        // fall through to metadata extraction
+      } else {
+        // Address line (ignore shop keywords)
+        if (!line.match(/(?:UDHAYAM|PAINT:|ELECTRICAL:|GSTIN:\s*33AADFU6496M1ZJ)/i)) {
+          const cleanedAddr = line.replace(/,\s*,/g, ',').trim();
+          if (cleanedAddr) customerAddressParts.push(cleanedAddr);
+        }
+        continue;
+      }
+    }
+
+    // Payment Terms (e.g. "Payment Terms : Cash")
+    const payMatch = line.match(/^Payment\s+Terms\s*[:\s]*(.+)$/i);
+    if (payMatch) {
+      paymentTerms = payMatch[1].trim();
+      continue;
+    }
+
+    // Quote / Estimate No (e.g. "No : 1182")
+    const noMatch = line.match(/^(?:No|Estimate\s+No|Quote\s+No)\s*[:\s]*([A-Za-z0-9\-_/]+)/i);
+    if (noMatch) {
+      estimateNumber = noMatch[1].trim();
+      continue;
+    }
+
+    // Quotation Date (e.g. "Date : 18/11/2026")
+    const dateMatch = line.match(/^Date\s*[:\s]*(\d{1,2}[-/.](?:\d{1,2}|[A-Za-z]{3})[-/.]\d{2,4})/i);
+    if (dateMatch) {
+      quotationDate = dateMatch[1];
+      continue;
+    }
+
+    // Detect Table Header (e.g. "S.No Description HSN/SAC Qty Rate Tax% Amount")
+    if (line.match(/^S\.?No\b/i) || line.match(/Description.*HSN/i)) {
+      inTableBlock = true;
+      continue;
+    }
+
+    // Detect End of Table & Bottom Summaries
+    const totalRowMatch = line.match(/^Total\s+(\d+(?:\.\d+)?)\s+(\d+(?:\.\d+)?)/i);
+    if (totalRowMatch) {
+      if (currentItem) {
+        rawItems.push(currentItem);
+        currentItem = null;
+      }
+      inTableBlock = false;
+      totalQty = parseFloat(totalRowMatch[1]);
+      taxableValue = parseFloat(totalRowMatch[2]);
+      continue;
+    }
+
+    if (line.match(/^Taxable\s+Value/i)) {
+      if (currentItem) {
+        rawItems.push(currentItem);
+        currentItem = null;
+      }
+      inTableBlock = false;
+      continue;
+    }
+
+    // CGST / SGST breakdown line (e.g. "27958.04 9.00 2516.22 9.00 2516.22 18.00 5032.44")
+    const taxValuesMatch = line.match(/(\d+(?:\.\d+)?)\s+(\d+(?:\.\d+)?)\s+(\d+(?:\.\d+)?)\s+(\d+(?:\.\d+)?)\s+(\d+(?:\.\d+)?)\s+(\d+(?:\.\d+)?)\s+(\d+(?:\.\d+)?)/);
+    if (taxValuesMatch && !inTableBlock) {
+      if (!taxableValue) taxableValue = parseFloat(taxValuesMatch[1]);
+      cgstAmount = parseFloat(taxValuesMatch[3]);
+      sgstAmount = parseFloat(taxValuesMatch[5]);
+      totalTaxAmount = parseFloat(taxValuesMatch[7]);
+      continue;
+    }
+
+    // Total Tax Amount (e.g. "Total Tax Amount : 5032.44")
+    const taxMatch = line.match(/Total\s+Tax\s+Amount\s*[:\s]*(\d+(?:\.\d+)?)/i);
+    if (taxMatch) {
+      totalTaxAmount = parseFloat(taxMatch[1]);
+      continue;
+    }
+
+    // Rounded Off (e.g. "Rounded Off : -0.48")
+    const roundMatch = line.match(/Rounded\s+Off\s*[:\s]*([+-]?\s*\d+(?:\.\d+)?)/i);
+    if (roundMatch) {
+      roundedOff = parseFloat(roundMatch[1].replace(/\s+/g, ''));
+      continue;
+    }
+
+    // Net Amount / Grand Total (e.g. "Net Amount : 32990.00")
+    const netMatch = line.match(/(?:Net\s+Amount|Grand\s+Total)\s*[:\s]*(\d+(?:\.\d+)?)/i);
+    if (netMatch) {
+      netAmount = parseFloat(netMatch[1]);
+      continue;
+    }
+
+    // Amount in Words (e.g. "Rupees Thirty Two Thousand Nine Hundred And Ninety Only")
+    const wordsMatch = line.match(/^Rupees\s+(.+)$/i);
+    if (wordsMatch) {
+      amountInWords = 'Rupees ' + wordsMatch[1].trim();
+      continue;
+    }
+
+    // Parse Table Items
+    if (inTableBlock) {
+      const m = line.match(itemRegex);
+      if (m) {
+        if (currentItem) rawItems.push(currentItem);
+        currentItem = {
+          sNo: parseInt(m[1], 10),
+          desc: m[2].trim(),
+          hsn: m[3],
+          qty: parseFloat(m[4]),
+          unit: m[5] || 'Nos',
+          rate: parseFloat(m[6]),
+          taxPercent: parseFloat(m[7]),
+          amount: parseFloat(m[8])
+        };
+        continue;
+      }
+
+      // Check alternate line match without HSN
+      const altM = line.match(altItemRegex);
+      if (altM && !line.match(/^(?:Total|Taxable|GSTIN|Payment|Date|BANK)/i)) {
+        if (currentItem) rawItems.push(currentItem);
+        currentItem = {
+          sNo: parseInt(altM[1], 10),
+          desc: altM[2].trim(),
+          hsn: '3209',
+          qty: parseFloat(altM[3]),
+          unit: altM[4] || 'Nos',
+          rate: parseFloat(altM[5]),
+          taxPercent: parseFloat(altM[6]),
+          amount: parseFloat(altM[7])
+        };
+        continue;
+      }
+
+      // Check continuation line of multi-line description (e.g. "(GLSY-ENAMEL)-ASIAN", "500 C) 0189", "BLACK-AGARAM")
+      if (currentItem) {
+        if (!line.match(/^(?:Total|Taxable|GSTIN|Payment|Date|BANK|S\.?No|Rupees)/i)) {
+          currentItem.desc += ' ' + line.trim();
+        }
       }
     }
   }
 
-  // 3. Match each item using UD-QM's 11-Stage Matching Engine
-  const matchedLineItems = parsedItems.map((rawItem, idx) => {
-    const matchResult = matchProduct(rawItem.itemName);
+  if (currentItem) {
+    rawItems.push(currentItem);
+  }
+
+  // Format cleaned customer address
+  const customerAddress = customerAddressParts
+    .join(', ')
+    .replace(/\s*,\s*,+/g, ',')
+    .replace(/^,\s*/, '')
+    .trim();
+
+  // Match each raw item against catalogue while preserving authentic Optech rate and quantity
+  const matchedLineItems = rawItems.map((raw, idx) => {
+    const matchResult = matchProduct(raw.desc);
     const matched = matchResult.matchedProduct;
     const confidence = matchResult.confidence || { score: 0, tier: 'None' };
 
-    // Determine unit
-    const unit = matched?.main_unit || (rawItem.packSize.match(/LT|L|ML/i) ? 'Litre' : rawItem.packSize.match(/KG|GM/i) ? 'Kg' : 'Nos');
-
-    // Sister pack sizes for instant 1-click swapping
+    // Get sister pack sizes for instant 1-click swapping if user wants
     let sisterSizes = [];
     if (matched && matched.id) {
       try {
@@ -237,26 +315,22 @@ function parseOptechText(rawText) {
       } catch (e) {}
     }
 
-    // Determine final rate:
-    // If matched product has catalogue sale_rate, user gets authentic rate.
-    // Otherwise fallback to Optech rate from PDF.
-    const catalogRate = matched?.sale_rate != null ? Number(matched.sale_rate) : rawItem.rate;
-    const effectiveRate = catalogRate > 0 ? catalogRate : rawItem.rate;
-    const lineTotal = Math.round(rawItem.quantity * effectiveRate * 100) / 100;
+    // STRICT USER REQUIREMENT: Preserve exact Optech item name, quantity, rate, tax and amount!
+    const effectiveRate = raw.rate > 0 ? raw.rate : (matched?.sale_rate || 0);
+    const lineTotal = raw.amount > 0 ? raw.amount : Math.round(raw.qty * effectiveRate * 100) / 100;
 
     return {
       id: Date.now() + idx + Math.random(),
-      originalDescription: rawItem.itemName,
-      rawText: rawItem.rawText,
+      originalDescription: raw.desc,
       product_id: matched?.id || null,
-      item_name: matched?.item_name || rawItem.itemName,
-      details: rawItem.itemName !== (matched?.item_name || '') ? `Optech: ${rawItem.itemName}` : '',
-      hsn_sac: matched?.hsn_sac || '3209',
-      unit: unit,
-      quantity: rawItem.quantity,
+      item_name: raw.desc, // Keep full original Optech description
+      matchedCatalogName: matched?.item_name || '',
+      details: '',
+      hsn_sac: raw.hsn || matched?.hsn_sac || '3209',
+      unit: raw.unit || matched?.main_unit || 'Nos',
+      quantity: raw.qty,
       sale_rate: effectiveRate,
-      catalog_rate: catalogRate,
-      optech_rate: rawItem.rate,
+      tax_percent: raw.taxPercent || 18,
       line_total: lineTotal,
       confidenceScore: Math.round((confidence.score || 0) * 100),
       confidenceTier: confidence.tier || (matched ? 'High' : 'None'),
@@ -265,24 +339,50 @@ function parseOptechText(rawText) {
     };
   });
 
-  // Calculate totals
-  const subtotal = matchedLineItems.reduce((acc, it) => acc + (it.line_total || 0), 0);
-  const gstRate = 18; // Tamil Nadu standard paint GST included in UD-QM rates
-  const taxAmount = Math.round((subtotal * (gstRate / (100 + gstRate))) * 100) / 100;
+  // Calculate fallbacks if not explicitly found in footer
+  if (!taxableValue && matchedLineItems.length > 0) {
+    taxableValue = matchedLineItems.reduce((acc, it) => acc + (it.line_total || 0), 0);
+  }
+  if (!totalTaxAmount && taxableValue > 0) {
+    totalTaxAmount = Math.round(taxableValue * 0.18 * 100) / 100;
+    cgstAmount = Math.round(totalTaxAmount / 2 * 100) / 100;
+    sgstAmount = Math.round(totalTaxAmount / 2 * 100) / 100;
+  }
+  if (!netAmount) {
+    netAmount = Math.round((taxableValue + totalTaxAmount + roundedOff) * 100) / 100;
+  }
+  if (!totalQty) {
+    totalQty = matchedLineItems.reduce((acc, it) => acc + it.quantity, 0);
+  }
+
+  // Quotation number formatting
+  const formattedQuoteNo = estimateNumber
+    ? `UDQ-2026-${String(estimateNumber).padStart(6, '0')}`
+    : '';
 
   return {
     customer: {
-      name: customerName,
-      phone: customerPhone,
-      address: customerAddress
+      name: customerName || 'Valued Customer',
+      address: customerAddress,
+      gstin: customerGstin,
+      phone: customerPhone
     },
-    estimateNumber: estimateNumber,
+    quotationNumber: formattedQuoteNo,
+    referenceNo: estimateNumber,
+    paymentTerms: paymentTerms,
     quotationDate: quotationDate || new Date().toISOString().split('T')[0],
     items: matchedLineItems,
     totals: {
-      subtotal: Math.round(subtotal * 100) / 100,
-      taxAmount: taxAmount,
-      grandTotal: Math.round(subtotal * 100) / 100
+      totalQty: totalQty,
+      taxableValue: Math.round(taxableValue * 100) / 100,
+      cgstPercent: 9.0,
+      cgstAmount: cgstAmount || Math.round(taxableValue * 0.09 * 100) / 100,
+      sgstPercent: 9.0,
+      sgstAmount: sgstAmount || Math.round(taxableValue * 0.09 * 100) / 100,
+      totalTaxAmount: Math.round(totalTaxAmount * 100) / 100,
+      roundedOff: roundedOff,
+      grandTotal: Math.round(netAmount * 100) / 100,
+      amountInWords: amountInWords
     }
   };
 }
@@ -295,7 +395,7 @@ async function processOptechPdf(buffer) {
   const parsedData = parseOptechText(extractedText);
   return {
     ...parsedData,
-    rawExtractedText: extractedText.slice(0, 1000) // snippet for debugging
+    rawExtractedText: extractedText.slice(0, 1500)
   };
 }
 

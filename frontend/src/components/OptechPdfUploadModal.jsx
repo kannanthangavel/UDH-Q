@@ -2,7 +2,7 @@ import React, { useState, useRef } from 'react';
 import { 
   FileText, Upload, CheckCircle2, AlertCircle, RefreshCw, 
   Download, MessageSquare, ArrowRight, X, Sparkles, Building2,
-  ChevronRight, Phone, MapPin, Hash, Calendar, Layers, Check
+  ChevronRight, Phone, MapPin, Hash, Calendar, Layers, Check, ShieldCheck
 } from 'lucide-react';
 import { api } from '../api/client';
 
@@ -19,6 +19,7 @@ export default function OptechPdfUploadModal({
 
   // Editable fields in preview
   const [customerName, setCustomerName] = useState('');
+  const [customerGstin, setCustomerGstin] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
   const [customerAddress, setCustomerAddress] = useState('');
   const [items, setItems] = useState([]);
@@ -35,6 +36,7 @@ export default function OptechPdfUploadModal({
     setParseError('');
     setParsedData(null);
     setCustomerName('');
+    setCustomerGstin('');
     setCustomerPhone('');
     setCustomerAddress('');
     setItems([]);
@@ -66,7 +68,8 @@ export default function OptechPdfUploadModal({
 
       if (res && res.success) {
         setParsedData(res);
-        setCustomerName(res.customer?.name || 'Walk-in Customer');
+        setCustomerName(res.customer?.name || '');
+        setCustomerGstin(res.customer?.gstin || '');
         setCustomerPhone(res.customer?.phone || '');
         setCustomerAddress(res.customer?.address || '');
         setItems(res.items || []);
@@ -90,7 +93,6 @@ export default function OptechPdfUploadModal({
       target.product_id = sisterProduct.id;
       target.item_name = sisterProduct.item_name;
       target.sale_rate = sisterProduct.sale_rate;
-      target.catalog_rate = sisterProduct.sale_rate;
       target.line_total = Math.round(target.quantity * sisterProduct.sale_rate * 100) / 100;
       target.unit = sisterProduct.main_unit || target.unit;
       return updated;
@@ -101,19 +103,18 @@ export default function OptechPdfUploadModal({
     setItems(prev => prev.filter((_, i) => i !== idx));
   }
 
-  // Calculate live totals
-  const subtotal = items.reduce((acc, it) => acc + (it.line_total || 0), 0);
-  const gstRate = 18;
-  const taxAmount = Math.round((subtotal * (gstRate / (100 + gstRate))) * 100) / 100;
-  const grandTotal = Math.round(subtotal * 100) / 100;
+  // Live calculations
+  const taxableSubtotal = items.reduce((acc, it) => acc + (it.line_total || 0), 0);
+  const cgstAmount = parsedData?.totals?.cgstAmount || Math.round((taxableSubtotal * 0.09) * 100) / 100;
+  const sgstAmount = parsedData?.totals?.sgstAmount || Math.round((taxableSubtotal * 0.09) * 100) / 100;
+  const totalTaxAmount = parsedData?.totals?.totalTaxAmount || Math.round((taxableSubtotal * 0.18) * 100) / 100;
+  const roundOff = parsedData?.totals?.roundedOff || 0;
+  const grandTotal = parsedData?.totals?.grandTotal || Math.round((taxableSubtotal + totalTaxAmount + roundOff) * 100) / 100;
+  const totalQty = items.reduce((acc, it) => acc + (parseFloat(it.quantity) || 0), 0);
 
   async function handleAutoCreateAndDownload() {
     if (!customerName.trim()) {
       setParseError('Please enter a customer name for the quotation.');
-      return;
-    }
-    if (!customerPhone.trim()) {
-      setParseError('Please enter a 10-digit mobile number for WhatsApp sharing and records.');
       return;
     }
     if (items.length === 0) {
@@ -129,10 +130,18 @@ export default function OptechPdfUploadModal({
         customer_name: customerName.trim(),
         customer_phone: customerPhone.trim(),
         customer_address: customerAddress.trim(),
+        customer_gstin: customerGstin.trim(),
+        reference_no: parsedData?.referenceNo || parsedData?.estimateNumber || '',
+        payment_terms: parsedData?.paymentTerms || 'Cash',
+        rounded_off: roundOff,
+        quotation_date: parsedData?.quotationDate || new Date().toISOString().split('T')[0],
         paper_format: paperFormat,
+        subtotal: Math.round(taxableSubtotal * 100) / 100,
         gst_rate: 18,
-        is_tax_inclusive: true,
-        notes: parsedData?.estimateNumber ? `Converted from Optech Estimate #${parsedData.estimateNumber}` : 'Converted from Optech Quotation',
+        gst_amount: Math.round(totalTaxAmount * 100) / 100,
+        grand_total: Math.round(grandTotal * 100) / 100,
+        is_tax_inclusive: false, // Optech uses Tax Exclusive breakdown
+        notes: parsedData?.referenceNo ? `Optech Quote #${parsedData.referenceNo}` : 'Converted from Optech Quotation',
         items: items.map(it => ({
           product_id: it.product_id || null,
           item_name: it.item_name,
@@ -141,6 +150,7 @@ export default function OptechPdfUploadModal({
           unit: it.unit || 'Nos',
           quantity: it.quantity,
           sale_rate: it.sale_rate,
+          tax_percent: it.tax_percent || 18,
           line_total: it.line_total
         }))
       };
@@ -169,16 +179,25 @@ export default function OptechPdfUploadModal({
         customer: {
           name: customerName,
           phone: customerPhone,
-          address: customerAddress
+          address: customerAddress,
+          gstin: customerGstin
         },
+        reference_no: parsedData?.referenceNo || '',
+        payment_terms: parsedData?.paymentTerms || 'Cash',
+        is_tax_inclusive: false,
+        subtotal: taxableSubtotal,
+        gst_amount: totalTaxAmount,
+        grand_total: grandTotal,
         items: items.map(it => ({
           productId: it.product_id,
           itemName: it.item_name,
-          details: it.details || (parsedData?.estimateNumber ? `Optech Quote #${parsedData.estimateNumber}` : ''),
+          details: it.details || (parsedData?.referenceNo ? `Optech #${parsedData.referenceNo}` : ''),
           hsnSac: it.hsn_sac || '3209',
           unit: it.unit || 'Nos',
           quantity: it.quantity,
           saleRate: it.sale_rate,
+          taxPercent: it.tax_percent || 18,
+          lineTotal: it.line_total,
           availableSizes: it.availableSizes || []
         }))
       });
@@ -207,7 +226,7 @@ export default function OptechPdfUploadModal({
                 </span>
               </div>
               <p className="text-xs text-emerald-100">
-                Upload any Optech quotation/estimate PDF → auto-matches with 5,331 UD-QM catalogue items → instant UD-QM A4/A5 PDF & WhatsApp Share!
+                Upload Optech quote PDF → preserves exact Customer, GSTIN, Quantities & Rates → instant UD-QM A4/A5 PDF & WhatsApp Share!
               </p>
             </div>
           </div>
@@ -221,7 +240,7 @@ export default function OptechPdfUploadModal({
         </div>
 
         {/* Modal Body */}
-        <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6">
+        <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-5">
           
           {/* Error Banner */}
           {parseError && (
@@ -234,7 +253,7 @@ export default function OptechPdfUploadModal({
             </div>
           )}
 
-          {/* Upload Area (shown when no items parsed yet or to replace file) */}
+          {/* Upload Area */}
           {!parsedData && (
             <div 
               onClick={() => fileInputRef.current?.click()}
@@ -260,7 +279,7 @@ export default function OptechPdfUploadModal({
                       Ingesting Optech Quotation PDF...
                     </p>
                     <p className="text-xs text-slate-500 mt-1">
-                      Extracting text, customer details, and matching products via 11-stage AI engine...
+                      Extracting Customer, GSTIN, Products, Rates & Tax Breakdown...
                     </p>
                   </div>
                 </div>
@@ -288,23 +307,28 @@ export default function OptechPdfUploadModal({
 
           {/* Parsed Quotation Preview */}
           {parsedData && (
-            <div className="space-y-5 animate-in fade-in duration-150">
+            <div className="space-y-4 animate-in fade-in duration-150">
               
-              {/* File Info & Re-upload Bar */}
+              {/* File Info Bar */}
               <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3 flex flex-wrap items-center justify-between gap-2 text-xs">
                 <div className="flex items-center space-x-2">
                   <CheckCircle2 className="w-4 h-4 text-emerald-600" />
                   <span className="font-bold text-emerald-950">
                     Parsed: <span className="font-mono">{file?.name || parsedData.filename}</span>
                   </span>
-                  {parsedData.estimateNumber && (
+                  {parsedData.referenceNo && (
                     <span className="bg-emerald-200 text-emerald-900 px-2 py-0.5 rounded font-mono font-bold text-[10px]">
-                      Est #{parsedData.estimateNumber}
+                      Optech #{parsedData.referenceNo}
                     </span>
                   )}
                   {parsedData.quotationDate && (
                     <span className="text-emerald-700">
                       • {parsedData.quotationDate}
+                    </span>
+                  )}
+                  {parsedData.paymentTerms && (
+                    <span className="text-emerald-700">
+                      • Terms: {parsedData.paymentTerms}
                     </span>
                   )}
                 </div>
@@ -329,9 +353,9 @@ export default function OptechPdfUploadModal({
               <div className="bg-slate-50 border border-slate-200 rounded-xl p-4">
                 <h4 className="text-xs font-black uppercase tracking-wider text-slate-500 mb-3 flex items-center space-x-1.5">
                   <Building2 className="w-3.5 h-3.5 text-[#00545C]" />
-                  <span>Customer Details for Quotation</span>
+                  <span>Customer Details (from Optech PDF)</span>
                 </h4>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
                   <div>
                     <label className="block text-[11px] font-bold text-slate-700 mb-1">
                       Customer / Firm Name *
@@ -340,20 +364,33 @@ export default function OptechPdfUploadModal({
                       type="text"
                       value={customerName}
                       onChange={e => setCustomerName(e.target.value)}
-                      placeholder="e.g. Senthil Paints"
-                      className="w-full px-3 py-2 text-xs bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#00545C] font-semibold text-slate-900"
+                      placeholder="e.g. Milky Mist Diary Food Pvt Ltd"
+                      className="w-full px-3 py-2 text-xs bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#00545C] font-bold text-slate-900"
                     />
                   </div>
 
                   <div>
                     <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                      Phone Number (for WhatsApp Share) *
+                      Customer GSTIN
+                    </label>
+                    <input
+                      type="text"
+                      value={customerGstin}
+                      onChange={e => setCustomerGstin(e.target.value)}
+                      placeholder="e.g. 33AAJCM3448G1ZI"
+                      className="w-full px-3 py-2 text-xs bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#00545C] font-mono font-bold text-slate-900"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                      Phone Number (Optional)
                     </label>
                     <input
                       type="tel"
                       value={customerPhone}
                       onChange={e => setCustomerPhone(e.target.value)}
-                      placeholder="e.g. 9842144555"
+                      placeholder="Mobile for WhatsApp share"
                       className="w-full px-3 py-2 text-xs bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#00545C] font-mono text-slate-900"
                     />
                   </div>
@@ -366,22 +403,22 @@ export default function OptechPdfUploadModal({
                       type="text"
                       value={customerAddress}
                       onChange={e => setCustomerAddress(e.target.value)}
-                      placeholder="e.g. Perundurai Road, Erode"
+                      placeholder="e.g. Pattakaran Palayam, Perundurai"
                       className="w-full px-3 py-2 text-xs bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#00545C] text-slate-900"
                     />
                   </div>
                 </div>
               </div>
 
-              {/* Line Items Table */}
+              {/* Line Items Table (Optech Layout Design) */}
               <div className="border border-slate-200 rounded-xl overflow-hidden shadow-2xs">
                 <div className="bg-slate-100 px-4 py-2.5 flex items-center justify-between border-b border-slate-200">
                   <div className="flex items-center space-x-2">
                     <span className="text-xs font-black text-slate-800">
-                      Line Items ({items.length})
+                      Line Items ({items.length}) • Total Qty: {totalQty}
                     </span>
                     <span className="bg-[#7DBA00] text-[#003B40] text-[10px] font-black px-2 py-0.5 rounded-full">
-                      Catalogue Matched
+                      Exact Rates & Quantities
                     </span>
                   </div>
                   
@@ -411,14 +448,15 @@ export default function OptechPdfUploadModal({
 
                 <div className="overflow-x-auto max-h-72 overflow-y-auto">
                   <table className="w-full text-left border-collapse text-xs">
-                    <thead className="bg-slate-50 text-slate-500 font-bold border-b border-slate-200 text-[11px] sticky top-0 z-10">
+                    <thead className="bg-[#00545C] text-white font-bold text-[11px] sticky top-0 z-10">
                       <tr>
-                        <th className="py-2 px-3 w-8">#</th>
-                        <th className="py-2 px-3">Product Description & Sister Sizes</th>
-                        <th className="py-2 px-3 w-16 text-center">Unit</th>
-                        <th className="py-2 px-3 w-16 text-right">Qty</th>
-                        <th className="py-2 px-3 w-24 text-right">Sale Rate</th>
-                        <th className="py-2 px-3 w-28 text-right">Total (₹)</th>
+                        <th className="py-2 px-3 w-8 text-center">S.No</th>
+                        <th className="py-2 px-3">Description of Goods</th>
+                        <th className="py-2 px-3 w-24 text-center">HSN/SAC</th>
+                        <th className="py-2 px-3 w-20 text-center">Qty</th>
+                        <th className="py-2 px-3 w-24 text-right">Rate (₹)</th>
+                        <th className="py-2 px-3 w-16 text-center">Tax %</th>
+                        <th className="py-2 px-3 w-28 text-right">Amount (₹)</th>
                         <th className="py-2 px-2 w-8"></th>
                       </tr>
                     </thead>
@@ -432,47 +470,41 @@ export default function OptechPdfUploadModal({
                             <div className="font-extrabold text-slate-900">
                               {it.item_name}
                             </div>
-                            {it.details && (
-                              <div className="text-[11px] text-slate-500 font-mono">
-                                {it.details}
-                              </div>
-                            )}
-
                             {/* Sister sizes pill selector */}
                             {it.availableSizes && it.availableSizes.length > 1 && (
-                              <div className="flex flex-wrap items-center gap-1 mt-1.5">
+                              <div className="flex flex-wrap items-center gap-1 mt-1">
                                 <span className="text-[10px] font-bold text-slate-400">Packs:</span>
-                                {it.availableSizes.map(sz => {
-                                  const isSelected = sz.id === it.product_id;
-                                  return (
-                                    <button
-                                      key={sz.id}
-                                      type="button"
-                                      onClick={() => handleSwitchPack(idx, sz)}
-                                      className={`px-1.5 py-0.5 rounded text-[10px] font-bold cursor-pointer transition-colors ${
-                                        isSelected
-                                          ? 'bg-[#00545C] text-white'
-                                          : 'bg-slate-200 hover:bg-slate-300 text-slate-700'
-                                      }`}
-                                    >
-                                      {sz.pack_size || sz.item_name.match(/(\d+(?:\.\d+)?\s*(?:LT|L|ML|KG|GM|NOS))\b/i)?.[1] || 'Size'} (₹{sz.sale_rate})
-                                    </button>
-                                  );
-                                })}
+                                {it.availableSizes.map(sz => (
+                                  <button
+                                    key={sz.id}
+                                    type="button"
+                                    onClick={() => handleSwitchPack(idx, sz)}
+                                    className={`px-1.5 py-0.5 rounded text-[10px] font-bold cursor-pointer transition-colors ${
+                                      sz.id === it.product_id
+                                        ? 'bg-[#00545C] text-white'
+                                        : 'bg-slate-200 hover:bg-slate-300 text-slate-700'
+                                    }`}
+                                  >
+                                    {sz.pack_size || sz.item_name.match(/(\d+(?:\.\d+)?\s*(?:LT|L|ML|KG|GM|NOS))\b/i)?.[1] || 'Size'} (₹{sz.sale_rate})
+                                  </button>
+                                ))}
                               </div>
                             )}
                           </td>
-                          <td className="py-2.5 px-3 text-center text-slate-600 font-medium">
-                            {it.unit || 'Nos'}
+                          <td className="py-2.5 px-3 text-center font-mono text-slate-600">
+                            {it.hsn_sac || '-'}
                           </td>
-                          <td className="py-2.5 px-3 text-right font-mono font-bold text-slate-800">
-                            {it.quantity}
+                          <td className="py-2.5 px-3 text-center font-mono font-bold text-slate-900 whitespace-nowrap">
+                            {it.quantity} {it.unit || 'Nos'}
                           </td>
                           <td className="py-2.5 px-3 text-right font-mono text-slate-700">
-                            ₹{Number(it.sale_rate || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                            {Number(it.sale_rate || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                          </td>
+                          <td className="py-2.5 px-3 text-center font-mono text-slate-600">
+                            {it.tax_percent || 18}%
                           </td>
                           <td className="py-2.5 px-3 text-right font-mono font-extrabold text-[#00545C]">
-                            ₹{Number(it.line_total || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                            {Number(it.line_total || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                           </td>
                           <td className="py-2.5 px-2 text-center">
                             <button
@@ -490,17 +522,47 @@ export default function OptechPdfUploadModal({
                   </table>
                 </div>
 
-                {/* Totals Footer */}
-                <div className="bg-slate-50 border-t border-slate-200 px-4 py-3 flex flex-wrap items-center justify-between gap-3 text-xs">
-                  <div className="text-slate-500">
-                    Standard 18% Paint GST Included • Official UD-QM Rate Master
-                  </div>
-                  <div className="flex items-center space-x-4">
-                    <div className="text-right">
-                      <span className="text-slate-500 mr-2">Grand Total:</span>
-                      <span className="text-base font-black text-[#00545C] font-mono">
-                        ₹{grandTotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                      </span>
+                {/* Tax Breakdown & Net Amount Footer */}
+                <div className="bg-slate-50 border-t border-slate-200 p-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+                    <div className="space-y-1 text-slate-600">
+                      <div className="font-bold text-slate-800">GST Breakdown (Optech Standard):</div>
+                      <div className="flex justify-between max-w-xs">
+                        <span>Taxable Value (Subtotal):</span>
+                        <span className="font-mono font-bold">₹{taxableSubtotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                      </div>
+                      <div className="flex justify-between max-w-xs">
+                        <span>CGST (9.00%):</span>
+                        <span className="font-mono">+ ₹{cgstAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                      </div>
+                      <div className="flex justify-between max-w-xs">
+                        <span>SGST (9.00%):</span>
+                        <span className="font-mono">+ ₹{sgstAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                      </div>
+                      <div className="flex justify-between max-w-xs">
+                        <span>Total Tax Amount:</span>
+                        <span className="font-mono font-bold text-slate-800">₹{totalTaxAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                      </div>
+                      {roundOff !== 0 && (
+                        <div className="flex justify-between max-w-xs">
+                          <span>Rounded Off:</span>
+                          <span className="font-mono">{roundOff > 0 ? `+ ₹${roundOff}` : `- ₹${Math.abs(roundOff)}`}</span>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="flex flex-col justify-end items-end space-y-1">
+                      <div className="text-right">
+                        <span className="text-xs font-bold text-slate-500 uppercase tracking-wider block">Net Amount (Incl. GST)</span>
+                        <span className="text-2xl font-black text-[#00545C] font-mono">
+                          ₹{grandTotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </span>
+                      </div>
+                      {parsedData?.totals?.amountInWords && (
+                        <div className="text-[11px] text-slate-500 italic max-w-sm text-right">
+                          {parsedData.totals.amountInWords}
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -541,7 +603,7 @@ export default function OptechPdfUploadModal({
                 {isCreatingQuote ? (
                   <>
                     <RefreshCw className="w-4 h-4 animate-spin text-[#003B40]" />
-                    <span>Creating Quotation...</span>
+                    <span>Generating UD-QM Quotation...</span>
                   </>
                 ) : (
                   <>
