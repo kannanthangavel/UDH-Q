@@ -383,10 +383,14 @@ export default function Dashboard({ setActivePage, onStartQuoteWithImport }) {
               setActivePage('create-quotation');
             }
           }}
-          onQuotationCreated={(newQuote) => {
+          onQuotationCreated={(newQuote, opts = {}) => {
             setShowOptechModal(false);
             loadDashboard();
-            setSelectedQuoteForPdf(newQuote);
+            if (opts?.openWhatsApp) {
+              setSelectedQuoteForWa(newQuote);
+            } else {
+              setSelectedQuoteForPdf(newQuote);
+            }
           }}
         />
       )}
@@ -411,6 +415,11 @@ export default function Dashboard({ setActivePage, onStartQuoteWithImport }) {
         <QuotationPdfModal
           quotation={selectedQuoteForPdf}
           onClose={() => setSelectedQuoteForPdf(null)}
+          onShareWhatsApp={() => {
+            const q = selectedQuoteForPdf;
+            setSelectedQuoteForPdf(null);
+            setSelectedQuoteForWa(q);
+          }}
         />
       )}
 

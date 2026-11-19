@@ -429,6 +429,11 @@ export default function Quotations({ setActivePage, onEditQuotation }) {
             setSelectedQuoteForPdf(null);
             await handleDelete(q);
           }}
+          onShareWhatsApp={() => {
+            const q = selectedQuoteForPdf;
+            setSelectedQuoteForPdf(null);
+            setSelectedQuoteForWa(q);
+          }}
         />
       )}
 

@@ -2006,10 +2006,14 @@ export default function CreateQuotation({ setActivePage, initialCustomer, import
             setShowOptechModal(false);
             applyImportData(data);
           }}
-          onQuotationCreated={(newQuote) => {
+          onQuotationCreated={(newQuote, opts = {}) => {
             setShowOptechModal(false);
             setCreatedQuotation(newQuote);
-            setShowPdfModal(true);
+            if (opts?.openWhatsApp) {
+              setShowWaModal(true);
+            } else {
+              setShowPdfModal(true);
+            }
           }}
         />
       )}

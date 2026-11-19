@@ -112,7 +112,7 @@ export default function OptechPdfUploadModal({
   const grandTotal = parsedData?.totals?.grandTotal || Math.round((taxableSubtotal + totalTaxAmount + roundOff) * 100) / 100;
   const totalQty = items.reduce((acc, it) => acc + (parseFloat(it.quantity) || 0), 0);
 
-  async function handleAutoCreateAndDownload() {
+  async function handleConvert(action = 'download') {
     if (!customerName.trim()) {
       setParseError('Please enter a customer name for the quotation.');
       return;
@@ -158,8 +158,19 @@ export default function OptechPdfUploadModal({
       const res = await api.createQuotation(quotePayload);
 
       if (res && res.quotation) {
+        if (action === 'download') {
+          // Trigger instant download of the converted PDF
+          const downloadUrl = api.getApiUrl(`/quotations/${res.quotation.id}/pdf?format=${paperFormat}&download=true`);
+          const link = document.createElement('a');
+          link.href = downloadUrl;
+          link.download = `${res.quotation.quotation_number}.pdf`;
+          document.body.appendChild(link);
+          link.click();
+          link.remove();
+        }
+
         if (onQuotationCreated) {
-          onQuotationCreated(res.quotation);
+          onQuotationCreated(res.quotation, { openWhatsApp: action === 'share' });
         }
         onClose();
         resetAll();
@@ -597,20 +608,31 @@ export default function OptechPdfUploadModal({
               <button
                 type="button"
                 disabled={isCreatingQuote}
-                onClick={handleAutoCreateAndDownload}
-                className="inline-flex items-center space-x-2 px-5 py-2.5 rounded-xl bg-[#7DBA00] hover:bg-[#8ee000] text-[#003B40] text-xs font-black shadow-md cursor-pointer transition-all transform active:scale-95 disabled:opacity-50"
+                onClick={() => handleConvert('download')}
+                className="inline-flex items-center space-x-1.5 px-4 py-2.5 rounded-xl bg-[#7DBA00] hover:bg-[#8ee000] text-[#003B40] text-xs font-black shadow-md cursor-pointer transition-all transform active:scale-95 disabled:opacity-50"
               >
                 {isCreatingQuote ? (
                   <>
                     <RefreshCw className="w-4 h-4 animate-spin text-[#003B40]" />
-                    <span>Generating UD-QM Quotation...</span>
+                    <span>Processing...</span>
                   </>
                 ) : (
                   <>
-                    <Sparkles className="w-4 h-4 text-[#003B40]" />
-                    <span>Convert to UD-QM Quotation & Download / Share</span>
+                    <Download className="w-4 h-4 text-[#003B40]" />
+                    <span>Convert & Download PDF</span>
                   </>
                 )}
+              </button>
+
+              <button
+                type="button"
+                disabled={isCreatingQuote}
+                onClick={() => handleConvert('share')}
+                className="inline-flex items-center space-x-1.5 px-4.5 py-2.5 rounded-xl bg-[#25D366] hover:bg-[#20ba59] text-white text-xs font-black shadow-md cursor-pointer transition-all transform active:scale-95 disabled:opacity-50"
+                title="Convert and immediately share via WhatsApp with attached PDF"
+              >
+                <MessageSquare className="w-4 h-4 text-white" />
+                <span>Convert & Share WhatsApp</span>
               </button>
             </div>
           )}
