@@ -256,17 +256,26 @@ export default function QuotationPdfModal({ quotation, onClose, onEdit, onDelete
                     QUOTATION META:
                   </span>
                   <p className={`${isA5 ? 'text-[10px]' : 'text-[11px]'} text-slate-700`}>
-                    <span className="text-slate-500">Valid Until:</span>{' '}
-                    <span className="font-bold text-slate-900 tabular-nums">{quotation.validity_date || '7 days from issue'}</span>
+                    <span className="text-slate-500">Quote No:</span>{' '}
+                    <span className="font-bold text-slate-900 tabular-nums">{quotation.quotation_number}</span>
                   </p>
                   <p className={`${isA5 ? 'text-[10px]' : 'text-[11px]'} text-slate-700 mt-0.5`}>
-                    <span className="text-slate-500">Tax Convention:</span>{' '}
-                    <span className="font-semibold text-emerald-800">GST Inclusive</span>
+                    <span className="text-slate-500">Date:</span>{' '}
+                    <span className="font-bold text-slate-900 tabular-nums">{quotation.quotation_date}</span>
                   </p>
                   <p className={`${isA5 ? 'text-[10px]' : 'text-[11px]'} text-slate-700 mt-0.5`}>
-                    <span className="text-slate-500">Authorized:</span>{' '}
-                    <span className="font-semibold text-slate-900">Udhayam Paint Division</span>
+                    <span className="text-slate-500">Valid Till:</span>{' '}
+                    <span className="font-bold text-slate-900 tabular-nums">{quotation.validity_date || '7 days'}</span>
                   </p>
+                  <div className="mt-1">
+                    <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-extrabold uppercase ${
+                      /credit/i.test(quotation.payment_terms || '')
+                        ? 'bg-amber-100 text-amber-900 border border-amber-300'
+                        : 'bg-emerald-100 text-emerald-900 border border-emerald-300'
+                    }`}>
+                      Terms: {quotation.payment_terms || 'Cash'}
+                    </span>
+                  </div>
                 </div>
               </div>
 
@@ -326,135 +335,120 @@ export default function QuotationPdfModal({ quotation, onClose, onEdit, onDelete
             {/* BOTTOM SECTION: ANCHORED AT BOTTOM OF A4 / A5 PAGE */}
             <div className={`mt-3 pt-1.5 ${isA5 ? 'space-y-2' : 'space-y-3.5'}`}>
               
-              {/* Bottom Two Cards: Equal Height, Perfectly Aligned Bottom */}
-              <div className={`grid grid-cols-1 md:grid-cols-2 ${isA5 ? 'gap-2' : 'gap-3.5'} items-stretch`}>
-                
-                {/* Left Card: Bank Details, UPI QR, and Terms & Conditions */}
-                <div className={`bg-slate-50/90 border border-slate-200 rounded-xl flex flex-col justify-between h-full ${
-                  isA5 ? 'p-2.5' : 'p-3.5'
-                }`}>
-                  <div>
-                    <span className={`${isA5 ? 'text-[8px]' : 'text-[9px]'} font-extrabold text-[#00545C] uppercase tracking-wider block mb-1`}>
-                      BANK & UPI PAYMENT DETAILS:
-                    </span>
-                    
-                    <div className="flex items-start justify-between gap-2 sm:gap-3">
-                      <div className={`${isA5 ? 'text-[9.5px]' : 'text-[11px]'} text-slate-700 space-y-0.5 flex-1 min-w-0`}>
-                        <p><span className="text-slate-500 font-medium">Bank:</span> <strong className="text-slate-900 font-bold">{settings?.bank_name || 'Indian Bank'}</strong> ({settings?.bank_branch || 'Perundurai'})</p>
-                        <p><span className="text-slate-500 font-medium">A/c Name:</span> <strong className="text-slate-900 font-semibold">{settings?.bank_account_name || 'Udhayam Agencies'}</strong></p>
-                        <p><span className="text-slate-500 font-medium">A/c No:</span> <strong className="text-slate-900 font-bold tabular-nums">{settings?.bank_account_no || '6659330152'}</strong></p>
-                        <p><span className="text-slate-500 font-medium">IFSC:</span> <strong className="text-slate-900 font-bold tabular-nums">{settings?.bank_ifsc || 'IDIB000P034'}</strong></p>
-                        <p className="text-[#00545C] font-bold pt-0.5">
-                          GPay: <span className="tabular-nums">{settings?.gpay_number || '+91 97156 22499'}</span> <span className="text-slate-500 font-normal">(MS Udhayam)</span>
-                        </p>
-                      </div>
-
-                      {/* UPI QR Code Container with Frame */}
-                      <div className="flex flex-col items-center flex-shrink-0 bg-white p-1 rounded-xl border border-slate-200 shadow-2xs">
-                        <img
-                          src={getUploadUrl(`/uploads/qr/${settings?.payment_qr_code || 'default_upi_qr.png'}`)}
-                          alt="UPI QR Code"
-                          className={`${isA5 ? 'w-12 h-12' : 'w-16 h-16 sm:w-18 sm:h-18'} object-contain rounded-md`}
-                          onError={(e) => {
-                            e.target.onerror = null;
-                            e.target.src = getUploadUrl('/uploads/qr/default_upi_qr.png');
-                          }}
-                        />
-                        <span className={`${isA5 ? 'text-[7px]' : 'text-[8px]'} font-black text-[#00545C] mt-0.5 uppercase tracking-wider`}>
-                          SCAN TO PAY UPI
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Terms & Conditions */}
-                  <div className={`mt-2 pt-1.5 border-t border-slate-200 ${isA5 ? 'text-[9px]' : 'text-[10px]'} text-slate-500 leading-tight`}>
-                    <span className="font-bold text-slate-700 block mb-0.5">Terms & Conditions:</span>
-                    <div className="whitespace-pre-line leading-relaxed text-slate-600">
-                      {quotation.notes || settings?.default_terms || '1. Quotation is valid for 7 days from the date of issue.\n2. Goods once sold/dispatched will not be taken back.\n3. Delivery subject to physical stock availability.\n4. GST and Transport charges applicable as mentioned.'}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Right Card: Tax-Inclusive Financial Breakdown */}
-                <div className={`bg-white border border-slate-200 rounded-xl flex flex-col justify-between h-full shadow-2xs ${
-                  isA5 ? 'p-2.5 text-[11px]' : 'p-3.5 text-xs'
-                }`}>
-                  <div className={`space-y-1 text-slate-700`}>
-                    <div className="flex justify-between py-0.5 border-b border-slate-100">
-                      <span className="text-slate-600 font-medium">Subtotal (Retail Incl. GST):</span>
-                      <span className={`font-extrabold text-slate-900 tabular-nums ${isA5 ? 'text-xs' : 'text-sm'}`}>{formatCurrency(subtotal)}</span>
-                    </div>
-
-                    {discountAmount > 0 && (
-                      <div className="flex justify-between py-0.5 border-b border-slate-100 text-emerald-700">
-                        <span className="font-medium">Discount ({quotation.discount_percent}%):</span>
-                        <span className="font-bold tabular-nums">- {formatCurrency(discountAmount)}</span>
-                      </div>
-                    )}
-
-                    {/* GST Inclusive Breakdown Box */}
-                    <div className={`bg-slate-50/90 rounded-lg border border-slate-200/80 space-y-0.5 ${
-                      isA5 ? 'p-1.5 text-[9.5px]' : 'p-2 text-[11px]'
-                    }`}>
-                      <div className="flex justify-between text-slate-500">
-                        <span>Taxable Value (Base):</span>
-                        <span className="tabular-nums font-semibold text-slate-700">{formatCurrency(taxableAmount)}</span>
-                      </div>
-                      <div className="flex justify-between text-slate-600">
-                        <span>CGST ({(gstRate / 2)}%):</span>
-                        <span className="tabular-nums font-semibold text-slate-700">{formatCurrency(cgstAmount)}</span>
-                      </div>
-                      <div className="flex justify-between text-slate-600">
-                        <span>SGST ({(gstRate / 2)}%):</span>
-                        <span className="tabular-nums font-semibold text-slate-700">{formatCurrency(sgstAmount)}</span>
-                      </div>
-                      <div className="flex justify-between font-bold text-emerald-800 pt-0.5 border-t border-slate-200">
-                        <span>Total GST Included ({gstRate}%):</span>
-                        <span className="tabular-nums font-extrabold">{formatCurrency(gstAmount)}</span>
-                      </div>
-                    </div>
-
-                    {Number(quotation.delivery_charges || 0) > 0 && (
-                      <div className="flex justify-between py-0.5 border-b border-slate-100">
-                        <span className="text-slate-600 font-medium">Delivery / Freight:</span>
-                        <span className="font-bold text-slate-900 tabular-nums">+ {formatCurrency(quotation.delivery_charges)}</span>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Grand Total Highlight Banner */}
-                  <div className="mt-2 pt-1 border-t border-slate-200">
-                    <div className={`bg-[#00545C] text-white rounded-xl flex items-center justify-between shadow-sm ${
-                      isA5 ? 'p-2 sm:p-2.5' : 'p-2.5 sm:p-3'
-                    }`}>
-                      <div>
-                        <span className={`font-black uppercase tracking-wider block leading-tight ${
-                          isA5 ? 'text-[10px]' : 'text-xs'
-                        }`}>
-                          GRAND TOTAL:
-                        </span>
-                        <span className={`${isA5 ? 'text-[8.5px]' : 'text-[10px]'} text-emerald-200 font-medium`}>
-                          Inclusive of all taxes
-                        </span>
-                      </div>
-                      <div className="text-right">
-                        <span className={`font-black tabular-nums block leading-none text-[#7DBA00] ${
-                          isA5 ? 'text-sm sm:text-base' : 'text-base sm:text-xl'
-                        }`}>
-                          {formatCurrency(quotation.grand_total)}
-                        </span>
-                      </div>
-                    </div>
-                    {/* Amount in words */}
-                    <div className={`mt-1.5 text-slate-500 italic leading-snug ${isA5 ? 'text-[8.5px]' : 'text-[10px]'}`}>
-                      <span className="font-bold text-slate-700 not-italic">In Words: </span>
-                      {numberToIndianWords(quotation.grand_total)}
-                    </div>
-                  </div>
-                </div>
-
+            {/* 1. HORIZONTAL TAX BREAKDOWN TABLE (FULL WIDTH) */}
+            <div className="mt-3 border border-slate-200 rounded-xl overflow-hidden shadow-2xs">
+              <div className="overflow-x-auto">
+                <table className="w-full border-collapse text-left">
+                  <thead>
+                    <tr className="bg-[#00545C] text-white text-[9px] sm:text-[10px] font-bold uppercase tracking-wider">
+                      <th className="py-2 px-3 text-right">Taxable Value</th>
+                      <th className="py-2 px-2 text-center">CGST %</th>
+                      <th className="py-2 px-3 text-right">CGST Amt</th>
+                      <th className="py-2 px-2 text-center">SGST %</th>
+                      <th className="py-2 px-3 text-right">SGST Amt</th>
+                      <th className="py-2 px-3 text-right">Total Tax</th>
+                      <th className="py-2 px-2 text-right">Round Off</th>
+                      <th className="py-2 px-3 text-right bg-[#7DBA00] text-[#003B40]">Net Grand Total</th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-slate-100 text-xs">
+                    <tr>
+                      <td className="py-2.5 px-3 text-right font-mono font-bold text-slate-800">
+                        {formatCurrency(taxableAmount)}
+                      </td>
+                      <td className="py-2.5 px-2 text-center font-mono text-slate-600">
+                        {(gstRate / 2).toFixed(2)}%
+                      </td>
+                      <td className="py-2.5 px-3 text-right font-mono text-slate-700">
+                        {formatCurrency(cgstAmount)}
+                      </td>
+                      <td className="py-2.5 px-2 text-center font-mono text-slate-600">
+                        {(gstRate / 2).toFixed(2)}%
+                      </td>
+                      <td className="py-2.5 px-3 text-right font-mono text-slate-700">
+                        {formatCurrency(sgstAmount)}
+                      </td>
+                      <td className="py-2.5 px-3 text-right font-mono font-bold text-slate-800">
+                        {formatCurrency(gstAmount)}
+                      </td>
+                      <td className="py-2.5 px-2 text-right font-mono text-slate-500">
+                        {quotation.rounded_off ? formatCurrency(quotation.rounded_off) : '₹0.00'}
+                      </td>
+                      <td className="py-2.5 px-3 text-right font-mono font-black text-sm sm:text-base text-[#003B40] bg-lime-100/70">
+                        {formatCurrency(quotation.grand_total)}
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
               </div>
+              <div className="bg-slate-50 px-3 py-1.5 border-t border-slate-200 text-[10px] sm:text-xs text-slate-600 flex items-center justify-between">
+                <span>
+                  <strong className="text-slate-800">Amount in Words: </strong>
+                  <span className="italic">{numberToIndianWords(quotation.grand_total)}</span>
+                </span>
+                <span className="text-[10px] text-emerald-800 font-bold bg-emerald-100 px-2 py-0.5 rounded">
+                  GST Applicable
+                </span>
+              </div>
+            </div>
+
+            {/* 2. BANK DETAILS & TERMS HORIZONTAL COLUMNS (FULL WIDTH) */}
+            <div className="mt-3 bg-slate-50/90 border border-slate-200 rounded-xl p-3 shadow-2xs">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 items-stretch">
+                {/* Col 1: Bank & Settlement */}
+                <div className="space-y-0.5 text-[11px] text-slate-700 border-r border-slate-200/80 pr-2">
+                  <span className="text-[9px] font-black text-[#00545C] uppercase tracking-wider block mb-1">
+                    BANK & PAYMENT DETAILS:
+                  </span>
+                  <p><span className="text-slate-500">Bank:</span> <strong>{settings?.bank_name || 'Indian Bank'}</strong> ({settings?.bank_branch || 'Perundurai'})</p>
+                  <p><span className="text-slate-500">A/c:</span> <strong>{settings?.bank_account_no || '6659330152'}</strong></p>
+                  <p><span className="text-slate-500">IFSC:</span> <strong>{settings?.bank_ifsc || 'IDIB000P034'}</strong></p>
+                  <p className="text-[#00545C] font-bold">GPay: {settings?.gpay_number || '+91 97156 22499'}</p>
+                </div>
+
+                {/* Col 2: Terms & Conditions */}
+                <div className="text-[10px] text-slate-600 border-r border-slate-200/80 pr-2 space-y-1">
+                  <span className="text-[9px] font-black text-[#00545C] uppercase tracking-wider block mb-1">
+                    TERMS & CONDITIONS:
+                  </span>
+                  <p className="line-clamp-3 leading-relaxed">
+                    {quotation.notes || settings?.default_terms || '1. Quotation valid for 7 days.\n2. Goods once sold will not be taken back.\n3. Delivery subject to physical stock.'}
+                  </p>
+                </div>
+
+                {/* Col 3: UPI QR Code */}
+                <div className="flex flex-col items-center justify-center border-r border-slate-200/80 pr-2">
+                  <div className="bg-white p-1 rounded-lg border border-slate-200 shadow-2xs flex flex-col items-center">
+                    <img
+                      src={getUploadUrl(`/uploads/qr/${settings?.payment_qr_code || 'default_upi_qr.png'}`)}
+                      alt="UPI QR Code"
+                      className="w-14 h-14 object-contain rounded"
+                      onError={(e) => {
+                        e.target.onerror = null;
+                        e.target.src = getUploadUrl('/uploads/qr/default_upi_qr.png');
+                      }}
+                    />
+                    <span className="text-[7.5px] font-black text-[#00545C] mt-0.5 uppercase tracking-wider">
+                      SCAN TO PAY UPI
+                    </span>
+                  </div>
+                </div>
+
+                {/* Col 4: Authorised Signatory */}
+                <div className="flex flex-col justify-between text-right text-[11px] text-slate-700 pl-1">
+                  <div className="text-left">
+                    <span className="text-[9px] font-black text-slate-500 uppercase tracking-wider block">Customer Acceptance</span>
+                    <div className="border-b border-dashed border-slate-300 w-28 h-5"></div>
+                    <span className="text-[8px] text-slate-400">Signature / Seal</span>
+                  </div>
+                  <div className="mt-2 text-right">
+                    <p className="font-extrabold text-[#00545C] text-xs">For {settings?.company_name || 'UDHAYAM AGENCIES'}</p>
+                    <div className="border-b border-dashed border-slate-300 w-32 h-5 ml-auto"></div>
+                    <p className="text-[9px] font-semibold text-slate-500 mt-0.5">Authorised Signatory</p>
+                  </div>
+                </div>
+              </div>
+            </div>
 
               {/* Footer Signature & Verification Bar */}
               <div className={`pt-2 border-t border-slate-300 flex items-end justify-between ${

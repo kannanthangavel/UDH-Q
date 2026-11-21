@@ -56,6 +56,13 @@ export default function CreateQuotation({ setActivePage, initialCustomer, import
   const [paperFormat, setPaperFormat] = useState(settings?.default_paper_format || 'A4'); // 'A4' | 'A5'
   const [notes, setNotes] = useState(settings?.default_terms || '');
 
+  function handleSetValidityPreset(days) {
+    const base = quotationDate ? new Date(quotationDate) : new Date();
+    const d = isNaN(base.getTime()) ? new Date() : base;
+    d.setDate(d.getDate() + days);
+    setValidityDate(d.toISOString().split('T')[0]);
+  }
+
   // Line Items in Quotation Studio
   const [items, setItems] = useState([]);
   const [highlightedRowIndex, setHighlightedRowIndex] = useState(null);
@@ -1044,9 +1051,34 @@ export default function CreateQuotation({ setActivePage, initialCustomer, import
           </div>
 
           <div>
-            <label className="block font-bold text-slate-700 mb-1">
-              Validity Until Date
-            </label>
+            <div className="flex items-center justify-between mb-1">
+              <label className="font-bold text-slate-700">
+                Validity Until Date
+              </label>
+              <div className="flex items-center space-x-1">
+                <button
+                  type="button"
+                  onClick={() => handleSetValidityPreset(7)}
+                  className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-100 hover:bg-slate-200 text-slate-600 border border-slate-200 cursor-pointer"
+                >
+                  +7D
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleSetValidityPreset(15)}
+                  className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-100 hover:bg-slate-200 text-slate-600 border border-slate-200 cursor-pointer"
+                >
+                  +15D
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleSetValidityPreset(30)}
+                  className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-100 hover:bg-slate-200 text-slate-600 border border-slate-200 cursor-pointer"
+                >
+                  +30D
+                </button>
+              </div>
+            </div>
             <input
               type="date"
               value={validityDate}
@@ -1083,8 +1115,54 @@ export default function CreateQuotation({ setActivePage, initialCustomer, import
 
           <div>
             <label className="block font-bold text-slate-700 mb-1">
-              Payment Terms
+              Payment Terms (Cash / Credit)
             </label>
+            <div className="flex flex-wrap gap-1 mb-1.5">
+              <button
+                type="button"
+                onClick={() => setPaymentTerms('Cash')}
+                className={`text-[10px] font-extrabold px-2 py-0.5 rounded-md transition-colors cursor-pointer ${
+                  paymentTerms.toLowerCase() === 'cash'
+                    ? 'bg-emerald-600 text-white shadow-xs'
+                    : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                }`}
+              >
+                💵 Cash
+              </button>
+              <button
+                type="button"
+                onClick={() => setPaymentTerms('Credit')}
+                className={`text-[10px] font-extrabold px-2 py-0.5 rounded-md transition-colors cursor-pointer ${
+                  paymentTerms.toLowerCase() === 'credit'
+                    ? 'bg-amber-600 text-white shadow-xs'
+                    : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                }`}
+              >
+                💳 Credit
+              </button>
+              <button
+                type="button"
+                onClick={() => setPaymentTerms('Credit (15 Days)')}
+                className={`text-[10px] font-bold px-2 py-0.5 rounded-md transition-colors cursor-pointer ${
+                  paymentTerms.includes('15')
+                    ? 'bg-amber-600 text-white shadow-xs'
+                    : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                }`}
+              >
+                15 Days
+              </button>
+              <button
+                type="button"
+                onClick={() => setPaymentTerms('Credit (30 Days)')}
+                className={`text-[10px] font-bold px-2 py-0.5 rounded-md transition-colors cursor-pointer ${
+                  paymentTerms.includes('30')
+                    ? 'bg-amber-600 text-white shadow-xs'
+                    : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                }`}
+              >
+                30 Days
+              </button>
+            </div>
             <input
               type="text"
               value={paymentTerms}

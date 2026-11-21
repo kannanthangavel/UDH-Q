@@ -6,6 +6,7 @@ const { generateQuotationPdf } = require('../services/pdfService');
 // POST /api/quotations - Create Quotation
 router.post('/', (req, res) => {
   const {
+    quotation_number = '',
     customer_id,
     customer_name,
     customer_phone = '',
@@ -177,7 +178,17 @@ router.post('/', (req, res) => {
   let quoteNumber = null;
 
   const transaction = db.transaction(() => {
-    quoteNumber = getNextQuotationNumber();
+    if (quotation_number && quotation_number.trim()) {
+      let desired = quotation_number.trim();
+      const existing = db.prepare('SELECT id FROM quotations WHERE quotation_number = ?').get(desired);
+      if (existing) {
+        quoteNumber = `${desired}-${Date.now().toString().slice(-4)}`;
+      } else {
+        quoteNumber = desired;
+      }
+    } else {
+      quoteNumber = getNextQuotationNumber();
+    }
 
     const insertQuote = db.prepare(`
       INSERT INTO quotations (
@@ -801,9 +812,12 @@ const pdfUpload = multer({
 
 // POST /api/quotations/upload-optech-pdf - Parse Optech software quote PDF and auto-match products
 router.post('/upload-optech-pdf', (req, res, next) => {
-  pdfUpload.single('file')(req, res, (err) => {
+  pdfUpload.any()(req, res, (err) => {
     if (err) {
       return res.status(400).json({ error: err.message });
+    }
+    if (req.files && req.files.length > 0) {
+      req.file = req.files[0];
     }
     next();
   });

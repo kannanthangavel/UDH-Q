@@ -107,8 +107,29 @@ router.post('/', requireAdmin, (req, res) => {
   res.json({ success: true, settings, message: 'Settings updated successfully' });
 });
 
+// Robust upload middlewares accepting any file field name (logo, qr, qr_code, file)
+const logoUploadMiddleware = (req, res, next) => {
+  uploadLogo.any()(req, res, (err) => {
+    if (err) return res.status(400).json({ error: err.message });
+    if (req.files && req.files.length > 0) {
+      req.file = req.files[0];
+    }
+    next();
+  });
+};
+
+const qrUploadMiddleware = (req, res, next) => {
+  uploadQr.any()(req, res, (err) => {
+    if (err) return res.status(400).json({ error: err.message });
+    if (req.files && req.files.length > 0) {
+      req.file = req.files[0];
+    }
+    next();
+  });
+};
+
 // POST /api/settings/logo - Upload company logo / profile image
-router.post('/logo', requireAdmin, uploadLogo.single('logo'), (req, res) => {
+router.post('/logo', requireAdmin, logoUploadMiddleware, (req, res) => {
   if (!req.file) {
     return res.status(400).json({ error: 'Please choose an image file to upload.' });
   }
@@ -165,7 +186,7 @@ router.delete('/logo', requireAdmin, (req, res) => {
 });
 
 // POST /api/settings/qr-code - Upload manual payment UPI QR code image
-router.post('/qr-code', requireAdmin, uploadQr.single('qr_code'), (req, res) => {
+router.post('/qr-code', requireAdmin, qrUploadMiddleware, (req, res) => {
   if (!req.file) {
     return res.status(400).json({ error: 'Please choose a QR code image file to upload.' });
   }

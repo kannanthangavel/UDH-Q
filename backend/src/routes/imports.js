@@ -24,8 +24,19 @@ const upload = multer({
 // Cache for parsed preview data (keyed by temporary preview ID or filename)
 const previewCache = new Map();
 
+// Flexible multer middleware accepting any field name for excel/csv
+const excelUploadMiddleware = (req, res, next) => {
+  upload.any()(req, res, (err) => {
+    if (err) return res.status(400).json({ error: err.message });
+    if (req.files && req.files.length > 0) {
+      req.file = req.files[0];
+    }
+    next();
+  });
+};
+
 // POST /api/imports/preview
-router.post('/preview', upload.single('file'), (req, res) => {
+router.post('/preview', excelUploadMiddleware, (req, res) => {
   if (!req.file) {
     return res.status(400).json({ error: 'Please select an Excel or CSV rate sheet file to upload.' });
   }

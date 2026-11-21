@@ -159,11 +159,12 @@ export async function request(endpoint, options = {}) {
 
   if (options.body instanceof FormData) {
     delete headers['Content-Type'];
+    delete headers['content-type'];
   }
 
   const url = getApiUrl(endpoint);
   const controller = new AbortController();
-  const timeoutMs = options.timeoutMs || 45000;
+  const timeoutMs = options.timeoutMs || 60000;
   const timer = setTimeout(() => controller.abort(), timeoutMs);
 
   let response;

@@ -22,6 +22,14 @@ export default function OptechPdfUploadModal({
   const [customerGstin, setCustomerGstin] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
   const [customerAddress, setCustomerAddress] = useState('');
+  const [quotationNumber, setQuotationNumber] = useState('');
+  const [quotationDate, setQuotationDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [validityDate, setValidityDate] = useState(() => {
+    const d = new Date();
+    d.setDate(d.getDate() + 8);
+    return d.toISOString().split('T')[0];
+  });
+  const [paymentTerms, setPaymentTerms] = useState('Cash');
   const [items, setItems] = useState([]);
   const [paperFormat, setPaperFormat] = useState('A4');
   const [isCreatingQuote, setIsCreatingQuote] = useState(false);
@@ -39,7 +47,20 @@ export default function OptechPdfUploadModal({
     setCustomerGstin('');
     setCustomerPhone('');
     setCustomerAddress('');
+    setQuotationNumber('');
+    setQuotationDate(new Date().toISOString().split('T')[0]);
+    const d = new Date();
+    d.setDate(d.getDate() + 8);
+    setValidityDate(d.toISOString().split('T')[0]);
+    setPaymentTerms('Cash');
     setItems([]);
+  }
+
+  function handleSetValidityPreset(days) {
+    const base = quotationDate ? new Date(quotationDate) : new Date();
+    const d = isNaN(base.getTime()) ? new Date() : base;
+    d.setDate(d.getDate() + days);
+    setValidityDate(d.toISOString().split('T')[0]);
   }
 
   function handleFileSelected(e) {
@@ -72,6 +93,16 @@ export default function OptechPdfUploadModal({
         setCustomerGstin(res.customer?.gstin || '');
         setCustomerPhone(res.customer?.phone || '');
         setCustomerAddress(res.customer?.address || '');
+        setQuotationNumber(res.quotationNumber || res.referenceNo || res.estimateNumber || '');
+        setPaymentTerms(res.paymentTerms || 'Cash');
+        if (res.quotationDate) setQuotationDate(res.quotationDate);
+        if (res.quotationDate) {
+          const qd = new Date(res.quotationDate);
+          if (!isNaN(qd.getTime())) {
+            qd.setDate(qd.getDate() + 8);
+            setValidityDate(qd.toISOString().split('T')[0]);
+          }
+        }
         setItems(res.items || []);
       } else {
         setParseError(res.error || 'Could not parse quotation items from this PDF.');
@@ -127,14 +158,16 @@ export default function OptechPdfUploadModal({
       setParseError('');
 
       const quotePayload = {
+        quotation_number: quotationNumber.trim(),
         customer_name: customerName.trim(),
         customer_phone: customerPhone.trim(),
         customer_address: customerAddress.trim(),
         customer_gstin: customerGstin.trim(),
         reference_no: parsedData?.referenceNo || parsedData?.estimateNumber || '',
-        payment_terms: parsedData?.paymentTerms || 'Cash',
+        payment_terms: paymentTerms.trim() || 'Cash',
+        validity_date: validityDate,
+        quotation_date: quotationDate || new Date().toISOString().split('T')[0],
         rounded_off: roundOff,
-        quotation_date: parsedData?.quotationDate || new Date().toISOString().split('T')[0],
         paper_format: paperFormat,
         subtotal: Math.round(taxableSubtotal * 100) / 100,
         gst_rate: 18,
@@ -193,8 +226,10 @@ export default function OptechPdfUploadModal({
           address: customerAddress,
           gstin: customerGstin
         },
-        reference_no: parsedData?.referenceNo || '',
-        payment_terms: parsedData?.paymentTerms || 'Cash',
+        quotation_number: quotationNumber,
+        reference_no: parsedData?.referenceNo || quotationNumber || '',
+        payment_terms: paymentTerms || 'Cash',
+        validity_date: validityDate,
         is_tax_inclusive: false,
         subtotal: taxableSubtotal,
         gst_amount: totalTaxAmount,
@@ -416,6 +451,146 @@ export default function OptechPdfUploadModal({
                       onChange={e => setCustomerAddress(e.target.value)}
                       placeholder="e.g. Pattakaran Palayam, Perundurai"
                       className="w-full px-3 py-2 text-xs bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#00545C] text-slate-900"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Quotation Parameters & CASH / Credit Operations */}
+              <div className="bg-slate-50 border border-slate-200 rounded-xl p-4">
+                <h4 className="text-xs font-black uppercase tracking-wider text-slate-500 mb-3 flex items-center justify-between">
+                  <div className="flex items-center space-x-1.5">
+                    <Calendar className="w-3.5 h-3.5 text-[#00545C]" />
+                    <span>Quotation Number, Validity & Payment Terms</span>
+                  </div>
+                  <span className="text-[10px] bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded-full">
+                    Optech Linked
+                  </span>
+                </h4>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  {/* Quote Number (SAM Quote Number from Optech) */}
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                      Quotation / Estimate # *
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="text"
+                        value={quotationNumber}
+                        onChange={e => setQuotationNumber(e.target.value)}
+                        placeholder="e.g. 1182"
+                        className="w-full px-3 py-2 text-xs bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#00545C] font-mono font-bold text-[#00545C]"
+                      />
+                      {parsedData?.referenceNo && (
+                        <span className="absolute right-2 top-2 text-[10px] font-bold text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded">
+                          Optech No
+                        </span>
+                      )}
+                    </div>
+                    <span className="text-[10px] text-slate-500 mt-1 block">
+                      Matches Optech quote number automatically.
+                    </span>
+                  </div>
+
+                  {/* Manual Validity Date Operation */}
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="text-[11px] font-bold text-slate-700">
+                        Valid Until Date
+                      </label>
+                      <div className="flex items-center space-x-1">
+                        <button
+                          type="button"
+                          onClick={() => handleSetValidityPreset(7)}
+                          className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-white hover:bg-slate-200 text-slate-600 border border-slate-200 cursor-pointer"
+                        >
+                          +7D
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleSetValidityPreset(15)}
+                          className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-white hover:bg-slate-200 text-slate-600 border border-slate-200 cursor-pointer"
+                        >
+                          +15D
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleSetValidityPreset(30)}
+                          className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-white hover:bg-slate-200 text-slate-600 border border-slate-200 cursor-pointer"
+                        >
+                          +30D
+                        </button>
+                      </div>
+                    </div>
+                    <input
+                      type="date"
+                      value={validityDate}
+                      onChange={e => setValidityDate(e.target.value)}
+                      className="w-full px-3 py-2 text-xs bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#00545C] font-mono font-medium text-slate-900"
+                    />
+                    <span className="text-[10px] text-slate-500 mt-1 block">
+                      Manual calendar selection or quick presets.
+                    </span>
+                  </div>
+
+                  {/* CASH / Credit Operations */}
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                      Payment Terms (Cash / Credit)
+                    </label>
+                    <div className="flex flex-wrap gap-1 mb-1.5">
+                      <button
+                        type="button"
+                        onClick={() => setPaymentTerms('Cash')}
+                        className={`text-[10px] font-extrabold px-2 py-1 rounded-md transition-colors cursor-pointer ${
+                          paymentTerms.toLowerCase() === 'cash'
+                            ? 'bg-emerald-600 text-white shadow-xs'
+                            : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-100'
+                        }`}
+                      >
+                        💵 Cash
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setPaymentTerms('Credit')}
+                        className={`text-[10px] font-extrabold px-2 py-1 rounded-md transition-colors cursor-pointer ${
+                          paymentTerms.toLowerCase() === 'credit'
+                            ? 'bg-amber-600 text-white shadow-xs'
+                            : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-100'
+                        }`}
+                      >
+                        💳 Credit
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setPaymentTerms('Credit (15 Days)')}
+                        className={`text-[10px] font-bold px-2 py-1 rounded-md transition-colors cursor-pointer ${
+                          paymentTerms.includes('15')
+                            ? 'bg-amber-600 text-white shadow-xs'
+                            : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-100'
+                        }`}
+                      >
+                        15 Days
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setPaymentTerms('Credit (30 Days)')}
+                        className={`text-[10px] font-bold px-2 py-1 rounded-md transition-colors cursor-pointer ${
+                          paymentTerms.includes('30')
+                            ? 'bg-amber-600 text-white shadow-xs'
+                            : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-100'
+                        }`}
+                      >
+                        30 Days
+                      </button>
+                    </div>
+                    <input
+                      type="text"
+                      value={paymentTerms}
+                      onChange={e => setPaymentTerms(e.target.value)}
+                      placeholder="e.g. Cash / Credit (15 Days)"
+                      className="w-full px-3 py-1.5 text-xs bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#00545C] text-slate-900"
                     />
                   </div>
                 </div>

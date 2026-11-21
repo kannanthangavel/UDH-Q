@@ -386,7 +386,8 @@ function parseOptechText(rawText) {
     totalQty = matchedLineItems.reduce((acc, it) => acc + it.quantity, 0);
   }
 
-  // Quotation number formatting
+  // Quotation number formatting - strictly use exact estimate/quote number from Optech PDF
+  const optechQuoteNo = estimateNumber || '';
   const formattedQuoteNo = estimateNumber
     ? `UDQ-2026-${String(estimateNumber).padStart(6, '0')}`
     : '';
@@ -398,7 +399,8 @@ function parseOptechText(rawText) {
       gstin: customerGstin,
       phone: customerPhone
     },
-    quotationNumber: formattedQuoteNo,
+    quotationNumber: optechQuoteNo || formattedQuoteNo,
+    estimateNumber: estimateNumber,
     referenceNo: estimateNumber,
     paymentTerms: paymentTerms,
     quotationDate: quotationDate || new Date().toISOString().split('T')[0],

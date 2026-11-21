@@ -286,6 +286,7 @@ export default function Settings() {
       setIsUploadingQr(true);
       setQrError('');
       const data = new FormData();
+      data.append('qr_code', qrFile);
       data.append('qr', qrFile);
       const res = await api.uploadQrCode(data);
       setPaymentQrCode(res.filename);
