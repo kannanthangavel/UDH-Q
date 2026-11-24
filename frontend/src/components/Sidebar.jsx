@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { 
   FileText, PlusCircle, Users, Settings as SettingsIcon, 
   Layers, LayoutDashboard, Menu, X, Sparkles, MessageSquare,
-  ChevronRight, Shield, CheckCircle2
+  ChevronRight, Shield, CheckCircle2, Receipt, Truck
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { getUploadUrl } from '../api/client';
@@ -10,16 +10,20 @@ import { getUploadUrl } from '../api/client';
 export default function Sidebar({ activePage, setActivePage, onOpenWhatsAppParser, mobileOpen, setMobileOpen }) {
   const { user, settings } = useAuth();
 
-  const logoUrl = getUploadUrl(
-    settings?.company_logo
-      ? `/uploads/logos/${settings.company_logo}`
-      : '/uploads/logos/udhayam_logo.png'
-  );
+  const logoUrl = (settings?.company_logo_data && settings?.company_logo_data.startsWith('data:'))
+    ? settings.company_logo_data
+    : getUploadUrl(
+        settings?.company_logo
+          ? `/uploads/logos/${settings.company_logo}`
+          : '/uploads/logos/udhayam_logo.png'
+      );
 
   const navItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { id: 'create-quotation', label: 'Create Quotation', icon: PlusCircle, isPrimary: true },
     { id: 'quotations', label: 'Quotations', icon: FileText },
+    { id: 'receipts', label: 'Customer Receipts', icon: Receipt },
+    { id: 'supplier-bills', label: 'Supplier Payments', icon: Truck },
     { id: 'price-list', label: 'Price List & Catalogue', icon: Layers },
     { id: 'customers', label: 'Customers', icon: Users },
     { id: 'settings', label: 'Settings & Profile', icon: SettingsIcon },

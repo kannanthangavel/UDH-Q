@@ -135,12 +135,25 @@ router.post('/logo', requireAdmin, logoUploadMiddleware, (req, res) => {
   }
 
   const filename = req.file.filename;
+  let base64Data = '';
+  try {
+    const fileBuf = fs.readFileSync(req.file.path);
+    const mime = req.file.mimetype || 'image/png';
+    base64Data = `data:${mime};base64,${fileBuf.toString('base64')}`;
+  } catch (err) {
+    console.warn('Failed to convert logo to base64:', err.message);
+  }
 
-  db.prepare(`
+  const upsert = db.prepare(`
     INSERT INTO settings (key, value, updated_at)
-    VALUES ('company_logo', ?, datetime('now'))
+    VALUES (?, ?, datetime('now'))
     ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = datetime('now')
-  `).run(filename);
+  `);
+
+  upsert.run('company_logo', filename);
+  if (base64Data) {
+    upsert.run('company_logo_data', base64Data);
+  }
 
   logAudit(
     req.user?.id || 1,
@@ -155,6 +168,7 @@ router.post('/logo', requireAdmin, logoUploadMiddleware, (req, res) => {
   res.json({
     success: true,
     filename,
+    company_logo_data: base64Data || undefined,
     url: `/uploads/logos/${filename}`,
     message: 'Company logo uploaded and updated successfully'
   });
@@ -165,6 +179,11 @@ router.delete('/logo', requireAdmin, (req, res) => {
   db.prepare(`
     UPDATE settings SET value = 'udhayam_logo.png', updated_at = datetime('now')
     WHERE key = 'company_logo'
+  `).run();
+
+  db.prepare(`
+    UPDATE settings SET value = '', updated_at = datetime('now')
+    WHERE key = 'company_logo_data'
   `).run();
 
   logAudit(
@@ -192,12 +211,25 @@ router.post('/qr-code', requireAdmin, qrUploadMiddleware, (req, res) => {
   }
 
   const filename = req.file.filename;
+  let base64Data = '';
+  try {
+    const fileBuf = fs.readFileSync(req.file.path);
+    const mime = req.file.mimetype || 'image/png';
+    base64Data = `data:${mime};base64,${fileBuf.toString('base64')}`;
+  } catch (err) {
+    console.warn('Failed to convert QR to base64:', err.message);
+  }
 
-  db.prepare(`
+  const upsert = db.prepare(`
     INSERT INTO settings (key, value, updated_at)
-    VALUES ('payment_qr_code', ?, datetime('now'))
+    VALUES (?, ?, datetime('now'))
     ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = datetime('now')
-  `).run(filename);
+  `);
+
+  upsert.run('payment_qr_code', filename);
+  if (base64Data) {
+    upsert.run('payment_qr_code_data', base64Data);
+  }
 
   logAudit(
     req.user?.id || 1,
@@ -212,6 +244,7 @@ router.post('/qr-code', requireAdmin, qrUploadMiddleware, (req, res) => {
   res.json({
     success: true,
     filename,
+    payment_qr_code_data: base64Data || undefined,
     url: `/uploads/qr/${filename}`,
     message: 'Payment UPI QR code uploaded and attached successfully'
   });
@@ -223,6 +256,12 @@ router.delete('/qr-code', requireAdmin, (req, res) => {
     INSERT INTO settings (key, value, updated_at)
     VALUES ('payment_qr_code', 'default_upi_qr.png', datetime('now'))
     ON CONFLICT(key) DO UPDATE SET value = 'default_upi_qr.png', updated_at = datetime('now')
+  `).run();
+
+  db.prepare(`
+    INSERT INTO settings (key, value, updated_at)
+    VALUES ('payment_qr_code_data', '', datetime('now'))
+    ON CONFLICT(key) DO UPDATE SET value = '', updated_at = datetime('now')
   `).run();
 
   logAudit(

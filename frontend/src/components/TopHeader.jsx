@@ -9,6 +9,8 @@ export default function TopHeader({ activePage, onToggleMobileSidebar, onOpenWha
     'dashboard': 'Dashboard Overview',
     'create-quotation': 'Quotation Creator Wizard',
     'quotations': 'Quotations Register',
+    'receipts': 'Customer Payment Receipts',
+    'supplier-bills': 'Supplier Payments & Due Alerts',
     'price-list': 'Price List & Official Catalogue',
     'customers': 'Customer Directory',
     'settings': 'Settings & Business Profile'

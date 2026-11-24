@@ -12,12 +12,28 @@ const COLOR_TEXT = '#1E293B';
 const COLOR_MUTED = '#64748B';
 const COLOR_BORDER = '#CBD5E1';
 
-function getLogoPath(companyLogoSetting) {
-  return resolveUploadedFile('logos', companyLogoSetting, 'udhayam_logo.png');
+function getLogoSource(settings = {}) {
+  if (settings.company_logo_data && typeof settings.company_logo_data === 'string' && settings.company_logo_data.startsWith('data:image')) {
+    try {
+      const base64Data = settings.company_logo_data.replace(/^data:image\/\w+;base64,/, '');
+      return Buffer.from(base64Data, 'base64');
+    } catch (e) {
+      console.warn('Buffer conversion failed for company_logo_data:', e.message);
+    }
+  }
+  return resolveUploadedFile('logos', settings.company_logo, 'udhayam_logo.png');
 }
 
-function getQrCodePath(paymentQrSetting) {
-  return resolveUploadedFile('qr', paymentQrSetting, 'default_upi_qr.png');
+function getQrSource(settings = {}) {
+  if (settings.payment_qr_code_data && typeof settings.payment_qr_code_data === 'string' && settings.payment_qr_code_data.startsWith('data:image')) {
+    try {
+      const base64Data = settings.payment_qr_code_data.replace(/^data:image\/\w+;base64,/, '');
+      return Buffer.from(base64Data, 'base64');
+    } catch (e) {
+      console.warn('Buffer conversion failed for payment_qr_code_data:', e.message);
+    }
+  }
+  return resolveUploadedFile('qr', settings.payment_qr_code, 'default_upi_qr.png');
 }
 
 /**
@@ -60,7 +76,7 @@ function generateQuotationPdf(quotation, settings = {}, res = null) {
   const pageWidth = doc.page.width;
   const pageHeight = doc.page.height;
   const contentWidth = pageWidth - margin * 2;
-  const logoPath = getLogoPath(settings.company_logo);
+  const logoSource = getLogoSource(settings);
 
   // Card and Pill Corner Radii
   const R_CARD = isA5 ? 6 : 8;
@@ -76,7 +92,7 @@ function generateQuotationPdf(quotation, settings = {}, res = null) {
 
   // Logo in clean rounded white square container (fills allocated space fully!)
   let textLeft = margin + (isA5 ? 6 : 10);
-  if (logoPath) {
+  if (logoSource) {
     try {
       const logoBoxW = isA5 ? 46 : 64;
       const logoBoxH = isA5 ? 46 : 64;
@@ -84,7 +100,7 @@ function generateQuotationPdf(quotation, settings = {}, res = null) {
       const boxX = margin + (isA5 ? 4 : 5);
       const boxY = margin + (isA5 ? 3 : 5);
       doc.roundedRect(boxX, boxY, logoBoxW, logoBoxH, R_SM).fill('#FFFFFF');
-      doc.image(logoPath, boxX + pad, boxY + pad, {
+      doc.image(logoSource, boxX + pad, boxY + pad, {
         fit: [logoBoxW - pad * 2, logoBoxH - pad * 2],
         align: 'center',
         valign: 'center'
@@ -501,12 +517,12 @@ function generateQuotationPdf(quotation, settings = {}, res = null) {
 
   // Col 3: UPI QR Code Card
   const qrSize = isA5 ? 34 : 46;
-  const qrPath = getQrCodePath(settings.payment_qr_code);
-  if (qrPath) {
+  const qrSource = getQrSource(settings);
+  if (qrSource) {
     try {
       const qrImgX = cx + (bCol3W - qrSize) / 2;
       const qrImgY = curY + (isA5 ? 4 : 5);
-      doc.image(qrPath, qrImgX, qrImgY, { fit: [qrSize, qrSize] });
+      doc.image(qrSource, qrImgX, qrImgY, { fit: [qrSize, qrSize] });
       doc.fillColor(COLOR_TEAL_DARK).font('Helvetica-Bold').fontSize(isA5 ? 4.2 : 5.2)
          .text('SCAN TO PAY UPI', cx, qrImgY + qrSize + (isA5 ? 2.5 : 3.5), { width: bCol3W, align: 'center' });
     } catch (e) {
@@ -593,7 +609,7 @@ function generatePriceListPdf(products, sectionName, paperFormat, settings, res)
   const pageWidth = doc.page.width;
   const pageHeight = doc.page.height;
   const contentWidth = pageWidth - margin * 2;
-  const logoPath = getLogoPath(settings.company_logo);
+  const logoSource = getLogoSource(settings);
 
   const colDef = [
     { label: 'S. No.', width: isA5 ? 24 : 30, align: 'center' },
@@ -609,9 +625,9 @@ function generatePriceListPdf(products, sectionName, paperFormat, settings, res)
     doc.roundedRect(margin, y, contentWidth, isA5 ? 42 : 50, isA5 ? 6 : 8).fill(COLOR_TEAL);
 
     let tX = margin + 6;
-    if (logoPath) {
+    if (logoSource) {
       try {
-        doc.image(logoPath, margin + 4, y + (isA5 ? 4 : 6), {
+        doc.image(logoSource, margin + 4, y + (isA5 ? 4 : 6), {
           fit: [isA5 ? 60 : 75, isA5 ? 32 : 38]
         });
         tX = margin + (isA5 ? 70 : 86);

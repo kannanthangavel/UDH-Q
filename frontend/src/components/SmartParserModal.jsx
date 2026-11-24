@@ -309,14 +309,6 @@ Red Oxide Primer 4lt`);
                           Clear Text
                         </button>
                       )}
-                      <button
-                        type="button"
-                        onClick={handleLoadSample}
-                        className="text-[#00545C] hover:underline font-bold flex items-center space-x-1 cursor-pointer"
-                      >
-                        <RefreshCw className="w-3 h-3" />
-                        <span>Load Sample Demo Order</span>
-                      </button>
                     </div>
                   </div>
 

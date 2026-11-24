@@ -645,7 +645,7 @@ export default function CreateQuotation({ setActivePage, initialCustomer, import
         customer_address: customerAddress.trim(),
         customer_gstin: customerGstin.trim(),
         reference_no: referenceNo.trim(),
-        payment_terms: paymentTerms.trim(),
+        payment_terms: (paymentTerms || '').trim(),
         is_tax_inclusive: isTaxInclusive,
         items: items.map(it => {
           let finalDetails = it.details || '';
@@ -1122,7 +1122,7 @@ export default function CreateQuotation({ setActivePage, initialCustomer, import
                 type="button"
                 onClick={() => setPaymentTerms('Cash')}
                 className={`text-[10px] font-extrabold px-2 py-0.5 rounded-md transition-colors cursor-pointer ${
-                  paymentTerms.toLowerCase() === 'cash'
+                  (paymentTerms || '').toLowerCase() === 'cash'
                     ? 'bg-emerald-600 text-white shadow-xs'
                     : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
                 }`}
@@ -1133,7 +1133,7 @@ export default function CreateQuotation({ setActivePage, initialCustomer, import
                 type="button"
                 onClick={() => setPaymentTerms('Credit')}
                 className={`text-[10px] font-extrabold px-2 py-0.5 rounded-md transition-colors cursor-pointer ${
-                  paymentTerms.toLowerCase() === 'credit'
+                  (paymentTerms || '').toLowerCase() === 'credit'
                     ? 'bg-amber-600 text-white shadow-xs'
                     : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
                 }`}
@@ -1144,7 +1144,7 @@ export default function CreateQuotation({ setActivePage, initialCustomer, import
                 type="button"
                 onClick={() => setPaymentTerms('Credit (15 Days)')}
                 className={`text-[10px] font-bold px-2 py-0.5 rounded-md transition-colors cursor-pointer ${
-                  paymentTerms.includes('15')
+                  (paymentTerms || '').includes('15')
                     ? 'bg-amber-600 text-white shadow-xs'
                     : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
                 }`}
@@ -1155,7 +1155,7 @@ export default function CreateQuotation({ setActivePage, initialCustomer, import
                 type="button"
                 onClick={() => setPaymentTerms('Credit (30 Days)')}
                 className={`text-[10px] font-bold px-2 py-0.5 rounded-md transition-colors cursor-pointer ${
-                  paymentTerms.includes('30')
+                  (paymentTerms || '').includes('30')
                     ? 'bg-amber-600 text-white shadow-xs'
                     : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
                 }`}
@@ -1165,7 +1165,7 @@ export default function CreateQuotation({ setActivePage, initialCustomer, import
             </div>
             <input
               type="text"
-              value={paymentTerms}
+              value={paymentTerms || ''}
               onChange={(e) => setPaymentTerms(e.target.value)}
               placeholder="e.g. Cash / Immediate / 30 Days"
               className="w-full px-3 py-2 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#00545C]/20 focus:border-[#00545C]"

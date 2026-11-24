@@ -95,15 +95,25 @@ function parseOptechText(rawText) {
   let netAmount = 0;
   let amountInWords = '';
 
-  // Standard Optech Item regex:
-  // Starts with S.No (1-999), then description, HSN (4-8 digits), Qty (int/dec), Unit (Nos/etc), Rate (float), Tax% (int/float), Amount (float)
-  const itemRegex = /^\s*(\d{1,3})\s+(.+?)\s+(\d{4,8})\s+(\d+(?:\.\d+)?)\s*([A-Za-z]+)?\s+(\d+(?:\.\d+)?)\s+(\d+(?:\.\d+)?)\s+(\d+(?:\.\d+)?)\s*$/;
+  // Standard & Flexible Optech Item regex patterns (handles comma-separated numbers like 1,830.51):
+  // 1. With HSN (2-8 digits), Qty, Unit, Rate, ValA, ValB (ValA/ValB = Tax% / Amount)
+  const itemRegexWithHsn = /^(\d{1,3})[\s.)-]+\s*(.+?)\s+(\d{2,8})\s+(\d+(?:\.\d+)?)\s*([A-Za-z]+)?\s+(\d+(?:\.\d+)?)\s+(\d+(?:\.\d+)?)\s+(\d+(?:\.\d+)?)$/;
 
-  // Alternate regex for formats where HSN is omitted or on next line
-  const altItemRegex = /^\s*(\d{1,3})\s+(.+?)\s+(\d+(?:\.\d+)?)\s*([A-Za-z]+)?\s+(\d+(?:\.\d+)?)\s+(\d+(?:\.\d+)?)\s+(\d+(?:\.\d+)?)\s*$/;
+  // 2. With HSN, Qty, Unit, Rate, Amount (2 trailing numbers, e.g. Cash/estimate bills without tax col)
+  const itemRegexHsnNoTax = /^(\d{1,3})[\s.)-]+\s*(.+?)\s+(\d{2,8})\s+(\d+(?:\.\d+)?)\s*([A-Za-z]+)?\s+(\d+(?:\.\d+)?)\s+(\d+(?:\.\d+)?)$/;
+
+  // 3. Without HSN, Qty, Unit, Rate, ValA, ValB (3 trailing numbers)
+  const itemRegexNoHsn3 = /^(\d{1,3})[\s.)-]+\s*(.+?)\s+(\d+(?:\.\d+)?)\s*([A-Za-z]+)?\s+(\d+(?:\.\d+)?)\s+(\d+(?:\.\d+)?)\s+(\d+(?:\.\d+)?)$/;
+
+  // 4. Without HSN, Qty, Unit, Rate, Amount (2 trailing numbers)
+  const itemRegexNoHsn2 = /^(\d{1,3})[\s.)-]+\s*(.+?)\s+(\d+(?:\.\d+)?)\s*([A-Za-z]+)?\s+(\d+(?:\.\d+)?)\s+(\d+(?:\.\d+)?)$/;
+
+  // 5. With Discount: HSN, Qty, Unit, Rate, Disc%, Tax%, Amount (4 trailing numbers)
+  const itemRegexWithDisc = /^(\d{1,3})[\s.)-]+\s*(.+?)\s+(\d{2,8})\s+(\d+(?:\.\d+)?)\s*([A-Za-z]+)?\s+(\d+(?:\.\d+)?)\s+(\d+(?:\.\d+)?)\s+(\d+(?:\.\d+)?)\s+(\d+(?:\.\d+)?)$/;
 
   for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
+    // Sanitize commas between digits so "1,830.51" parses cleanly as 1830.51 without altering address text
+    let line = lines[i].replace(/(\d),(\d)/g, '$1$2').trim();
 
     // Detect Customer "To." or "To:" block (e.g. "To. MILKY MIST DIARY FOOD PVT LTD")
     const toMatch = line.match(/^To[.:\s]+(.+)$/i);
@@ -246,9 +256,16 @@ function parseOptechText(rawText) {
       continue;
     }
 
+    // Auto-resume table block if we see an indexed row even after a page subtotal
+    const looksLikeItemRow = line.match(/^(\d{1,3})[\s.)-]+\s*[A-Za-z]/);
+    if (!inTableBlock && looksLikeItemRow && !line.match(/^(?:Phone|Date|GSTIN|No|Payment|Total|Taxable|BANK)/i)) {
+      inTableBlock = true;
+    }
+
     // Parse Table Items
     if (inTableBlock) {
-      const m = line.match(itemRegex);
+      // 1. Check with HSN (3 trailing numbers: Rate, ValA, ValB)
+      let m = line.match(itemRegexWithHsn);
       if (m) {
         if (currentItem) rawItems.push(currentItem);
         const qty = parseFloat(m[4]);
@@ -256,7 +273,6 @@ function parseOptechText(rawText) {
         const valA = parseFloat(m[7]);
         const valB = parseFloat(m[8]);
 
-        // In Optech: columns in text stream can be Rate Amount Tax% or Rate Tax% Amount
         let amount = valA;
         let taxPercent = valB;
         if (valA <= 28 && (valB > 28 || Math.abs((qty * rate) - valB) < Math.abs((qty * rate) - valA))) {
@@ -280,14 +296,57 @@ function parseOptechText(rawText) {
         continue;
       }
 
-      // Check alternate line match without HSN
-      const altM = line.match(altItemRegex);
-      if (altM && !line.match(/^(?:Total|Taxable|GSTIN|Payment|Date|BANK)/i)) {
+      // 2. Check with HSN and Discount (4 trailing numbers: Rate, Disc, Tax%, Amount)
+      const mDisc = line.match(itemRegexWithDisc);
+      if (mDisc) {
         if (currentItem) rawItems.push(currentItem);
-        const qty = parseFloat(altM[3]);
-        const rate = parseFloat(altM[5]);
-        const valA = parseFloat(altM[6]);
-        const valB = parseFloat(altM[7]);
+        const qty = parseFloat(mDisc[4]);
+        const rate = parseFloat(mDisc[6]);
+        const taxVal = parseFloat(mDisc[8]);
+        const amtVal = parseFloat(mDisc[9]);
+
+        currentItem = {
+          sNo: parseInt(mDisc[1], 10),
+          desc: mDisc[2].trim(),
+          hsn: mDisc[3],
+          qty: qty,
+          unit: mDisc[5] || 'Nos',
+          rate: rate,
+          taxPercent: taxVal || 18,
+          amount: amtVal > 0 ? amtVal : Math.round(qty * rate * 100) / 100
+        };
+        continue;
+      }
+
+      // 3. Check with HSN (2 trailing numbers: Rate, Amount - e.g. Cash/estimate bills)
+      const mHsn2 = line.match(itemRegexHsnNoTax);
+      if (mHsn2 && !line.match(/^(?:Total|Taxable|GSTIN|Payment|Date|BANK)/i)) {
+        if (currentItem) rawItems.push(currentItem);
+        const qty = parseFloat(mHsn2[4]);
+        const rate = parseFloat(mHsn2[6]);
+        const amount = parseFloat(mHsn2[7]);
+
+        currentItem = {
+          sNo: parseInt(mHsn2[1], 10),
+          desc: mHsn2[2].trim(),
+          hsn: mHsn2[3],
+          qty: qty,
+          unit: mHsn2[5] || 'Nos',
+          rate: rate,
+          taxPercent: 18,
+          amount: amount
+        };
+        continue;
+      }
+
+      // 4. Check without HSN (3 trailing numbers: Qty, Unit, Rate, ValA, ValB)
+      const mNoHsn3 = line.match(itemRegexNoHsn3);
+      if (mNoHsn3 && !line.match(/^(?:Total|Taxable|GSTIN|Payment|Date|BANK)/i)) {
+        if (currentItem) rawItems.push(currentItem);
+        const qty = parseFloat(mNoHsn3[3]);
+        const rate = parseFloat(mNoHsn3[5]);
+        const valA = parseFloat(mNoHsn3[6]);
+        const valB = parseFloat(mNoHsn3[7]);
 
         let amount = valA;
         let taxPercent = valB;
@@ -300,11 +359,11 @@ function parseOptechText(rawText) {
         }
 
         currentItem = {
-          sNo: parseInt(altM[1], 10),
-          desc: altM[2].trim(),
+          sNo: parseInt(mNoHsn3[1], 10),
+          desc: mNoHsn3[2].trim(),
           hsn: '3209',
           qty: qty,
-          unit: altM[4] || 'Nos',
+          unit: mNoHsn3[4] || 'Nos',
           rate: rate,
           taxPercent: taxPercent,
           amount: amount
@@ -312,7 +371,74 @@ function parseOptechText(rawText) {
         continue;
       }
 
-      // Check continuation line of multi-line description (e.g. "(GLSY-ENAMEL)-ASIAN", "500 C) 0189", "BLACK-AGARAM")
+      // 5. Check without HSN (2 trailing numbers: Qty, Unit, Rate, Amount)
+      const mNoHsn2 = line.match(itemRegexNoHsn2);
+      if (mNoHsn2 && !line.match(/^(?:Total|Taxable|GSTIN|Payment|Date|BANK)/i)) {
+        if (currentItem) rawItems.push(currentItem);
+        const qty = parseFloat(mNoHsn2[3]);
+        const rate = parseFloat(mNoHsn2[5]);
+        const amount = parseFloat(mNoHsn2[6]);
+
+        currentItem = {
+          sNo: parseInt(mNoHsn2[1], 10),
+          desc: mNoHsn2[2].trim(),
+          hsn: '3209',
+          qty: qty,
+          unit: mNoHsn2[4] || 'Nos',
+          rate: rate,
+          taxPercent: 18,
+          amount: amount
+        };
+        continue;
+      }
+
+      // 6. Check split row across 2 lines (Line 1: S.No + Desc, Line 2: numerical columns)
+      const splitCandidateMatch = line.match(/^(\d{1,3})[\s.)-]+\s*[A-Za-z]/);
+      if (i + 1 < lines.length && splitCandidateMatch) {
+        const candSNo = parseInt(splitCandidateMatch[1], 10);
+        const nextExpected = (currentItem ? currentItem.sNo : rawItems.length) + 1;
+        const nextCleanLine = lines[i + 1].replace(/(\d),(\d)/g, '$1$2').trim();
+        const nextLineIsItsOwnItem = nextCleanLine.match(itemRegexWithHsn) || nextCleanLine.match(itemRegexHsnNoTax);
+
+        // Only consider a 2-line split if candSNo is in sequential order AND next line is not already a standalone item
+        if (candSNo <= nextExpected + 2 && candSNo <= 150 && !nextLineIsItsOwnItem) {
+          const combined = line + ' ' + nextCleanLine;
+          const combM = combined.match(itemRegexWithHsn) || combined.match(itemRegexHsnNoTax) || combined.match(itemRegexNoHsn3) || combined.match(itemRegexNoHsn2);
+          if (combM) {
+            if (currentItem) rawItems.push(currentItem);
+            i++; // Consume next line
+            const sNo = parseInt(combM[1], 10);
+            const desc = combM[2].trim();
+            let hsn = '3209';
+            let qty = 1;
+            let unit = 'Nos';
+            let rate = 0;
+            let amount = 0;
+            let taxPercent = 18;
+
+            if (combM.length === 9) {
+              hsn = combM[3];
+              qty = parseFloat(combM[4]);
+              unit = combM[5] || 'Nos';
+              rate = parseFloat(combM[6]);
+              const valA = parseFloat(combM[7]);
+              const valB = parseFloat(combM[8]);
+              if (valA <= 28) { taxPercent = valA; amount = valB; } else { amount = valA; taxPercent = valB; }
+            } else if (combM.length === 8) {
+              hsn = combM[3];
+              qty = parseFloat(combM[4]);
+              unit = combM[5] || 'Nos';
+              rate = parseFloat(combM[6]);
+              amount = parseFloat(combM[7]);
+            }
+
+            currentItem = { sNo, desc, hsn, qty, unit, rate, taxPercent, amount };
+            continue;
+          }
+        }
+      }
+
+      // 7. Check continuation line of multi-line description (e.g. "(GLSY-ENAMEL)-ASIAN", "500 C) 0189", "BLACK-AGARAM")
       if (currentItem) {
         if (!line.match(/^(?:Total|Taxable|GSTIN|Payment|Date|BANK|S\.?No|Rupees)/i)) {
           currentItem.desc += ' ' + line.trim();

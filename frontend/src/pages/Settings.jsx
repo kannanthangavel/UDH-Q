@@ -358,8 +358,8 @@ export default function Settings() {
     }
   }
 
-  const currentLogoSrc = logoPreviewUrl || getUploadUrl(`/uploads/logos/${companyLogo}`);
-  const currentQrSrc = qrPreviewUrl || getUploadUrl(`/uploads/qr/${paymentQrCode || 'default_upi_qr.png'}`);
+  const currentLogoSrc = logoPreviewUrl || (formData.company_logo_data && formData.company_logo_data.startsWith('data:') ? formData.company_logo_data : '') || getUploadUrl(`/uploads/logos/${companyLogo}`);
+  const currentQrSrc = qrPreviewUrl || (formData.payment_qr_code_data && formData.payment_qr_code_data.startsWith('data:') ? formData.payment_qr_code_data : '') || getUploadUrl(`/uploads/qr/${paymentQrCode || 'default_upi_qr.png'}`);
 
   return (
     <div className="space-y-6">

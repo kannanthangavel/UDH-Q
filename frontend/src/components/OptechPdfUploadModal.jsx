@@ -164,7 +164,7 @@ export default function OptechPdfUploadModal({
         customer_address: customerAddress.trim(),
         customer_gstin: customerGstin.trim(),
         reference_no: parsedData?.referenceNo || parsedData?.estimateNumber || '',
-        payment_terms: paymentTerms.trim() || 'Cash',
+        payment_terms: (paymentTerms || '').trim() || 'Cash',
         validity_date: validityDate,
         quotation_date: quotationDate || new Date().toISOString().split('T')[0],
         rounded_off: roundOff,
@@ -544,7 +544,7 @@ export default function OptechPdfUploadModal({
                         type="button"
                         onClick={() => setPaymentTerms('Cash')}
                         className={`text-[10px] font-extrabold px-2 py-1 rounded-md transition-colors cursor-pointer ${
-                          paymentTerms.toLowerCase() === 'cash'
+                          (paymentTerms || '').toLowerCase() === 'cash'
                             ? 'bg-emerald-600 text-white shadow-xs'
                             : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-100'
                         }`}
@@ -555,7 +555,7 @@ export default function OptechPdfUploadModal({
                         type="button"
                         onClick={() => setPaymentTerms('Credit')}
                         className={`text-[10px] font-extrabold px-2 py-1 rounded-md transition-colors cursor-pointer ${
-                          paymentTerms.toLowerCase() === 'credit'
+                          (paymentTerms || '').toLowerCase() === 'credit'
                             ? 'bg-amber-600 text-white shadow-xs'
                             : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-100'
                         }`}
@@ -566,7 +566,7 @@ export default function OptechPdfUploadModal({
                         type="button"
                         onClick={() => setPaymentTerms('Credit (15 Days)')}
                         className={`text-[10px] font-bold px-2 py-1 rounded-md transition-colors cursor-pointer ${
-                          paymentTerms.includes('15')
+                          (paymentTerms || '').includes('15')
                             ? 'bg-amber-600 text-white shadow-xs'
                             : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-100'
                         }`}
@@ -577,7 +577,7 @@ export default function OptechPdfUploadModal({
                         type="button"
                         onClick={() => setPaymentTerms('Credit (30 Days)')}
                         className={`text-[10px] font-bold px-2 py-1 rounded-md transition-colors cursor-pointer ${
-                          paymentTerms.includes('30')
+                          (paymentTerms || '').includes('30')
                             ? 'bg-amber-600 text-white shadow-xs'
                             : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-100'
                         }`}
@@ -587,7 +587,7 @@ export default function OptechPdfUploadModal({
                     </div>
                     <input
                       type="text"
-                      value={paymentTerms}
+                      value={paymentTerms || ''}
                       onChange={e => setPaymentTerms(e.target.value)}
                       placeholder="e.g. Cash / Credit (15 Days)"
                       className="w-full px-3 py-1.5 text-xs bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#00545C] text-slate-900"

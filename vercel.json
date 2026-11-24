@@ -4,12 +4,16 @@
   "outputDirectory": "frontend/dist",
   "rewrites": [
     {
-      "source": "/api/(.*)",
-      "destination": "https://ud-qm-backend.onrender.com/api/$1"
+      "source": "/api",
+      "destination": "https://ud-qm-backend.onrender.com/api"
     },
     {
-      "source": "/uploads/(.*)",
-      "destination": "https://ud-qm-backend.onrender.com/uploads/$1"
+      "source": "/api/:path*",
+      "destination": "https://ud-qm-backend.onrender.com/api/:path*"
+    },
+    {
+      "source": "/uploads/:path*",
+      "destination": "https://ud-qm-backend.onrender.com/uploads/:path*"
     },
     {
       "source": "/(.*)",

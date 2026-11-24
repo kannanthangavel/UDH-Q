@@ -7,6 +7,8 @@ import CreateQuotation from './pages/CreateQuotation';
 import Quotations from './pages/Quotations';
 import PriceListAndCatalogue from './pages/PriceListAndCatalogue';
 import Customers from './pages/Customers';
+import Receipts from './pages/Receipts';
+import SupplierBills from './pages/SupplierBills';
 import Settings from './pages/Settings';
 import SmartParserModal from './components/SmartParserModal';
 import ErrorBoundary from './components/ErrorBoundary';
@@ -89,6 +91,14 @@ export default function App() {
                 setActivePage={setActivePage} 
                 onEditQuotation={handleEditQuotation}
               />
+            )}
+
+            {activePage === 'receipts' && (
+              <Receipts />
+            )}
+
+            {activePage === 'supplier-bills' && (
+              <SupplierBills />
             )}
 
             {activePage === 'price-list' && (

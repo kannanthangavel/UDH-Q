@@ -15,6 +15,8 @@ import { customerApi } from './customerApi';
 import { productApi } from './productApi';
 import { quotationApi } from './quotationApi';
 import { whatsappApi } from './whatsappApi';
+import { receiptApi } from './receiptApi';
+import { supplierBillApi } from './supplierBillApi';
 import { settingsApi, dashboardApi, importsApi, auditApi } from './settingsApi';
 
 export {
@@ -33,6 +35,8 @@ export {
   productApi,
   quotationApi,
   whatsappApi,
+  receiptApi,
+  supplierBillApi,
   settingsApi,
   dashboardApi,
   importsApi,
@@ -47,6 +51,8 @@ export const api = {
   ...whatsappApi,
   ...importsApi,
   ...quotationApi,
+  ...receiptApi,
+  ...supplierBillApi,
   ...customerApi,
   ...settingsApi,
   ...auditApi

@@ -225,6 +225,53 @@ function initDb() {
       updated_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
     CREATE INDEX IF NOT EXISTS idx_wa_conv_phone ON whatsapp_conversations(customer_phone);
+
+    -- Customer Receipts Table (Credit bill settlement / Cash receipts)
+    CREATE TABLE IF NOT EXISTS customer_receipts (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      receipt_number TEXT UNIQUE NOT NULL,
+      customer_name TEXT NOT NULL,
+      customer_phone TEXT,
+      customer_address TEXT,
+      bill_no TEXT,
+      payment_date TEXT NOT NULL DEFAULT (date('now')),
+      payment_mode TEXT NOT NULL DEFAULT 'Cash',
+      reference_no TEXT,
+      amount_paid REAL NOT NULL DEFAULT 0,
+      balance_amount REAL NOT NULL DEFAULT 0,
+      notes TEXT,
+      paper_format TEXT NOT NULL DEFAULT 'A4',
+      created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_customer_receipts_customer ON customer_receipts(customer_name);
+    CREATE INDEX IF NOT EXISTS idx_customer_receipts_date ON customer_receipts(payment_date);
+
+    -- Receipt Sequence Table for Atomic Numbering
+    CREATE TABLE IF NOT EXISTS receipt_sequences (
+      year INTEGER PRIMARY KEY,
+      current_sequence INTEGER NOT NULL DEFAULT 0
+    );
+
+    -- Supplier Bills & Due Date Alerts Table
+    CREATE TABLE IF NOT EXISTS supplier_bills (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      supplier_name TEXT NOT NULL,
+      bill_number TEXT NOT NULL,
+      bill_date TEXT NOT NULL DEFAULT (date('now')),
+      due_date TEXT NOT NULL,
+      bill_amount REAL NOT NULL DEFAULT 0,
+      paid_amount REAL NOT NULL DEFAULT 0,
+      status TEXT NOT NULL DEFAULT 'Pending',
+      notes TEXT,
+      alert_sent_at TEXT,
+      created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_supplier_bills_due ON supplier_bills(due_date);
+    CREATE INDEX IF NOT EXISTS idx_supplier_bills_supplier ON supplier_bills(supplier_name);
   `);
 
   try {
@@ -435,6 +482,21 @@ function getNextQuotationNumber() {
   return `UDQ-${currentYear}-${sequenceNum}`;
 }
 
+// Atomic customer receipt number generator: UDR-YYYY-000001
+function getNextReceiptNumber() {
+  const currentYear = new Date().getFullYear();
+  const updateSeq = db.prepare(`
+    INSERT INTO receipt_sequences (year, current_sequence)
+    VALUES (?, 1)
+    ON CONFLICT(year) DO UPDATE SET current_sequence = current_sequence + 1
+    RETURNING current_sequence
+  `);
+
+  const result = updateSeq.get(currentYear);
+  const sequenceNum = String(result.current_sequence).padStart(6, '0');
+  return `UDR-${currentYear}-${sequenceNum}`;
+}
+
 // Log audit action helper
 function logAudit(userId, userEmail, userRole, action, entity, entityId, details) {
   try {
@@ -452,5 +514,6 @@ initDb();
 module.exports = {
   db,
   getNextQuotationNumber,
+  getNextReceiptNumber,
   logAudit
 };
