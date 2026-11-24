@@ -28,6 +28,15 @@ export default class ErrorBoundary extends React.Component {
 
   render() {
     if (this.state.hasError) {
+      const err = this.state.error;
+      const errorText = typeof err === 'string'
+        ? err
+        : typeof err?.message === 'string'
+          ? err.message
+          : err
+            ? JSON.stringify(err)
+            : 'An unexpected application error occurred.';
+
       return (
         <div className="min-h-screen bg-[#F5F8F5] flex items-center justify-center p-4">
           <div className="bg-white max-w-lg w-full rounded-2xl shadow-xl border border-slate-200 overflow-hidden">
@@ -43,12 +52,12 @@ export default class ErrorBoundary extends React.Component {
 
             <div className="p-6 space-y-4">
               <p className="text-sm text-slate-700 leading-relaxed">
-                Something unexpected occurred while rendering this view. Your saved quotations and catalogue data are completely safe.
+                Something unexpected occurred while rendering this view. Your saved quotations, catalogue data, and receipts are completely safe.
               </p>
 
-              {this.state.error?.message && (
+              {errorText && (
                 <div className="bg-rose-50 border border-rose-200 rounded-xl p-3 text-xs font-mono text-rose-800 break-words">
-                  {this.state.error.message}
+                  {errorText}
                 </div>
               )}
 

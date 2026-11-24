@@ -97,7 +97,7 @@ export default function QuotationPdfModal({ quotation, onClose, onEdit, onDelete
             {/* Download Button */}
             <a
               href={getApiUrl(`/quotations/${quotation.id}/pdf?download=true&format=${paperFormat}`)}
-              download
+              download={`${(quotation.customer_name || 'Customer').trim().replace(/[^A-Za-z0-9]+/g, '_').replace(/^_+|_+$/g, '')}_${(quotation.quotation_number || 'Quote').trim().replace(/[^A-Za-z0-9\-]+/g, '_')}.pdf`}
               className="flex items-center space-x-1 px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white text-xs font-bold border border-white/20 transition-colors"
             >
               <Download className="w-3.5 h-3.5" />

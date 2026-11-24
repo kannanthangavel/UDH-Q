@@ -16,6 +16,10 @@
       "destination": "https://ud-qm-backend.onrender.com/uploads/:path*"
     },
     {
+      "source": "/download/:path*",
+      "destination": "https://ud-qm-backend.onrender.com/download/:path*"
+    },
+    {
       "source": "/(.*)",
       "destination": "/index.html"
     }

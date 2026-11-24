@@ -16,6 +16,7 @@ const auditRoutes = require('./routes/audit');
 const whatsappRoutes = require('./routes/whatsapp');
 const receiptRoutes = require('./routes/receipts');
 const supplierBillRoutes = require('./routes/supplierBills');
+const downloadRoutes = require('./routes/downloads');
 
 const app = express();
 
@@ -61,6 +62,7 @@ app.use('/api/audit', auditRoutes);
 app.use('/api/whatsapp', whatsappRoutes);
 app.use('/api/receipts', receiptRoutes);
 app.use('/api/supplier-bills', supplierBillRoutes);
+app.use('/download', downloadRoutes);
 
 // Health check endpoints (supports both /health and /api/health for Render & uptime checks)
 const healthResponse = (req, res) => {

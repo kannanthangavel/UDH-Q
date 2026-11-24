@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { 
   PlusCircle, FileText, CheckCircle2, Clock, 
   Layers, Users, ArrowUpRight, MessageCircle, Printer, Eye,
-  RefreshCw, TrendingUp, Sparkles, MessageSquare, ArrowRight, Upload
+  RefreshCw, TrendingUp, Sparkles, MessageSquare, ArrowRight, Upload,
+  Receipt, Truck
 } from 'lucide-react';
 import { api } from '../api/client';
 import QuotationPdfModal from '../components/QuotationPdfModal';
@@ -104,65 +105,125 @@ export default function Dashboard({ setActivePage, onStartQuoteWithImport }) {
         <div className="absolute -right-12 -bottom-16 w-64 h-64 rounded-full bg-white/5 pointer-events-none"></div>
       </div>
 
-      {/* Quick Action Cards Grid (Optech PDF Converter + WhatsApp Parser) */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      {/* Quick Action Cards Grid (Optech PDF Converter + WhatsApp Parser + Customer Receipts + Supplier Alerts) */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Optech PDF Converter Card */}
-        <div className="bg-gradient-to-br from-cyan-50 to-teal-50 border border-teal-200/80 rounded-2xl p-5 shadow-sm flex flex-col justify-between gap-4">
-          <div className="flex items-start space-x-3.5">
-            <div className="w-12 h-12 rounded-2xl bg-[#00545C] text-[#7DBA00] flex items-center justify-center flex-shrink-0 shadow-sm mt-0.5 font-black">
-              <FileText className="w-6 h-6" />
+        <div className="bg-gradient-to-br from-cyan-50 to-teal-50 border border-teal-200/80 rounded-2xl p-4 shadow-sm flex flex-col justify-between gap-3">
+          <div className="flex items-start space-x-3">
+            <div className="w-10 h-10 rounded-xl bg-[#00545C] text-[#7DBA00] flex items-center justify-center flex-shrink-0 shadow-sm font-black">
+              <FileText className="w-5 h-5" />
             </div>
             <div>
-              <div className="flex items-center space-x-2">
-                <h3 className="text-sm sm:text-base font-extrabold text-slate-900">
-                  Optech PDF Quotation Ingestion
+              <div className="flex items-center space-x-1.5">
+                <h3 className="text-sm font-extrabold text-slate-900">
+                  Optech PDF Import
                 </h3>
-                <span className="bg-[#7DBA00] text-[#003B40] text-[10px] font-black px-2 py-0.5 rounded-full uppercase">
+                <span className="bg-[#7DBA00] text-[#003B40] text-[9px] font-black px-1.5 py-0.2 rounded-full uppercase">
                   New
                 </span>
               </div>
-              <p className="text-xs text-slate-600 mt-0.5">
-                Upload Optech retail estimate PDFs — automatically matches Asian Paints, Berger & hardware products against the official 5,331-item catalogue with instant UD-QM A4/A5 PDF download and WhatsApp sharing!
+              <p className="text-[11px] text-slate-600 mt-1 line-clamp-2">
+                Convert Optech retail estimate PDFs to corporate UD-QM format with instant WhatsApp sharing.
               </p>
             </div>
           </div>
 
           <button
             onClick={() => setShowOptechModal(true)}
-            className="flex items-center justify-between px-5 py-2.5 rounded-xl bg-[#00545C] hover:bg-[#0A6D77] text-white font-black text-xs shadow-md transition-all transform active:scale-95 cursor-pointer"
+            className="flex items-center justify-between px-3.5 py-2 rounded-xl bg-[#00545C] hover:bg-[#0A6D77] text-white font-bold text-xs shadow-sm transition-all transform active:scale-95 cursor-pointer mt-1"
           >
-            <span>Upload Optech Quote PDF</span>
-            <ArrowRight className="w-4 h-4 text-[#7DBA00]" />
+            <span>Upload PDF</span>
+            <ArrowRight className="w-3.5 h-3.5 text-[#7DBA00]" />
           </button>
         </div>
 
-        {/* WhatsApp Smart Parser Showcase Card */}
-        <div className="bg-gradient-to-br from-emerald-50 to-teal-50 border border-emerald-200/80 rounded-2xl p-5 shadow-sm flex flex-col justify-between gap-4">
-          <div className="flex items-start space-x-3.5">
-            <div className="w-12 h-12 rounded-2xl bg-[#25D366] text-white flex items-center justify-center flex-shrink-0 shadow-sm mt-0.5">
-              <MessageSquare className="w-6 h-6" />
+        {/* WhatsApp Smart Parser Card */}
+        <div className="bg-gradient-to-br from-emerald-50 to-teal-50 border border-emerald-200/80 rounded-2xl p-4 shadow-sm flex flex-col justify-between gap-3">
+          <div className="flex items-start space-x-3">
+            <div className="w-10 h-10 rounded-xl bg-[#25D366] text-white flex items-center justify-center flex-shrink-0 shadow-sm">
+              <MessageSquare className="w-5 h-5" />
             </div>
             <div>
-              <div className="flex items-center space-x-2">
-                <h3 className="text-sm sm:text-base font-extrabold text-slate-900">
-                  WhatsApp Order AI Parser
+              <div className="flex items-center space-x-1.5">
+                <h3 className="text-sm font-extrabold text-slate-900">
+                  WhatsApp Parser
                 </h3>
-                <span className="bg-[#25D366] text-white text-[10px] font-black px-2 py-0.5 rounded-full uppercase">
+                <span className="bg-[#25D366] text-white text-[9px] font-black px-1.5 py-0.2 rounded-full uppercase">
                   Active
                 </span>
               </div>
-              <p className="text-xs text-slate-600 mt-0.5">
-                Paste informal customer messages with typos or shorthand (e.g. <span className="font-mono font-bold text-slate-800">"golden brown 1ltr 5ps, putty powder 40kg"</span>) — builds quotations in 1 click!
+              <p className="text-[11px] text-slate-600 mt-1 line-clamp-2">
+                Paste informal chat messages; automatically matches products against 5,331 items.
               </p>
             </div>
           </div>
 
           <button
             onClick={() => setShowParserModal(true)}
-            className="flex items-center justify-between px-5 py-2.5 rounded-xl bg-[#25D366] hover:bg-[#20ba59] text-white font-black text-xs shadow-md transition-all transform active:scale-95 cursor-pointer"
+            className="flex items-center justify-between px-3.5 py-2 rounded-xl bg-[#25D366] hover:bg-[#20ba59] text-white font-bold text-xs shadow-sm transition-all transform active:scale-95 cursor-pointer mt-1"
           >
-            <span>Launch WhatsApp Parser</span>
-            <ArrowRight className="w-4 h-4 text-white" />
+            <span>Launch Parser</span>
+            <ArrowRight className="w-3.5 h-3.5 text-white" />
+          </button>
+        </div>
+
+        {/* Customer Receipts Settlement Card */}
+        <div className="bg-gradient-to-br from-blue-50 to-indigo-50 border border-blue-200/80 rounded-2xl p-4 shadow-sm flex flex-col justify-between gap-3">
+          <div className="flex items-start space-x-3">
+            <div className="w-10 h-10 rounded-xl bg-[#0F172A] text-sky-400 flex items-center justify-center flex-shrink-0 shadow-sm">
+              <Receipt className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="flex items-center space-x-1.5">
+                <h3 className="text-sm font-extrabold text-slate-900">
+                  Customer Receipts
+                </h3>
+                <span className="bg-blue-600 text-white text-[9px] font-black px-1.5 py-0.2 rounded-full uppercase">
+                  Settlement
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-600 mt-1 line-clamp-2">
+                Issue corporate payment vouchers for cash, UPI, or cheque with instant WhatsApp receipt sharing.
+              </p>
+            </div>
+          </div>
+
+          <button
+            onClick={() => setActivePage('receipts')}
+            className="flex items-center justify-between px-3.5 py-2 rounded-xl bg-[#0F172A] hover:bg-slate-800 text-white font-bold text-xs shadow-sm transition-all transform active:scale-95 cursor-pointer mt-1"
+          >
+            <span>Record Receipt</span>
+            <ArrowRight className="w-3.5 h-3.5 text-sky-400" />
+          </button>
+        </div>
+
+        {/* Supplier Due Alerts Card */}
+        <div className="bg-gradient-to-br from-amber-50 to-orange-50 border border-amber-200/80 rounded-2xl p-4 shadow-sm flex flex-col justify-between gap-3">
+          <div className="flex items-start space-x-3">
+            <div className="w-10 h-10 rounded-xl bg-amber-600 text-white flex items-center justify-center flex-shrink-0 shadow-sm">
+              <Truck className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="flex items-center space-x-1.5">
+                <h3 className="text-sm font-extrabold text-slate-900">
+                  Supplier Bills
+                </h3>
+                <span className="bg-amber-600 text-white text-[9px] font-black px-1.5 py-0.2 rounded-full uppercase">
+                  Alerts
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-600 mt-1 line-clamp-2">
+                Track Asian Paints & dealer purchase bills; dispatch WhatsApp payment due alerts before 1 day.
+              </p>
+            </div>
+          </div>
+
+          <button
+            onClick={() => setActivePage('supplier-bills')}
+            className="flex items-center justify-between px-3.5 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs shadow-sm transition-all transform active:scale-95 cursor-pointer mt-1"
+          >
+            <span>View Due Bills</span>
+            <ArrowRight className="w-3.5 h-3.5 text-white" />
           </button>
         </div>
       </div>

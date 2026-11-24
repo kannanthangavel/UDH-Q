@@ -73,6 +73,11 @@ export function getAbsoluteApiUrl(endpoint = '') {
   return `${origin.replace(/\/+$/, '')}/api${cleanEndpoint}`;
 }
 
+export function getQuickDownloadUrl(type, identifier) {
+  const origin = typeof window !== 'undefined' ? window.location.origin : 'https://udh-q.vercel.app';
+  return `${origin.replace(/\/+$/, '')}/download/${type}/${identifier}`;
+}
+
 export function getUploadUrl(url) {
   if (!url) return '';
   if (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('blob:') || url.startsWith('data:')) {
@@ -143,69 +148,99 @@ export async function checkBackendHealth(customOrigin = null) {
 }
 
 export async function request(endpoint, options = {}) {
-  const headers = {
-    Accept: 'application/json',
-    'Content-Type': 'application/json',
-    ...options.headers
-  };
+  const maxRetries = options.retries !== undefined ? options.retries : 2;
+  const timeoutMs = options.timeoutMs || 45000;
 
-  const token = getStoredToken();
-  if (token) {
-    headers['Authorization'] = `Bearer ${token}`;
-  }
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    const headers = {
+      Accept: 'application/json',
+      'Content-Type': 'application/json',
+      ...options.headers
+    };
 
-  // Single user profile identifier
-  headers['x-user-role'] = 'admin';
-
-  if (options.body instanceof FormData) {
-    delete headers['Content-Type'];
-    delete headers['content-type'];
-  }
-
-  const url = getApiUrl(endpoint);
-  const controller = new AbortController();
-  const timeoutMs = options.timeoutMs || 60000;
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
-
-  let response;
-  try {
-    response = await fetch(url, {
-      ...options,
-      headers,
-      signal: options.signal || controller.signal
-    });
-  } catch (err) {
-    clearTimeout(timer);
-    if (err.name === 'AbortError') {
-      throw new Error('Request timed out. The backend server may be starting up — please try again in a few seconds.');
+    const token = getStoredToken();
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
     }
-    throw new Error('Unable to connect to the UD-QM backend server. Please check your connection or backend URL.');
-  } finally {
-    clearTimeout(timer);
-  }
 
-  const contentType = response.headers.get('content-type') || '';
+    // Single user profile identifier
+    headers['x-user-role'] = 'admin';
 
-  if (!response.ok) {
-    if (contentType.includes('application/json')) {
-      const errorData = await response.json().catch(() => ({}));
-      throw new Error(errorData.error || `Request failed with status ${response.status}`);
+    if (options.body instanceof FormData) {
+      delete headers['Content-Type'];
+      delete headers['content-type'];
     }
-    if (response.status === 502 || response.status === 503 || response.status === 504 || response.status === 405) {
-      throw new Error('Backend server is waking up or updating (HTTP ' + response.status + '). Please try again in 10-15 seconds.');
+
+    const url = getApiUrl(endpoint);
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+
+    let response;
+    let networkError = null;
+
+    try {
+      response = await fetch(url, {
+        ...options,
+        headers,
+        signal: options.signal || controller.signal
+      });
+    } catch (err) {
+      networkError = err;
+    } finally {
+      clearTimeout(timer);
     }
-    throw new Error(`Server response error (${response.status}). The backend API may be restarting.`);
-  }
 
-  if (options.rawResponse) {
-    return response;
-  }
+    // If fetch failed due to abort or network error, and we have retries left:
+    if (networkError) {
+      if (attempt < maxRetries) {
+        // Sleep 2.5s before retrying
+        await new Promise(r => setTimeout(r, 2500));
+        continue;
+      }
+      if (networkError.name === 'AbortError') {
+        throw new Error('UD-QM server took longer than expected to respond. Please click retry in a few seconds.');
+      }
+      throw new Error('Unable to connect to the UD-QM backend. The server may be waking up — please try again in a few moments.');
+    }
 
-  if (!contentType.includes('application/json')) {
-    throw new Error(
-      'Backend server is currently starting up (received HTML instead of JSON). Please wait 15 seconds and retry.'
+    const contentType = response.headers.get('content-type') || '';
+    const isJson = contentType.includes('application/json');
+
+    // If server returned cold-start status (502, 503, 504, 405) or HTML instead of JSON:
+    const isColdStart = (
+      response.status === 502 ||
+      response.status === 503 ||
+      response.status === 504 ||
+      response.status === 405 ||
+      (!response.ok && !isJson) ||
+      (response.ok && !isJson && !options.rawResponse)
     );
-  }
 
-  return response.json();
+    if (isColdStart && attempt < maxRetries) {
+      // Backend is waking up on Render, pause and retry seamlessly
+      await new Promise(r => setTimeout(r, 2500));
+      continue;
+    }
+
+    if (!response.ok) {
+      if (isJson) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || `Request failed with status ${response.status}`);
+      }
+      if (response.status === 502 || response.status === 503 || response.status === 504 || response.status === 405) {
+        throw new Error('UD-QM cloud backend is waking up. Please retry in 10-15 seconds.');
+      }
+      throw new Error(`Server returned status ${response.status}. Please try again.`);
+    }
+
+    if (options.rawResponse) {
+      return response;
+    }
+
+    if (!isJson) {
+      throw new Error('UD-QM backend is finishing startup. Please retry in a few seconds.');
+    }
+
+    return response.json();
+  }
 }

@@ -3,6 +3,7 @@ const router = express.Router();
 const { db, getNextReceiptNumber, logAudit } = require('../db/database');
 const { requireAdmin } = require('../middleware/auth');
 const { generateReceiptPdf } = require('../services/receiptPdfService');
+const { getReceiptPdfFilename } = require('../utils/filenameHelper');
 
 // GET /api/receipts - List receipts with pagination and search
 router.get('/', (req, res) => {
@@ -134,8 +135,9 @@ router.get('/:id/pdf', async (req, res) => {
     const format = req.query.format || receipt.paper_format || 'A4';
     receipt.paper_format = format;
 
+    const filename = getReceiptPdfFilename(receipt.customer_name, receipt.receipt_number);
     res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `inline; filename="Receipt-${receipt.receipt_number}.pdf"`);
+    res.setHeader('Content-Disposition', `inline; filename="${filename}"`);
 
     await generateReceiptPdf(receipt, settings, res);
   } catch (err) {

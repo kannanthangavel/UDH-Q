@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { db, getNextQuotationNumber, logAudit } = require('../db/database');
 const { generateQuotationPdf } = require('../services/pdfService');
+const { getQuotationPdfFilename } = require('../utils/filenameHelper');
 
 // POST /api/quotations - Create Quotation
 router.post('/', (req, res) => {
@@ -759,7 +760,7 @@ router.get('/:id/pdf', (req, res) => {
   const settings = {};
   settingsRows.forEach(r => settings[r.key] = r.value);
 
-  const filename = `${quote.quotation_number}-${quotationData.paper_format}.pdf`;
+  const filename = getQuotationPdfFilename(quote.customer_name, quote.quotation_number);
   const disposition = req.query.download === 'true' ? 'attachment' : 'inline';
 
   res.setHeader('Content-Type', 'application/pdf');

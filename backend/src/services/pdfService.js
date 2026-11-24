@@ -4,13 +4,15 @@ const fs = require('fs');
 const { numberToIndianWords, formatINR } = require('../utils/numberToWords');
 const { resolveUploadedFile } = require('../utils/storagePaths');
 
-// Brand Colors
-const COLOR_TEAL = '#00545C';
-const COLOR_TEAL_DARK = '#003B40';
-const COLOR_LIME = '#7DBA00';
-const COLOR_TEXT = '#1E293B';
-const COLOR_MUTED = '#64748B';
-const COLOR_BORDER = '#CBD5E1';
+// Brand Colors & Corporate Executive Palette
+const COLOR_TEAL = '#004D40';          // Deep corporate spruce
+const COLOR_TEAL_DARK = '#00332C';     // Darkest spruce
+const COLOR_TEAL_LIGHT = '#E0F2F1';    // Light spruce tint
+const COLOR_LIME = '#7DBA00';          // Brand lime accent
+const COLOR_TEXT = '#0F172A';          // Slate 900 high contrast text
+const COLOR_MUTED = '#64748B';         // Slate 500 captions
+const COLOR_BORDER = '#CBD5E1';        // Slate 300 crisp borders
+const COLOR_BG_LIGHT = '#F8FAFC';      // Slate 50 background
 
 function getLogoSource(settings = {}) {
   if (settings.company_logo_data && typeof settings.company_logo_data === 'string' && settings.company_logo_data.startsWith('data:image')) {
@@ -461,12 +463,13 @@ function generateQuotationPdf(quotation, settings = {}, res = null) {
   }
   curY += taxRowH;
 
-  // Full-width Amount in Words strip
-  doc.rect(margin, curY, contentWidth, wordsRowH).fillAndStroke('#F1F5F9', COLOR_BORDER);
+  // Full-width Amount in Words strip with left accent border callout
+  doc.rect(margin, curY, contentWidth, wordsRowH).fillAndStroke('#F8FAFC', COLOR_BORDER);
+  doc.rect(margin, curY, isA5 ? 3.5 : 4.5, wordsRowH).fill(COLOR_TEAL);
   doc.fillColor(COLOR_TEAL).font('Helvetica-Bold').fontSize(isA5 ? 5.2 : 6.8)
-     .text('Amount in Words:', margin + 6, curY + (isA5 ? 3.5 : 4.5), { continued: true })
+     .text('Amount in Words:', margin + 8, curY + (isA5 ? 3.5 : 4.5), { continued: true })
      .fillColor(COLOR_TEXT).font('Helvetica-Oblique')
-     .text(`  ${numberToIndianWords(grandTotalVal)}`, { width: contentWidth - 12 });
+     .text(`  ${numberToIndianWords(grandTotalVal)}`, { width: contentWidth - 16 });
 
   // ==========================================
   // 2. Bank Details Last Horizontal Columns (Full Width)

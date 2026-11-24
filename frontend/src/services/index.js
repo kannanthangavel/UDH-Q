@@ -6,6 +6,7 @@ import {
   getApiBase,
   getApiUrl,
   getAbsoluteApiUrl,
+  getQuickDownloadUrl,
   checkBackendHealth,
   API_BASE,
   getStoredToken
@@ -27,6 +28,7 @@ export {
   getApiBase,
   getApiUrl,
   getAbsoluteApiUrl,
+  getQuickDownloadUrl,
   checkBackendHealth,
   API_BASE,
   getStoredToken,

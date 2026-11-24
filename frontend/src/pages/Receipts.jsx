@@ -4,7 +4,7 @@ import {
   Trash2, Eye, Calendar, ArrowUpRight, DollarSign,
   CheckCircle2, Clock, FileText, User, Phone, Check, RefreshCw, X
 } from 'lucide-react';
-import { api } from '../api/client';
+import { api, getQuickDownloadUrl } from '../api/client';
 import ThemedConfirmDialog from '../components/ThemedConfirmDialog';
 
 export default function Receipts() {
@@ -162,7 +162,7 @@ export default function Receipts() {
   function handleShareWhatsApp(r) {
     const formattedPaid = Number(r.amount_paid || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 });
     const formattedBal = Number(r.balance_amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 });
-    const pdfUrl = api.getReceiptPdfUrl(r.id, r.paper_format || 'A4');
+    const pdfUrl = getQuickDownloadUrl('receipt', r.id || r.receipt_number);
 
     const msg = `Hello ${r.customer_name},
 
@@ -178,8 +178,7 @@ Thank you for your payment! Please find your official payment receipt from UDHAY
 📥 *Download Receipt PDF:*
 ${pdfUrl}
 
-${r.notes ? `\n"${r.notes}"\n` : ''}
-Thank you for your business and trust in Udhayam Agencies!
+Thank you for your business and partnership with Udhayam Agencies!
 
 📞 +91 97156 22499
 📞 +91 88700 22499
@@ -613,7 +612,7 @@ UDHAYAM AGENCIES - Perundurai`;
                   href={api.getReceiptPdfUrl(viewPdfReceipt.id, viewPdfReceipt.paper_format || 'A4')}
                   target="_blank"
                   rel="noreferrer"
-                  download={`Receipt-${viewPdfReceipt.receipt_number}.pdf`}
+                  download={`${(viewPdfReceipt.customer_name || 'Customer').trim().replace(/[^A-Za-z0-9]+/g, '_')}_Receipt_${(viewPdfReceipt.receipt_number || 'Receipt').trim().replace(/[^A-Za-z0-9\-]+/g, '_')}.pdf`}
                   className="flex items-center space-x-1 px-3 py-1.5 rounded-lg bg-[#7DBA00] hover:bg-[#8ee000] text-[#003B40] font-extrabold text-xs cursor-pointer shadow-xs"
                 >
                   <Printer className="w-3.5 h-3.5" />

@@ -4,7 +4,7 @@ import {
   FileText, Download, Share2, CheckCircle2, ArrowRight, Loader2, Sparkles,
   Smartphone, Monitor, Send
 } from 'lucide-react';
-import { api, getApiUrl, getAbsoluteApiUrl } from '../api/client';
+import { api, getApiUrl, getAbsoluteApiUrl, getQuickDownloadUrl } from '../api/client';
 import { useAuth } from '../context/AuthContext';
 
 function formatItemsList(items) {
@@ -120,7 +120,10 @@ export default function WhatsAppShareModal({ quotation, onClose, onShared }) {
   }
 
   const pdfFormat = quotation.paper_format || 'A4';
-  const pdfDownloadUrl = getAbsoluteApiUrl(`/quotations/${quotation.id}/pdf?format=${pdfFormat}&download=true`);
+  const cleanCustomerName = (quotation.customer_name || 'Customer').trim().replace(/[^A-Za-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+  const cleanQuoteNum = (quotation.quotation_number || 'Quote').trim().replace(/[^A-Za-z0-9\-]+/g, '_');
+  const targetPdfFilename = `${cleanCustomerName}_${cleanQuoteNum}.pdf`;
+  const pdfDownloadUrl = getQuickDownloadUrl('quote', quotation.id || quotation.quotation_number);
 
   // EXACT OFFICIAL MESSAGE REQUESTED BY USER
   const officialQuotationMessage = 
@@ -133,7 +136,7 @@ On behalf of UDHAYAM AGENCIES - Perundurai, please find the quotation details be
 💰 Total Amount: ₹${grandTotalFormatted}
 ⏳ Valid Till: ${validTillFormatted}
 
-📄 View / Download Quotation PDF:
+📄 Download Quotation PDF:
 ${pdfDownloadUrl}
 
 Please feel free to contact us for any changes or additional details.
@@ -227,7 +230,7 @@ Thank you! UDHAYAM AGENCIES`
         throw new Error('Unable to retrieve PDF from backend server.');
       }
       const pdfBlob = await pdfRes.blob();
-      const pdfFile = new File([pdfBlob], `${quotation.quotation_number}.pdf`, { type: 'application/pdf' });
+      const pdfFile = new File([pdfBlob], targetPdfFilename, { type: 'application/pdf' });
 
       // 2. Check if device supports Web Share API with files (Android, iOS, macOS/Windows Edge)
       if (typeof navigator !== 'undefined' && navigator.canShare && navigator.canShare({ files: [pdfFile] })) {
@@ -326,7 +329,7 @@ Thank you! UDHAYAM AGENCIES`
       const downloadUrl = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = downloadUrl;
-      link.download = `${quotation.quotation_number}.pdf`;
+      link.download = targetPdfFilename;
       document.body.appendChild(link);
       link.click();
       window.URL.revokeObjectURL(downloadUrl);
