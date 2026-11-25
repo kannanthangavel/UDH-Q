@@ -13,6 +13,7 @@ import SmartParserModal from '../components/SmartParserModal';
 import OptechPdfUploadModal from '../components/OptechPdfUploadModal';
 import ThemedConfirmDialog from '../components/ThemedConfirmDialog';
 import { numberToIndianWords } from '../utils/numberToWords';
+import { calculateQuotationFinancials } from '../utils/quotationEngine';
 
 const COMMON_UNITS = ['Nos', 'Ltr', 'Kg', 'Box', 'Bag', 'Can', 'Set', 'Drum', 'Roll', 'Meter', 'Pkt', 'Tin'];
 
@@ -143,6 +144,70 @@ export default function CreateQuotation({ setActivePage, initialCustomer, import
       if (onClearImportData) onClearImportData();
     }
   }, [importData]);
+
+  // Autosave Draft Recovery (only when starting fresh)
+  useEffect(() => {
+    if (!editingQuote && !initialCustomer && !importData) {
+      try {
+        const savedDraft = localStorage.getItem('udqm_quotation_draft');
+        if (savedDraft) {
+          const draft = JSON.parse(savedDraft);
+          if (Array.isArray(draft.items) && draft.items.length > 0) {
+            setItems(draft.items);
+            if (draft.customerName) setCustomerName(draft.customerName);
+            if (draft.customerPhone) setCustomerPhone(draft.customerPhone);
+            if (draft.customerAddress) setCustomerAddress(draft.customerAddress);
+            if (draft.customerGstin) setCustomerGstin(draft.customerGstin);
+            if (draft.paymentTerms) setPaymentTerms(draft.paymentTerms);
+            if (draft.validityDate) setValidityDate(draft.validityDate);
+            if (draft.paperFormat) setPaperFormat(draft.paperFormat);
+            if (draft.notes) setNotes(draft.notes);
+            showToast('✓ Restored unsaved draft from your previous session.');
+          }
+        }
+      } catch (e) {
+        console.warn('Draft restore error:', e);
+      }
+    }
+  }, []);
+
+  // Autosave Draft Persist
+  useEffect(() => {
+    if (!editingQuote) {
+      if (items.length > 0 || customerName.trim()) {
+        const draft = {
+          items,
+          customerName,
+          customerPhone,
+          customerAddress,
+          customerGstin,
+          paymentTerms,
+          validityDate,
+          paperFormat,
+          notes,
+          discountPercent,
+          discountAmountManual,
+          discountMode,
+          deliveryCharges
+        };
+        localStorage.setItem('udqm_quotation_draft', JSON.stringify(draft));
+      } else {
+        localStorage.removeItem('udqm_quotation_draft');
+      }
+    }
+  }, [items, customerName, customerPhone, customerAddress, customerGstin, paymentTerms, validityDate, paperFormat, notes, discountPercent, discountAmountManual, discountMode, deliveryCharges, editingQuote]);
+
+  // Unsaved Changes Protection on Browser Close / Refresh
+  useEffect(() => {
+    function handleBeforeUnload(e) {
+      if (items.length > 0 && !createdQuotation) {
+        e.preventDefault();
+        e.returnValue = '';
+      }
+    }
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [items.length, createdQuotation]);
 
   // Load existing quotation data when editing
   useEffect(() => {
@@ -551,22 +616,27 @@ export default function CreateQuotation({ setActivePage, initialCustomer, import
     setItems(prev => prev.filter((_, idx) => idx !== index));
   }
 
-  // TAX INCLUSIVE FINANCIAL CALCULATIONS
-  const grossSubtotal = Math.round(items.reduce((acc, it) => acc + (parseFloat(it.line_total) || 0), 0) * 100) / 100;
-  
-  let computedDiscount = 0;
-  if (discountMode === 'percent') {
-    computedDiscount = Math.round((grossSubtotal * (parseFloat(discountPercent) || 0) / 100) * 100) / 100;
-  } else {
-    computedDiscount = Math.min(grossSubtotal, parseFloat(discountAmountManual) || 0);
-  }
+  // Canonical Quotation Engine Calculations
+  const liveFinancials = calculateQuotationFinancials({
+    items: items,
+    discount_percent: discountMode === 'percent' ? discountPercent : 0,
+    discount_amount: discountMode === 'amount' ? discountAmountManual : 0,
+    discount_mode: discountMode,
+    is_tax_inclusive: isTaxInclusive,
+    default_gst_rate: gstRate,
+    delivery_charges: deliveryCharges,
+    customer_gstin: customerGstin
+  });
 
-  const netRetail = Math.max(0, grossSubtotal - computedDiscount);
+  const grossSubtotal = liveFinancials.grossSubtotal;
+  const computedDiscount = liveFinancials.discountAmount;
+  const netRetail = liveFinancials.netSubtotal;
   const gstRateVal = parseFloat(gstRate) || 18;
-  const taxableBase = Math.round((netRetail / (1 + gstRateVal / 100)) * 100) / 100;
-  const includedGst = Math.round((netRetail - taxableBase) * 100) / 100;
-  const deliveryVal = Math.max(0, parseFloat(deliveryCharges) || 0);
-  const grandTotal = Math.round((netRetail + deliveryVal) * 100) / 100;
+  const taxableBase = liveFinancials.taxableValue;
+  const includedGst = liveFinancials.totalTaxAmount;
+  const deliveryVal = liveFinancials.deliveryCharges;
+  const grandTotal = liveFinancials.grandTotal;
+  const taxSlabs = liveFinancials.taxSlabs || [];
 
   function formatCurrency(val) {
     return '₹' + Number(val || 0).toLocaleString('en-IN', {
@@ -596,6 +666,7 @@ export default function CreateQuotation({ setActivePage, initialCustomer, import
   }
 
   function resetAllStudioFields() {
+    try { localStorage.removeItem('udqm_quotation_draft'); } catch(e) {}
     setCustomerName('');
     setCustomerPhone('');
     setCustomerEmail('');
@@ -694,6 +765,7 @@ export default function CreateQuotation({ setActivePage, initialCustomer, import
       }
 
       if (res.success) {
+        try { localStorage.removeItem('udqm_quotation_draft'); } catch(e) {}
         const fullQuoteRes = await api.getQuotation(res.id);
         setCreatedQuotation(fullQuoteRes.quotation);
         setShowPdfModal(true);

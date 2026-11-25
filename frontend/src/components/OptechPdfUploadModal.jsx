@@ -2,9 +2,10 @@ import React, { useState, useRef } from 'react';
 import { 
   FileText, Upload, CheckCircle2, AlertCircle, RefreshCw, 
   Download, MessageSquare, ArrowRight, X, Sparkles, Building2,
-  ChevronRight, Phone, MapPin, Hash, Calendar, Layers, Check, ShieldCheck
+  ChevronRight, Phone, MapPin, Hash, Calendar, Layers, Check, ShieldCheck, AlertTriangle
 } from 'lucide-react';
 import { api } from '../api/client';
+import { calculateQuotationFinancials } from '../utils/quotationEngine';
 
 export default function OptechPdfUploadModal({
   isOpen,
@@ -134,14 +135,42 @@ export default function OptechPdfUploadModal({
     setItems(prev => prev.filter((_, i) => i !== idx));
   }
 
-  // Live calculations
-  const taxableSubtotal = items.reduce((acc, it) => acc + (it.line_total || 0), 0);
-  const cgstAmount = parsedData?.totals?.cgstAmount || Math.round((taxableSubtotal * 0.09) * 100) / 100;
-  const sgstAmount = parsedData?.totals?.sgstAmount || Math.round((taxableSubtotal * 0.09) * 100) / 100;
-  const totalTaxAmount = parsedData?.totals?.totalTaxAmount || Math.round((taxableSubtotal * 0.18) * 100) / 100;
-  const roundOff = parsedData?.totals?.roundedOff || 0;
-  const grandTotal = parsedData?.totals?.grandTotal || Math.round((taxableSubtotal + totalTaxAmount + roundOff) * 100) / 100;
+  function handleUpdateItem(idx, field, value) {
+    setItems(prev => {
+      const next = [...prev];
+      const it = { ...next[idx] };
+      if (field === 'quantity') {
+        it.quantity = Math.max(0.01, parseFloat(value) || 0);
+      } else if (field === 'sale_rate') {
+        it.sale_rate = Math.max(0, parseFloat(value) || 0);
+      } else if (field === 'tax_percent') {
+        it.tax_percent = parseFloat(value) || 0;
+      }
+      it.line_total = Math.round(it.quantity * it.sale_rate * 100) / 100;
+      next[idx] = it;
+      return next;
+    });
+  }
+
+  // Canonical Calculation Engine for Optech Quotation Review
+  const liveFinancials = calculateQuotationFinancials({
+    items: items,
+    is_tax_inclusive: false, // Optech uses Tax Exclusive breakdown
+    delivery_charges: 0,
+    customer_gstin: customerGstin
+  });
+
+  const taxableSubtotal = liveFinancials.taxableValue;
+  const cgstAmount = liveFinancials.totalCgst;
+  const sgstAmount = liveFinancials.totalSgst;
+  const totalTaxAmount = liveFinancials.totalTaxAmount;
+  const roundOff = liveFinancials.roundedOff;
+  const grandTotal = liveFinancials.grandTotal;
   const totalQty = items.reduce((acc, it) => acc + (parseFloat(it.quantity) || 0), 0);
+  const taxSlabs = liveFinancials.taxSlabs || [];
+
+  const extractedTotal = parsedData?.totals?.grandTotal != null ? Number(parsedData.totals.grandTotal) : null;
+  const hasDiscrepancy = extractedTotal != null && Math.abs(extractedTotal - grandTotal) > 1.0;
 
   async function handleConvert(action = 'download') {
     if (!customerName.trim()) {
@@ -394,6 +423,70 @@ export default function OptechPdfUploadModal({
                   className="hidden"
                 />
               </div>
+
+              {/* Conversion Review Checklist */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+                <div className="bg-white border border-slate-200 rounded-xl p-2.5 flex items-center space-x-2 shadow-2xs">
+                  {customerName ? (
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600 flex-shrink-0" />
+                  ) : (
+                    <AlertTriangle className="w-4 h-4 text-amber-500 flex-shrink-0" />
+                  )}
+                  <div className="min-w-0">
+                    <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">Customer</span>
+                    <span className="font-bold text-slate-900 truncate block text-xs" title={customerName}>
+                      {customerName || 'Required'}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="bg-white border border-slate-200 rounded-xl p-2.5 flex items-center space-x-2 shadow-2xs">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600 flex-shrink-0" />
+                  <div className="min-w-0">
+                    <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">Quote No</span>
+                    <span className="font-bold text-slate-900 truncate block text-xs font-mono">
+                      {quotationNumber || 'UDQ-Auto'}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="bg-white border border-slate-200 rounded-xl p-2.5 flex items-center space-x-2 shadow-2xs">
+                  {customerGstin ? (
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600 flex-shrink-0" />
+                  ) : (
+                    <span className="w-4 h-4 rounded-full bg-slate-100 text-slate-400 font-bold text-[10px] flex items-center justify-center flex-shrink-0">i</span>
+                  )}
+                  <div className="min-w-0">
+                    <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">GSTIN</span>
+                    <span className="font-bold text-slate-900 truncate block text-xs font-mono">
+                      {customerGstin || 'Unregistered'}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="bg-white border border-slate-200 rounded-xl p-2.5 flex items-center space-x-2 shadow-2xs">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600 flex-shrink-0" />
+                  <div className="min-w-0">
+                    <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">Items & Slabs</span>
+                    <span className="font-bold text-slate-900 truncate block text-xs">
+                      {items.length} Items ({taxSlabs.map(s => `${s.rate}%`).join(', ') || '18%'})
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Discrepancy Warning Alert */}
+              {hasDiscrepancy && (
+                <div className="bg-amber-50 border border-amber-300 rounded-xl p-3 flex items-start space-x-2.5 text-xs text-amber-900 shadow-2xs">
+                  <AlertTriangle className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <span className="font-bold block">Imported total differs from calculated total:</span>
+                    <span>
+                      The extracted Optech footer total is <strong>₹{extractedTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</strong>, whereas the recalculated sum is <strong>₹{grandTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</strong>. Please review line item quantities, rates, and tax percentages below.
+                    </span>
+                  </div>
+                </div>
+              )}
 
               {/* Customer Details Form */}
               <div className="bg-slate-50 border border-slate-200 rounded-xl p-4">
@@ -680,17 +773,44 @@ export default function OptechPdfUploadModal({
                           <td className="py-2.5 px-3 text-center font-mono text-slate-600">
                             {it.hsn_sac || '-'}
                           </td>
-                          <td className="py-2.5 px-3 text-center font-mono font-bold text-slate-900 whitespace-nowrap">
-                            {it.quantity} {it.unit || 'Nos'}
+                          <td className="py-2 px-2 text-center">
+                            <div className="flex items-center justify-center space-x-1">
+                              <input
+                                type="number"
+                                min="0.01"
+                                step="any"
+                                value={it.quantity}
+                                onChange={(e) => handleUpdateItem(idx, 'quantity', e.target.value)}
+                                className="w-16 text-center font-mono font-bold text-xs py-1 px-1 border border-slate-300 rounded bg-white text-slate-900 focus:outline-none focus:ring-1 focus:ring-[#00545C]"
+                              />
+                              <span className="text-[10px] text-slate-500 font-normal">{it.unit || 'Nos'}</span>
+                            </div>
                           </td>
-                          <td className="py-2.5 px-3 text-right font-mono text-slate-700">
-                            {Number(it.sale_rate || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                          <td className="py-2 px-2 text-right">
+                            <input
+                              type="number"
+                              min="0"
+                              step="any"
+                              value={it.sale_rate}
+                              onChange={(e) => handleUpdateItem(idx, 'sale_rate', e.target.value)}
+                              className="w-20 text-right font-mono font-bold text-xs py-1 px-1 border border-slate-300 rounded bg-white text-slate-900 focus:outline-none focus:ring-1 focus:ring-[#00545C]"
+                            />
                           </td>
-                          <td className="py-2.5 px-3 text-center font-mono text-slate-600">
-                            {it.tax_percent || 18}%
+                          <td className="py-2 px-2 text-center">
+                            <select
+                              value={it.tax_percent != null ? it.tax_percent : 18}
+                              onChange={(e) => handleUpdateItem(idx, 'tax_percent', e.target.value)}
+                              className="text-xs font-mono font-bold py-1 px-1 border border-slate-300 rounded bg-white text-slate-900 focus:outline-none focus:ring-1 focus:ring-[#00545C]"
+                            >
+                              <option value="18">18%</option>
+                              <option value="5">5%</option>
+                              <option value="12">12%</option>
+                              <option value="28">28%</option>
+                              <option value="0">0%</option>
+                            </select>
                           </td>
                           <td className="py-2.5 px-3 text-right font-mono font-extrabold text-[#00545C]">
-                            {Number(it.line_total || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                            ₹{Number(it.line_total || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                           </td>
                           <td className="py-2.5 px-2 text-center">
                             <button
@@ -717,15 +837,26 @@ export default function OptechPdfUploadModal({
                         <span>Taxable Value (Subtotal):</span>
                         <span className="font-mono font-bold">₹{taxableSubtotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
                       </div>
-                      <div className="flex justify-between max-w-xs">
-                        <span>CGST (9.00%):</span>
-                        <span className="font-mono">+ ₹{cgstAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
-                      </div>
-                      <div className="flex justify-between max-w-xs">
-                        <span>SGST (9.00%):</span>
-                        <span className="font-mono">+ ₹{sgstAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
-                      </div>
-                      <div className="flex justify-between max-w-xs">
+                      {taxSlabs.length > 1 ? (
+                        taxSlabs.map((s, sIdx) => (
+                          <div key={sIdx} className="flex justify-between max-w-xs text-[11px] text-slate-600 pl-2 border-l-2 border-slate-300">
+                            <span>Slab {s.rate}% (Taxable ₹{s.taxableValue.toFixed(2)}):</span>
+                            <span className="font-mono font-semibold">+ ₹{s.totalTaxAmount.toFixed(2)}</span>
+                          </div>
+                        ))
+                      ) : (
+                        <>
+                          <div className="flex justify-between max-w-xs">
+                            <span>CGST ({taxSlabs[0]?.cgstPercent ? taxSlabs[0].cgstPercent.toFixed(2) : '9.00'}%):</span>
+                            <span className="font-mono">+ ₹{cgstAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                          </div>
+                          <div className="flex justify-between max-w-xs">
+                            <span>SGST ({taxSlabs[0]?.sgstPercent ? taxSlabs[0].sgstPercent.toFixed(2) : '9.00'}%):</span>
+                            <span className="font-mono">+ ₹{sgstAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                          </div>
+                        </>
+                      )}
+                      <div className="flex justify-between max-w-xs pt-1 border-t border-slate-200">
                         <span>Total Tax Amount:</span>
                         <span className="font-mono font-bold text-slate-800">₹{totalTaxAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
                       </div>

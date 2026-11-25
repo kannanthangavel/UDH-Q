@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Printer, Download, X, FileText, CheckCircle2, ShieldCheck, 
   Building2, Edit3, Trash2, ArrowRight, MessageSquare, Plus 
@@ -7,12 +7,15 @@ import { useAuth } from '../context/AuthContext';
 import { getApiUrl, getUploadUrl } from '../api/client';
 import { numberToIndianWords } from '../utils/numberToWords';
 import { formatToDMY } from '../utils/dateHelper';
+import { calculateQuotationFinancials } from '../utils/quotationEngine';
+import { generateDynamicQrDataUrl } from '../services/qrService';
 
 export default function QuotationPdfModal({ quotation, onClose, onEdit, onDelete, onGoToQuotes, onNewQuotation, onShareWhatsApp }) {
   if (!quotation) return null;
 
   const { settings } = useAuth();
   const [paperFormat, setPaperFormat] = useState(quotation.paper_format || 'A4');
+  const [dynamicQrUrl, setDynamicQrUrl] = useState('');
 
   const logoUrl = getUploadUrl(
     settings?.company_logo
@@ -34,56 +37,41 @@ export default function QuotationPdfModal({ quotation, onClose, onEdit, onDelete
   }
 
   const items = quotation.items || [];
+  const isTaxInclusive = quotation.is_tax_inclusive === 1 || quotation.is_tax_inclusive === true;
 
-  // Tax calculations with multi-rate GST support (5%, 12%, 18%, 28%)
-  const subtotal = Number(quotation.subtotal || 0);
-  const discountAmount = Number(quotation.discount_amount || 0);
-  const netAmount = Math.max(0, subtotal - discountAmount);
-  const gstRate = Number(quotation.gst_rate || 18);
-  const isTaxExclusive = quotation.is_tax_inclusive === 0 || quotation.is_tax_inclusive === false || quotation.is_tax_exclusive === true;
-  
-  // Rate-wise GST slabs
-  const slabsMap = {};
-  for (const it of items) {
-    const r = it.tax_percent != null ? parseFloat(it.tax_percent) : gstRate;
-    if (!slabsMap[r]) {
-      slabsMap[r] = {
-        rate: r,
-        cgstPercent: r / 2,
-        sgstPercent: r / 2,
-        taxableValue: 0,
-        cgstAmount: 0,
-        sgstAmount: 0,
-        totalTaxAmount: 0
-      };
-    }
-    const lineTot = Number(it.line_total || 0);
-    if (!isTaxExclusive) {
-      const lineTaxable = r > 0 ? Math.round((lineTot / (1 + r / 100)) * 100) / 100 : lineTot;
-      slabsMap[r].taxableValue += lineTaxable;
-    } else {
-      slabsMap[r].taxableValue += lineTot;
-    }
-  }
-
-  const taxSlabs = Object.values(slabsMap).sort((a, b) => a.rate - b.rate).map(s => {
-    s.taxableValue = Math.round(s.taxableValue * 100) / 100;
-    s.cgstAmount = Math.round(s.taxableValue * (s.cgstPercent / 100) * 100) / 100;
-    s.sgstAmount = Math.round(s.taxableValue * (s.sgstPercent / 100) * 100) / 100;
-    s.totalTaxAmount = Math.round((s.cgstAmount + s.sgstAmount) * 100) / 100;
-    return s;
+  // Canonical Calculation Engine
+  const financials = calculateQuotationFinancials({
+    items: items,
+    discount_percent: quotation.discount_percent,
+    discount_amount: quotation.discount_amount,
+    is_tax_inclusive: isTaxInclusive,
+    default_gst_rate: quotation.gst_rate || settings?.default_gst_rate || 18,
+    delivery_charges: quotation.delivery_charges || 0,
+    company_state_code: settings?.company_state_code || '33',
+    customer_gstin: quotation.customer_gstin || ''
   });
 
-  const taxableAmount = quotation.taxable_amount !== undefined 
-    ? Number(quotation.taxable_amount) 
-    : Math.round(taxSlabs.reduce((acc, s) => acc + s.taxableValue, 0) * 100) / 100;
-  
-  const gstAmount = quotation.gst_amount !== undefined
-    ? Number(quotation.gst_amount)
-    : Math.round(taxSlabs.reduce((acc, s) => acc + s.totalTaxAmount, 0) * 100) / 100;
+  const taxSlabs = financials.taxSlabs || [];
+  const taxableAmount = financials.taxableValue;
+  const gstAmount = financials.totalTaxAmount;
+  const cgstAmount = financials.totalCgst;
+  const sgstAmount = financials.totalSgst;
+  const grandTotal = financials.grandTotal;
 
-  const cgstAmount = Math.round(taxSlabs.reduce((acc, s) => acc + s.cgstAmount, 0) * 100) / 100;
-  const sgstAmount = Math.round(taxSlabs.reduce((acc, s) => acc + s.sgstAmount, 0) * 100) / 100;
+  // Generate dynamic QR code matching quotation details
+  useEffect(() => {
+    let isMounted = true;
+    const upi = quotation.upi_id || settings?.upi_id || 'paytmqr6vc6b5@ptys';
+    generateDynamicQrDataUrl({
+      upiId: upi,
+      payeeName: settings?.bank_account_name || settings?.company_name || 'UDHAYAM AGENCIES',
+      amount: grandTotal,
+      ref: quotation.quotation_number
+    }).then(url => {
+      if (isMounted && url) setDynamicQrUrl(url);
+    });
+    return () => { isMounted = false; };
+  }, [quotation, settings, grandTotal]);
 
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto bg-black/60 backdrop-blur-sm flex items-center justify-center p-2 sm:p-4">
@@ -483,11 +471,11 @@ export default function QuotationPdfModal({ quotation, onClose, onEdit, onDelete
                   </p>
                 </div>
 
-                {/* Col 3: UPI QR Code */}
+                {/* Col 3: Dynamic UPI QR Code */}
                 <div className="flex flex-col items-center justify-center border-r border-slate-200/80 pr-2">
                   <div className="bg-white p-1 rounded-lg border border-slate-200 shadow-2xs flex flex-col items-center">
                     <img
-                      src={getUploadUrl(`/uploads/qr/${settings?.payment_qr_code || 'default_upi_qr.png'}`)}
+                      src={dynamicQrUrl || getUploadUrl(`/uploads/qr/${settings?.payment_qr_code || 'default_upi_qr.png'}`)}
                       alt="UPI QR Code"
                       className="w-14 h-14 object-contain rounded"
                       onError={(e) => {

@@ -582,6 +582,38 @@ function parseOptechText(rawText) {
     ? `UDQ-2026-${String(estimateNumber).padStart(6, '0')}`
     : '';
 
+  // Cross-validate extracted totals with canonical calculation engine
+  let calculatedTotals = null;
+  let validationReport = {
+    customerNameExtracted: Boolean(customerName && customerName.trim()),
+    quotationNumberExtracted: Boolean(estimateNumber),
+    gstinExtracted: Boolean(customerGstin),
+    itemsCount: matchedLineItems.length,
+    extractedGrandTotal: Math.round(netAmount * 100) / 100,
+    calculatedGrandTotal: Math.round(netAmount * 100) / 100,
+    totalsMatch: true,
+    warning: null
+  };
+
+  try {
+    const { calculateQuotationFinancials } = require('../utils/quotationEngine');
+    calculatedTotals = calculateQuotationFinancials({
+      items: matchedLineItems,
+      is_tax_inclusive: false, // Optech uses tax exclusive rates
+      delivery_charges: 0,
+      customer_gstin: customerGstin
+    });
+
+    const diff = Math.abs(validationReport.extractedGrandTotal - calculatedTotals.grandTotal);
+    validationReport.calculatedGrandTotal = calculatedTotals.grandTotal;
+    validationReport.totalsMatch = diff <= 1.0;
+    if (!validationReport.totalsMatch) {
+      validationReport.warning = `Imported total (₹${validationReport.extractedGrandTotal.toFixed(2)}) differs from calculated total (₹${calculatedTotals.grandTotal.toFixed(2)}). Please review line items.`;
+    }
+  } catch (err) {
+    console.warn('[Optech Parser] Financial validation warning:', err.message);
+  }
+
   return {
     customer: {
       name: customerName || 'Valued Customer',
@@ -607,7 +639,9 @@ function parseOptechText(rawText) {
       grandTotal: Math.round(netAmount * 100) / 100,
       amountInWords: amountInWords,
       taxSlabs: taxSlabs
-    }
+    },
+    calculatedTotals,
+    validationReport
   };
 }
 

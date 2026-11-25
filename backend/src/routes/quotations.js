@@ -3,6 +3,7 @@ const router = express.Router();
 const { db, getNextQuotationNumber, logAudit } = require('../db/database');
 const { generateQuotationPdf } = require('../services/pdfService');
 const { getQuotationPdfFilename } = require('../utils/filenameHelper');
+const { calculateQuotationFinancials } = require('../utils/quotationEngine');
 
 // POST /api/quotations - Create Quotation
 router.post('/', (req, res) => {
@@ -141,36 +142,24 @@ router.post('/', (req, res) => {
     });
   }
 
-  // Summary Calculations
-  let subtotal = Math.round(calculatedSubtotal * 100) / 100;
-  const discPercent = Math.min(100, Math.max(0, parseFloat(discount_percent) || 0));
-  const discountAmount = Math.round((subtotal * discPercent / 100) * 100) / 100;
-  const discountedNet = Math.max(0, subtotal - discountAmount);
+  // Canonical Quotation Engine Calculation
+  const engineResult = calculateQuotationFinancials({
+    items: processedItems,
+    discount_percent,
+    discount_amount: req.body.discount_amount,
+    is_tax_inclusive: is_tax_inclusive,
+    default_gst_rate: gst_rate || 18,
+    delivery_charges: delivery_charges || 0,
+    customer_gstin: customer_gstin || '',
+    customer_state_code: req.body.customer_state_code || ''
+  });
 
-  const gstRateVal = parseFloat(gst_rate) || 0;
-  let gstAmount = 0;
-  let taxableValue = discountedNet;
-  let grandTotal = 0;
-
-  const deliveryVal = Math.max(0, parseFloat(delivery_charges) || 0);
-
-  if (is_tax_inclusive) {
-    // Tax Inclusive: Sale rate already includes GST
-    if (gstRateVal > 0) {
-      taxableValue = Math.round((discountedNet / (1 + (gstRateVal / 100))) * 100) / 100;
-      gstAmount = Math.round((discountedNet - taxableValue) * 100) / 100;
-    } else {
-      taxableValue = discountedNet;
-      gstAmount = 0;
-    }
-    grandTotal = Math.round((discountedNet + deliveryVal) * 100) / 100;
-  } else {
-    // Tax Exclusive: GST is added on top (Optech standard)
-    taxableValue = req.body.subtotal != null ? parseFloat(req.body.subtotal) : discountedNet;
-    subtotal = taxableValue;
-    gstAmount = req.body.gst_amount != null ? parseFloat(req.body.gst_amount) : Math.round((discountedNet * gstRateVal / 100) * 100) / 100;
-    grandTotal = req.body.grand_total != null ? parseFloat(req.body.grand_total) : Math.round((discountedNet + gstAmount + deliveryVal + (parseFloat(rounded_off) || 0)) * 100) / 100;
-  }
+  const subtotal = req.body.subtotal != null && !is_tax_inclusive ? parseFloat(req.body.subtotal) : engineResult.subtotal;
+  const discountAmount = engineResult.discountAmount;
+  const gstAmount = req.body.gst_amount != null && !is_tax_inclusive ? parseFloat(req.body.gst_amount) : engineResult.totalTaxAmount;
+  const grandTotal = req.body.grand_total != null && !is_tax_inclusive ? parseFloat(req.body.grand_total) : engineResult.grandTotal;
+  const finalRoundedOff = req.body.rounded_off != null && !is_tax_inclusive ? parseFloat(req.body.rounded_off) : engineResult.roundedOff;
+  const gstRateVal = parseFloat(gst_rate) || 18;
 
   const todayStr = quotation_date || new Date().toISOString().split('T')[0];
   const validUntilStr = validity_date || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
@@ -210,18 +199,18 @@ router.post('/', (req, res) => {
       (customer_gstin || '').trim(),
       (reference_no || '').trim(),
       (payment_terms || 'Cash').trim(),
-      Number(rounded_off) || 0,
+      finalRoundedOff != null ? finalRoundedOff : (Number(rounded_off) || 0),
       is_tax_inclusive ? 1 : 0,
       userName,
       todayStr,
       validUntilStr,
       status,
       subtotal,
-      discPercent,
+      engineResult.discountPercent,
       discountAmount,
       gstRateVal,
       gstAmount,
-      deliveryVal,
+      engineResult.deliveryCharges,
       grandTotal,
       paper_format === 'A5' ? 'A5' : 'A4',
       notes
@@ -489,37 +478,30 @@ router.put('/:id', (req, res) => {
       unit: it.unit || originalProduct?.main_unit || 'Nos',
       quantity: qty,
       sale_rate: finalSaleRate,
+      tax_percent: it.tax_percent != null ? it.tax_percent : (gst_rate || 18),
       line_total: lineTotal,
       is_price_overridden: isOverridden,
       original_sale_rate: catalogRate
     });
   }
 
-  const subtotal = Math.round(calculatedSubtotal * 100) / 100;
-  const discPercent = Math.min(100, Math.max(0, parseFloat(discount_percent) || 0));
-  const discountAmount = Math.round((subtotal * discPercent / 100) * 100) / 100;
-  const discountedNet = Math.max(0, subtotal - discountAmount);
+  const engineResult = calculateQuotationFinancials({
+    items: processedItems,
+    discount_percent,
+    discount_amount: req.body.discount_amount,
+    is_tax_inclusive: is_tax_inclusive,
+    default_gst_rate: gst_rate || 18,
+    delivery_charges: delivery_charges || 0,
+    customer_gstin: customer_gstin || '',
+    customer_state_code: req.body.customer_state_code || ''
+  });
 
-  const gstRateVal = parseFloat(gst_rate) || 0;
-  let gstAmount = 0;
-  let taxableValue = discountedNet;
-  let grandTotal = 0;
-  const deliveryVal = Math.max(0, parseFloat(delivery_charges) || 0);
-
-  if (is_tax_inclusive) {
-    if (gstRateVal > 0) {
-      taxableValue = Math.round((discountedNet / (1 + (gstRateVal / 100))) * 100) / 100;
-      gstAmount = Math.round((discountedNet - taxableValue) * 100) / 100;
-    } else {
-      taxableValue = discountedNet;
-      gstAmount = 0;
-    }
-    grandTotal = Math.round((discountedNet + deliveryVal) * 100) / 100;
-  } else {
-    taxableValue = discountedNet;
-    gstAmount = Math.round((discountedNet * gstRateVal / 100) * 100) / 100;
-    grandTotal = Math.round((discountedNet + gstAmount + deliveryVal) * 100) / 100;
-  }
+  const subtotal = req.body.subtotal != null && !is_tax_inclusive ? parseFloat(req.body.subtotal) : engineResult.subtotal;
+  const discountAmount = engineResult.discountAmount;
+  const gstAmount = req.body.gst_amount != null && !is_tax_inclusive ? parseFloat(req.body.gst_amount) : engineResult.totalTaxAmount;
+  const grandTotal = req.body.grand_total != null && !is_tax_inclusive ? parseFloat(req.body.grand_total) : engineResult.grandTotal;
+  const finalRoundedOff = req.body.rounded_off != null && !is_tax_inclusive ? parseFloat(req.body.rounded_off) : engineResult.roundedOff;
+  const gstRateVal = parseFloat(gst_rate) || 18;
 
   const validUntilStr = validity_date || quote.validity_date;
   const targetFormat = (paper_format || quote.paper_format || 'A4').toUpperCase() === 'A5' ? 'A5' : 'A4';
@@ -559,16 +541,16 @@ router.put('/:id', (req, res) => {
       (customer_gstin || '').trim(),
       (reference_no || '').trim(),
       (payment_terms || 'Cash').trim(),
-      Number(rounded_off) || 0,
+      finalRoundedOff != null ? finalRoundedOff : (Number(rounded_off) || 0),
       is_tax_inclusive ? 1 : 0,
       validUntilStr,
       status,
       subtotal,
-      discPercent,
+      engineResult.discountPercent,
       discountAmount,
       gstRateVal,
       gstAmount,
-      deliveryVal,
+      engineResult.deliveryCharges,
       grandTotal,
       targetFormat,
       notes.trim(),
