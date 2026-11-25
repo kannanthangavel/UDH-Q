@@ -33,7 +33,7 @@ Bank Details:
 • Bank: Indian Bank, Perundurai Branch
 • Account Name: Udhayam Agencies
 • Account Number: 6659330152
-• IFSC: IDIB000P034
+• IFSC: IDIB000P155
 • GPay: +91 97156 22499
 
 If you require any further assistance or modifications, please feel free to reach out to us at +91 97156 22499.

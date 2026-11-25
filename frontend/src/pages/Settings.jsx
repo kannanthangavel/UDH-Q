@@ -25,7 +25,7 @@ export default function Settings() {
     bank_account_no: '6659330152',
     bank_name: 'Indian Bank',
     bank_branch: 'Perundurai Branch',
-    bank_ifsc: 'IDIB000P034',
+    bank_ifsc: 'IDIB000P155',
     gpay_number: '+91 97156 22499',
     default_paper_format: 'A4',
     default_validity_days: '7',
@@ -75,7 +75,7 @@ export default function Settings() {
         bank_account_no: authSettings.bank_account_no || '6659330152',
         bank_name: authSettings.bank_name || 'Indian Bank',
         bank_branch: authSettings.bank_branch || 'Perundurai Branch',
-        bank_ifsc: authSettings.bank_ifsc || 'IDIB000P034'
+        bank_ifsc: authSettings.bank_ifsc || 'IDIB000P155'
       }));
       if (authSettings.company_logo) setCompanyLogo(authSettings.company_logo);
       if (authSettings.payment_qr_code) setPaymentQrCode(authSettings.payment_qr_code);
@@ -568,7 +568,7 @@ export default function Settings() {
                   name="bank_ifsc"
                   value={formData.bank_ifsc}
                   onChange={handleInputChange}
-                  placeholder="IDIB000P034"
+                  placeholder="IDIB000P155"
                   className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl font-mono font-bold text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#004D40]"
                 />
               </div>

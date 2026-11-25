@@ -255,9 +255,57 @@ function generateQuotationPdf(quotation, settings = {}, res = null) {
   curY += infoBoxHeight + (isA5 ? 4 : 6);
 
   // Target bottom coordinates for true Full-Page A4 / A5 printing layout
-  const footerBarHeight = isA5 ? 20 : 25;
+  const footerBarHeight = isA5 ? 16 : 20;
   const bankCardHeight = isA5 ? 56 : 70;
-  const taxTableHeight = isA5 ? 38 : 46;
+
+  // Calculate tax breakdown values & Rate-Wise GST Slabs (5%, 12%, 18%, 28%)
+  const items = quotation.items || [];
+  const isTaxExclusive = quotation.is_tax_inclusive === 0 || quotation.is_tax_inclusive === false || quotation.is_tax_exclusive === true;
+  let taxableVal = Number(quotation.subtotal) || 0;
+  let totalTaxVal = Number(quotation.gst_amount) || 0;
+  let roundOffVal = Number(quotation.rounded_off) || 0;
+  let grandTotalVal = Number(quotation.grand_total) || 0;
+
+  const slabsMap = {};
+  for (const it of items) {
+    const rate = it.tax_percent != null ? parseFloat(it.tax_percent) : (parseFloat(quotation.gst_rate) || 18);
+    if (!slabsMap[rate]) {
+      slabsMap[rate] = {
+        rate: rate,
+        cgstPercent: rate / 2,
+        sgstPercent: rate / 2,
+        taxableValue: 0,
+        cgstAmount: 0,
+        sgstAmount: 0,
+        totalTaxAmount: 0
+      };
+    }
+    const lineTot = Number(it.line_total || 0);
+    if (!isTaxExclusive) {
+      const lineTaxable = rate > 0 ? Math.round((lineTot / (1 + rate / 100)) * 100) / 100 : lineTot;
+      slabsMap[rate].taxableValue += lineTaxable;
+    } else {
+      slabsMap[rate].taxableValue += lineTot;
+    }
+  }
+
+  const taxSlabs = Object.values(slabsMap).sort((a, b) => a.rate - b.rate).map(s => {
+    s.taxableValue = Math.round(s.taxableValue * 100) / 100;
+    s.cgstAmount = Math.round(s.taxableValue * (s.cgstPercent / 100) * 100) / 100;
+    s.sgstAmount = Math.round(s.taxableValue * (s.sgstPercent / 100) * 100) / 100;
+    s.totalTaxAmount = Math.round((s.cgstAmount + s.sgstAmount) * 100) / 100;
+    return s;
+  });
+
+  if (!taxableVal) taxableVal = Math.round(taxSlabs.reduce((acc, s) => acc + s.taxableValue, 0) * 100) / 100;
+  if (!totalTaxVal) totalTaxVal = Math.round(taxSlabs.reduce((acc, s) => acc + s.totalTaxAmount, 0) * 100) / 100;
+  if (!grandTotalVal) grandTotalVal = Math.round((taxableVal + totalTaxVal + roundOffVal) * 100) / 100;
+
+  const taxHeaderH = isA5 ? 12 : 15;
+  const taxRowH = isA5 ? 13 : 16;
+  const wordsRowH = isA5 ? 12 : 15;
+  const numTaxRows = taxSlabs.length > 1 ? (taxSlabs.length + 1) : 1;
+  const taxTableHeight = taxHeaderH + (numTaxRows * taxRowH) + wordsRowH;
 
   const targetFooterY = pageHeight - margin - footerBarHeight;
   const targetBankY = targetFooterY - bankCardHeight - (isA5 ? 4 : 6);
@@ -265,16 +313,17 @@ function generateQuotationPdf(quotation, settings = {}, res = null) {
   const tableBottomY = targetTaxY - (isA5 ? 4 : 6);
   const tableHeaderHeight = isA5 ? 15 : 19;
 
-  // Exact 7 Columns matching Image 1:
-  // # | ITEM DESCRIPTION & SPECIFICATIONS | HSN | UNIT | QTY | RATE (Rs.) | TOTAL (Rs.)
+  // Exact 8 Columns with TAX % (GST Slabs: 5%, 12%, 18%, 28%)
+  // # | ITEM DESCRIPTION & SPECIFICATIONS | HSN | QTY | UNIT | RATE (Rs.) | TAX % | TOTAL (Rs.)
   const colDef = [
-    { label: '#', width: isA5 ? 18 : 26, align: 'center' },
-    { label: 'ITEM DESCRIPTION & SPECIFICATIONS', width: isA5 ? (contentWidth - 18 - 42 - 32 - 32 - 50 - 58) : (contentWidth - 26 - 56 - 40 - 40 - 70 - 80), align: 'left' },
-    { label: 'HSN', width: isA5 ? 42 : 56, align: 'center' },
-    { label: 'UNIT', width: isA5 ? 32 : 40, align: 'center' },
-    { label: 'QTY', width: isA5 ? 32 : 40, align: 'center' },
-    { label: 'RATE (Rs.)', width: isA5 ? 50 : 70, align: 'right' },
-    { label: 'TOTAL (Rs.)', width: isA5 ? 58 : 80, align: 'right' }
+    { label: '#', width: isA5 ? 16 : 22, align: 'center' },
+    { label: 'ITEM DESCRIPTION & SPECIFICATIONS', width: isA5 ? (contentWidth - 16 - 40 - 24 - 26 - 48 - 32 - 58) : (contentWidth - 22 - 52 - 32 - 34 - 64 - 42 - 76), align: 'left' },
+    { label: 'HSN', width: isA5 ? 40 : 52, align: 'center' },
+    { label: 'QTY', width: isA5 ? 24 : 32, align: 'center' },
+    { label: 'UNIT', width: isA5 ? 26 : 34, align: 'center' },
+    { label: 'RATE (Rs.)', width: isA5 ? 48 : 64, align: 'right' },
+    { label: 'TAX %', width: isA5 ? 32 : 42, align: 'center' },
+    { label: 'TOTAL (Rs.)', width: isA5 ? 58 : 76, align: 'right' }
   ];
 
   function drawTableHeader(y) {
@@ -309,8 +358,6 @@ function generateQuotationPdf(quotation, settings = {}, res = null) {
     }
   }
 
-  // Line items
-  const items = quotation.items || [];
   let rowIdx = 0;
 
   for (const item of items) {
@@ -359,13 +406,14 @@ function generateQuotationPdf(quotation, settings = {}, res = null) {
     doc.text(item.hsn_sac || '-', x + 2, curY + (isA5 ? 3 : 4.5), { width: colDef[2].width - 4, align: 'center' });
     x += colDef[2].width;
 
-    // 4. UNIT
-    doc.text(item.unit || 'Nos', x + 2, curY + (isA5 ? 3 : 4.5), { width: colDef[3].width - 4, align: 'center' });
+    // 4. QTY
+    doc.font('Helvetica-Bold').fillColor(COLOR_TEXT);
+    doc.text(String(item.quantity || 1), x + 2, curY + (isA5 ? 3 : 4.5), { width: colDef[3].width - 4, align: 'center' });
     x += colDef[3].width;
 
-    // 5. QTY
-    doc.font('Helvetica-Bold').fillColor(COLOR_TEXT);
-    doc.text(String(item.quantity || 1), x + 2, curY + (isA5 ? 3 : 4.5), { width: colDef[4].width - 4, align: 'center' });
+    // 5. UNIT
+    doc.font('Helvetica').fontSize(isA5 ? 6 : 7.5).fillColor(COLOR_MUTED);
+    doc.text(item.unit || 'Nos', x + 2, curY + (isA5 ? 3 : 4.5), { width: colDef[4].width - 4, align: 'center' });
     x += colDef[4].width;
 
     // 6. RATE (Rs.)
@@ -373,9 +421,15 @@ function generateQuotationPdf(quotation, settings = {}, res = null) {
     doc.text(Number(item.sale_rate || 0).toFixed(2), x + 2, curY + (isA5 ? 3 : 4.5), { width: colDef[5].width - 4, align: 'right' });
     x += colDef[5].width;
 
-    // 7. TOTAL (Rs.)
+    // 7. TAX % (Strictly showing 5%, 12%, 18%, 28%)
+    const itemTaxRate = item.tax_percent != null ? parseFloat(item.tax_percent) : (parseFloat(quotation.gst_rate) || 18);
     doc.font('Helvetica-Bold').fillColor(COLOR_TEXT);
-    doc.text(Number(item.line_total || 0).toFixed(2), x + 2, curY + (isA5 ? 3 : 4.5), { width: colDef[6].width - 4, align: 'right' });
+    doc.text(`${itemTaxRate}%`, x + 2, curY + (isA5 ? 3 : 4.5), { width: colDef[6].width - 4, align: 'center' });
+    x += colDef[6].width;
+
+    // 8. TOTAL (Rs.)
+    doc.font('Helvetica-Bold').fillColor(COLOR_TEXT);
+    doc.text(Number(item.line_total || 0).toFixed(2), x + 2, curY + (isA5 ? 3 : 4.5), { width: colDef[7].width - 4, align: 'right' });
 
     curY += rowHeight;
     rowIdx++;
@@ -391,11 +445,9 @@ function generateQuotationPdf(quotation, settings = {}, res = null) {
 
   // ==========================================
   // 1. Horizontal Tax Breakdown Table (Full Width)
+  // Multi-Rate GST Support (5%, 12%, 18%, 28%)
   // ==========================================
   curY = targetTaxY;
-  const taxHeaderH = isA5 ? 12 : 15;
-  const taxRowH = isA5 ? 14 : 17;
-  const wordsRowH = isA5 ? 12 : 15;
 
   const taxCols = [
     { label: 'TAXABLE VALUE', w: isA5 ? 56 : 78, align: 'right' },
@@ -411,7 +463,6 @@ function generateQuotationPdf(quotation, settings = {}, res = null) {
   // Draw Horizontal Tax Table Header
   doc.roundedRect(margin, curY, contentWidth, taxHeaderH, R_SM).fill(COLOR_TEAL);
 
-  // Accent highlight Net Grand Total Header Cell in Lime Green (Matching Image 1)
   const lastColW = taxCols[7].w;
   const lastColX = margin + contentWidth - lastColW;
   doc.roundedRect(lastColX, curY, lastColW, taxHeaderH, R_SM).fill(COLOR_LIME);
@@ -432,34 +483,51 @@ function generateQuotationPdf(quotation, settings = {}, res = null) {
   }
   curY += taxHeaderH;
 
-  // Calculate tax breakdown values
-  const isTaxExclusive = quotation.is_tax_inclusive === 0 || quotation.is_tax_inclusive === false || quotation.is_tax_exclusive === true;
-  let taxableVal = Number(quotation.subtotal) || 0;
-  let gstRateVal = Number(quotation.gst_rate) || 18;
-  let totalTaxVal = Number(quotation.gst_amount) || 0;
-  let roundOffVal = Number(quotation.rounded_off) || 0;
-  let grandTotalVal = Number(quotation.grand_total) || 0;
+  // If multiple tax slabs exist (e.g. some items 5%, some 18%), print each slab row first
+  if (taxSlabs.length > 1) {
+    for (const slab of taxSlabs) {
+      doc.rect(margin, curY, contentWidth, taxRowH).fillAndStroke('#FFFFFF', COLOR_BORDER);
+      txX = margin;
+      const slabValues = [
+        formatINR(slab.taxableValue),
+        `${slab.cgstPercent.toFixed(2)}%`,
+        formatINR(slab.cgstAmount),
+        `${slab.sgstPercent.toFixed(2)}%`,
+        formatINR(slab.sgstAmount),
+        formatINR(slab.totalTaxAmount),
+        '—',
+        '—'
+      ];
 
-  if (!isTaxExclusive) {
-    const netBefore = quotation.subtotal - (quotation.discount_amount || 0);
-    taxableVal = gstRateVal > 0 ? Math.round((netBefore / (1 + (gstRateVal / 100))) * 100) / 100 : netBefore;
-    totalTaxVal = Math.round((netBefore - taxableVal) * 100) / 100;
+      for (let i = 0; i < taxCols.length; i++) {
+        const col = taxCols[i];
+        doc.fillColor(COLOR_TEXT).font(i === 0 || i === 5 ? 'Helvetica-Bold' : 'Helvetica').fontSize(isA5 ? 5.5 : 6.8);
+        doc.text(slabValues[i], txX + 2, curY + (isA5 ? 2.5 : 3.5), { width: col.w - 4, align: col.align });
+        txX += col.w;
+        if (i < taxCols.length - 1) {
+          doc.moveTo(txX, curY).lineTo(txX, curY + taxRowH).strokeColor(COLOR_BORDER).lineWidth(0.5).stroke();
+        }
+      }
+      curY += taxRowH;
+    }
   }
 
-  const halfRateStr = (gstRateVal / 2).toFixed(2);
-  const halfTaxVal = Math.round((totalTaxVal / 2) * 100) / 100;
-
-  // Draw Horizontal Tax Data Row
+  // Draw Summary / Net Grand Total Row
   doc.rect(margin, curY, contentWidth, taxRowH).fillAndStroke('#FFFFFF', COLOR_BORDER);
   doc.rect(lastColX, curY, lastColW, taxRowH).fill(COLOR_LIME);
+
+  const totalCgst = taxSlabs.reduce((acc, s) => acc + s.cgstAmount, 0);
+  const totalSgst = taxSlabs.reduce((acc, s) => acc + s.sgstAmount, 0);
+  const singleCgstPct = taxSlabs.length === 1 ? `${taxSlabs[0].cgstPercent.toFixed(2)}%` : 'TOTAL';
+  const singleSgstPct = taxSlabs.length === 1 ? `${taxSlabs[0].sgstPercent.toFixed(2)}%` : 'TOTAL';
 
   txX = margin;
   const taxValues = [
     formatINR(taxableVal),
-    `${halfRateStr}%`,
-    formatINR(halfTaxVal),
-    `${halfRateStr}%`,
-    formatINR(halfTaxVal),
+    singleCgstPct,
+    formatINR(totalCgst > 0 ? totalCgst : totalTaxVal / 2),
+    singleSgstPct,
+    formatINR(totalSgst > 0 ? totalSgst : totalTaxVal / 2),
     formatINR(totalTaxVal),
     roundOffVal !== 0 ? formatINR(roundOffVal) : '0.00',
     formatINR(grandTotalVal)
@@ -470,7 +538,7 @@ function generateQuotationPdf(quotation, settings = {}, res = null) {
     if (i === 7) {
       doc.fillColor(COLOR_TEAL_DARK).font('Helvetica-Bold').fontSize(isA5 ? 6.8 : 8.8);
     } else {
-      doc.fillColor(COLOR_TEXT).font(i === 0 || i === 5 ? 'Helvetica-Bold' : 'Helvetica').fontSize(isA5 ? 5.8 : 7.2);
+      doc.fillColor(COLOR_TEXT).font('Helvetica-Bold').fontSize(isA5 ? 5.8 : 7.2);
     }
     doc.text(taxValues[i], txX + 2, curY + (isA5 ? 3 : 4), { width: col.w - 4, align: col.align });
     txX += col.w;
@@ -500,17 +568,23 @@ function generateQuotationPdf(quotation, settings = {}, res = null) {
 
   // ==========================================
   // 2. Bank Details Last Horizontal Columns (Full Width)
+  // Exact Structure Requested:
+  // Bank Details:
+  // Udhayam Agencies
+  // ACC No: 6659330152
+  // IFSC Code: IDIB000P155
+  // Indian Bank - Perundurai Branch
   // ==========================================
   curY = targetBankY;
   doc.roundedRect(margin, curY, contentWidth, bankCardHeight, R_CARD)
      .fillAndStroke('#F8FAFC', COLOR_BORDER);
 
-  const bCol1W = isA5 ? 108 : 150;
-  const bCol2W = isA5 ? 124 : 172;
+  const bCol1W = isA5 ? 116 : 160;
+  const bCol2W = isA5 ? 116 : 162;
   const bCol3W = isA5 ? 54 : 74;
   const bCol4W = contentWidth - bCol1W - bCol2W - bCol3W;
 
-  // Col 1: Bank & Settlement (Executive 5-Line Structure)
+  // Col 1: Bank & Settlement (Executive Structure with IDIB000P155)
   let cx = margin;
   doc.fillColor(COLOR_TEAL).font('Helvetica-Bold').fontSize(isA5 ? 6 : 7.8)
      .text('BANK DETAILS:', cx + 6, curY + (isA5 ? 4 : 5));
@@ -520,18 +594,17 @@ function generateQuotationPdf(quotation, settings = {}, res = null) {
   const bName = settings.bank_name || 'Indian Bank';
   let bBranch = settings.bank_branch || 'Perundurai Branch';
   if (!bBranch.toLowerCase().includes('branch')) bBranch = `${bBranch} Branch`;
-  const ifscRaw = (settings.bank_ifsc || 'IDIB000P034').trim();
-  const ifscLine = ifscRaw.startsWith('IFSC') ? ifscRaw : `IFSC - ${ifscRaw}`;
+  const ifscRaw = (settings.bank_ifsc || 'IDIB000P155').trim();
+  const ifscClean = ifscRaw.replace(/^IFSC\s*(Code)?\s*[:\-]\s*/i, '');
 
   doc.fillColor(COLOR_TEXT).font('Helvetica-Bold').fontSize(isA5 ? 6 : 8)
      .text(accName, cx + 6, curY + (isA5 ? 12 : 15), { width: bCol1W - 10 });
   doc.font('Helvetica-Bold').fontSize(isA5 ? 6 : 8)
-     .text(accNo, cx + 6, curY + (isA5 ? 20 : 25), { width: bCol1W - 10 });
+     .text(`ACC No: ${accNo}`, cx + 6, curY + (isA5 ? 20 : 25), { width: bCol1W - 10 });
   doc.font('Helvetica').fontSize(isA5 ? 5.2 : 7)
-     .text(bName, cx + 6, curY + (isA5 ? 28 : 35), { width: bCol1W - 10 });
-  doc.text(bBranch, cx + 6, curY + (isA5 ? 36 : 44), { width: bCol1W - 10 });
+     .text(`${bName} - ${bBranch}`, cx + 6, curY + (isA5 ? 28 : 35), { width: bCol1W - 10 });
   doc.font('Helvetica-Bold').fillColor(COLOR_TEAL).fontSize(isA5 ? 5.5 : 7.2)
-     .text(ifscLine, cx + 6, curY + (isA5 ? 44 : 54), { width: bCol1W - 10 });
+     .text(`IFSC Code: ${ifscClean}`, cx + 6, curY + (isA5 ? 36 : 45), { width: bCol1W - 10 });
 
   // Vertical Divider 1
   cx += bCol1W;
@@ -541,13 +614,13 @@ function generateQuotationPdf(quotation, settings = {}, res = null) {
   doc.fillColor(COLOR_TEAL).font('Helvetica-Bold').fontSize(isA5 ? 5.5 : 7.2)
      .text('TERMS & CONDITIONS:', cx + 6, curY + (isA5 ? 4 : 5));
 
-  const officialTerms = '1. Quotation is valid for 7 days from the date of issue.\n2. Goods once sold/dispatched will not be taken back.\n3. Delivery subject to physical stock availability.\n4. GST and Transport charges applicable as mentioned.';
+  const officialTerms = '1. Quotation valid for 15 days from date of issue.\n2. Goods once sold will not be taken back or exchanged.\n3. 100% payment on delivery / as per agreed terms.\n4. Subject to Perundurai jurisdiction only.';
 
   doc.fillColor(COLOR_MUTED).font('Helvetica').fontSize(isA5 ? 4.5 : 5.8)
      .text(
        officialTerms,
        cx + 6, curY + (isA5 ? 13 : 16),
-       { width: bCol2W - 12, height: bankCardHeight - 18, lineGap: 1 }
+       { width: bCol2W - 12, height: bankCardHeight - 18, lineGap: 1.2 }
      );
 
   // Vertical Divider 2
@@ -573,7 +646,7 @@ function generateQuotationPdf(quotation, settings = {}, res = null) {
   cx += bCol3W;
   doc.moveTo(cx, curY + 4).lineTo(cx, curY + bankCardHeight - 4).strokeColor(COLOR_BORDER).lineWidth(0.5).stroke();
 
-  // Col 4: Customer Acceptance & For UDHAYAM AGENCIES inside card (Matching Image 1)
+  // Col 4: Customer Acceptance & Authorised Signatory inside card
   doc.fillColor(COLOR_MUTED).font('Helvetica-Bold').fontSize(isA5 ? 4.8 : 6.2)
      .text('CUSTOMER ACCEPTANCE', cx + 6, curY + 5);
   doc.moveTo(cx + 6, curY + (isA5 ? 15 : 19)).lineTo(cx + (isA5 ? 48 : 68), curY + (isA5 ? 15 : 19)).dash(2, { space: 2 }).strokeColor(COLOR_BORDER).lineWidth(0.5).stroke();
@@ -589,36 +662,16 @@ function generateQuotationPdf(quotation, settings = {}, res = null) {
      .text('Authorised Signatory', cx + 6, curY + bankCardHeight - (isA5 ? 9 : 12), { width: bCol4W - 10, align: 'right' });
 
   // ==========================================
-  // 3. Final Signature & Verification Bar (Underneath Card, Matching Image 1)
+  // 3. Corporate Disclaimer & Verification Footer Bar
+  // Clean single-line layout without duplicate signatures
   // ==========================================
-  const footY = targetFooterY;
+  const footY = targetFooterY + (isA5 ? 2 : 4);
   doc.moveTo(margin, footY).lineTo(margin + contentWidth, footY).strokeColor(COLOR_BORDER).lineWidth(0.5).stroke();
 
-  // Left: Customer Acceptance
-  doc.fillColor(COLOR_TEXT).font('Helvetica-Bold').fontSize(isA5 ? 5.2 : 6.8)
-     .text('Customer Acceptance', margin, footY + 3);
-  doc.moveTo(margin, footY + (isA5 ? 12 : 15)).lineTo(margin + (isA5 ? 70 : 95), footY + (isA5 ? 12 : 15)).dash(2, { space: 2 }).strokeColor(COLOR_BORDER).lineWidth(0.5).stroke();
-  doc.undash();
-  doc.fillColor(COLOR_MUTED).font('Helvetica').fontSize(isA5 ? 4 : 5.2)
-     .text('Signature / Seal & Date', margin, footY + (isA5 ? 13 : 17));
-
-  // Center: Computer generated quotation disclaimer
-  const centerW = isA5 ? 140 : 190;
-  const centerX = margin + (contentWidth - centerW) / 2;
-  doc.fillColor(COLOR_MUTED).font('Helvetica').fontSize(isA5 ? 4.2 : 5.2)
-     .text('Computer-generated quotation valid without physical signature.', centerX, footY + 4, { width: centerW, align: 'center' })
-     .font('Helvetica-Bold')
-     .text(`UDHAYAM AGENCIES • GSTIN: ${settings.company_gstin || '33AADFU6496M1ZJ'}`, centerX, footY + (isA5 ? 10 : 12), { width: centerW, align: 'center' });
-
-  // Right: Authorised Signatory
-  const rightFootW = isA5 ? 75 : 100;
-  const rightFootX = margin + contentWidth - rightFootW;
-  doc.fillColor(COLOR_TEXT).font('Helvetica-Bold').fontSize(isA5 ? 5.2 : 6.8)
-     .text(`For ${settings.company_name || 'UDHAYAM AGENCIES'}`, rightFootX, footY + 3, { width: rightFootW, align: 'right' });
-  doc.moveTo(rightFootX, footY + (isA5 ? 12 : 15)).lineTo(margin + contentWidth, footY + (isA5 ? 12 : 15)).dash(2, { space: 2 }).strokeColor(COLOR_BORDER).lineWidth(0.5).stroke();
-  doc.undash();
-  doc.fillColor(COLOR_MUTED).font('Helvetica').fontSize(isA5 ? 4 : 5.2)
-     .text('Authorised Signatory', rightFootX, footY + (isA5 ? 13 : 17), { width: rightFootW, align: 'right' });
+  doc.fillColor(COLOR_MUTED).font('Helvetica').fontSize(isA5 ? 4.5 : 5.8)
+     .text('Computer-generated quotation valid without physical signature.', margin, footY + (isA5 ? 3 : 4), { width: contentWidth, align: 'center' });
+  doc.fillColor(COLOR_TEXT).font('Helvetica-Bold').fontSize(isA5 ? 4.8 : 6.2)
+     .text(`UDHAYAM AGENCIES • 41/10, KMR Complex, Old Bus Stand Road, Perundurai - 638052 • Phone: +91 97156 22499 • GSTIN: ${settings.company_gstin || '33AADFU6496M1ZJ'}`, margin, footY + (isA5 ? 9 : 12), { width: contentWidth, align: 'center' });
 
   // End Document (Guaranteed single page fit!)
   doc.end();

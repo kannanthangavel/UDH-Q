@@ -146,7 +146,7 @@ test('Settings endpoint returns company credentials and Indian Bank details', as
   assert.equal(settings.company_name, 'UDHAYAM AGENCIES');
   assert.equal(settings.bank_name, 'Indian Bank');
   assert.equal(settings.bank_account_no, '6659330152');
-  assert.equal(settings.bank_ifsc, 'IDIB000P034');
+  assert.equal(settings.bank_ifsc, 'IDIB000P155');
 });
 
 test('Customer deletion endpoint DELETE /api/customers/:id removes customer cleanly', async () => {

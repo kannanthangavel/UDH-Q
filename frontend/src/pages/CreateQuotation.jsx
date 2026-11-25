@@ -357,6 +357,7 @@ export default function CreateQuotation({ setActivePage, initialCustomer, import
       quantity: 1,
       sale_rate: product.sale_rate,
       catalog_rate: product.sale_rate,
+      tax_percent: product.tax_percent != null ? parseFloat(product.tax_percent) : (parseFloat(gstRate) || 18),
       line_total: product.sale_rate,
       is_overridden: false,
       structuredDetails: product.structuredDetails || null,
@@ -384,6 +385,7 @@ export default function CreateQuotation({ setActivePage, initialCustomer, import
       quantity: 1,
       sale_rate: 0,
       catalog_rate: 0,
+      tax_percent: parseFloat(gstRate) || 18,
       line_total: 0,
       is_overridden: true,
       availableSizes: []
@@ -519,6 +521,17 @@ export default function CreateQuotation({ setActivePage, initialCustomer, import
       const numericQty = parseFloat(item.quantity) || 0;
       item.line_total = Math.round(numericQty * validRate * 100) / 100;
       item.is_overridden = Math.abs(validRate - (item.catalog_rate || 0)) > 0.001;
+      next[index] = item;
+      return next;
+    });
+  }
+
+  // Tax % Override (5%, 12%, 18%, 28%, 0%)
+  function updateItemTax(index, newTax) {
+    setItems(prev => {
+      const next = [...prev];
+      const item = { ...next[index] };
+      item.tax_percent = parseFloat(newTax) || 0;
       next[index] = item;
       return next;
     });
@@ -1436,6 +1449,7 @@ export default function CreateQuotation({ setActivePage, initialCustomer, import
                   <th className="py-3 px-2 text-center w-24">Unit</th>
                   <th className="py-3 px-3 text-center w-36">Quantity</th>
                   <th className="py-3 px-3 text-right w-28">Rate (₹)</th>
+                  <th className="py-3 px-2 text-center w-24">Tax %</th>
                   <th className="py-3 px-4 text-right w-32">Total (₹)</th>
                   <th className="py-3 px-2 text-center w-10"></th>
                 </tr>
@@ -1614,6 +1628,22 @@ export default function CreateQuotation({ setActivePage, initialCustomer, import
                         </div>
                       </td>
 
+                      {/* Tax % (5%, 12%, 18%, 28%, 0%) */}
+                      <td className="py-2 px-2 text-center">
+                        <select
+                          value={item.tax_percent != null ? item.tax_percent : (gstRateVal || 18)}
+                          onChange={(e) => updateItemTax(idx, e.target.value)}
+                          className="w-18 text-center font-mono font-bold text-xs py-1 px-1 border border-slate-300 rounded-lg bg-white text-slate-800 focus:outline-none focus:ring-1 focus:ring-[#00545C]"
+                          title="Item GST Tax Percentage"
+                        >
+                          <option value="18">18%</option>
+                          <option value="5">5%</option>
+                          <option value="12">12%</option>
+                          <option value="28">28%</option>
+                          <option value="0">0%</option>
+                        </select>
+                      </td>
+
                       {/* Line Total */}
                       <td className="py-2.5 px-4 text-right font-mono font-black text-sm text-[#00545C]">
                         ₹{Number(item.line_total || 0).toFixed(2)}
@@ -1674,7 +1704,7 @@ export default function CreateQuotation({ setActivePage, initialCustomer, import
                   {settings?.bank_name || 'Indian Bank'} • {settings?.bank_branch || 'Perundurai'}
                 </p>
                 <p className="font-mono text-slate-600">
-                  A/c No: <b>{settings?.bank_account_no || '6659330152'}</b> • IFSC: <b>{settings?.bank_ifsc || 'IDIB000P034'}</b>
+                  A/c No: <b>{settings?.bank_account_no || '6659330152'}</b> • IFSC: <b>{settings?.bank_ifsc || 'IDIB000P155'}</b>
                 </p>
                 <div className="flex items-center space-x-2 pt-0.5">
                   <span className="text-[10px] font-bold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">

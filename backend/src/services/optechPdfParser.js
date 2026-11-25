@@ -93,6 +93,7 @@ function parseOptechText(rawText) {
   let totalTaxAmount = 0;
   let roundedOff = 0;
   let netAmount = 0;
+  const parsedTaxRows = [];
   let amountInWords = '';
 
   // Standard & Flexible Optech Item regex patterns (handles comma-separated numbers like 1,830.51):
@@ -221,10 +222,28 @@ function parseOptechText(rawText) {
     // CGST / SGST breakdown line (e.g. "27958.04 9.00 2516.22 9.00 2516.22 18.00 5032.44")
     const taxValuesMatch = line.match(/(\d+(?:\.\d+)?)\s+(\d+(?:\.\d+)?)\s+(\d+(?:\.\d+)?)\s+(\d+(?:\.\d+)?)\s+(\d+(?:\.\d+)?)\s+(\d+(?:\.\d+)?)\s+(\d+(?:\.\d+)?)/);
     if (taxValuesMatch && !inTableBlock) {
-      if (!taxableValue) taxableValue = parseFloat(taxValuesMatch[1]);
-      cgstAmount = parseFloat(taxValuesMatch[3]);
-      sgstAmount = parseFloat(taxValuesMatch[5]);
-      totalTaxAmount = parseFloat(taxValuesMatch[7]);
+      const slabTaxable = parseFloat(taxValuesMatch[1]);
+      const slabCgstPct = parseFloat(taxValuesMatch[2]);
+      const slabCgstAmt = parseFloat(taxValuesMatch[3]);
+      const slabSgstPct = parseFloat(taxValuesMatch[4]);
+      const slabSgstAmt = parseFloat(taxValuesMatch[5]);
+      const slabNetPct = parseFloat(taxValuesMatch[6]);
+      const slabTotalTax = parseFloat(taxValuesMatch[7]);
+
+      parsedTaxRows.push({
+        taxableValue: slabTaxable,
+        cgstPercent: slabCgstPct,
+        cgstAmount: slabCgstAmt,
+        sgstPercent: slabSgstPct,
+        sgstAmount: slabSgstAmt,
+        netPercent: slabNetPct,
+        totalTaxAmount: slabTotalTax
+      });
+
+      if (!taxableValue) taxableValue = slabTaxable;
+      cgstAmount = slabCgstAmt;
+      sgstAmount = slabSgstAmt;
+      totalTaxAmount = slabTotalTax;
       continue;
     }
 
@@ -476,6 +495,19 @@ function parseOptechText(rawText) {
     const effectiveRate = raw.rate > 0 ? raw.rate : (matched?.sale_rate || 0);
     const lineTotal = raw.amount > 0 ? raw.amount : Math.round(raw.qty * effectiveRate * 100) / 100;
 
+    let itemTax = raw.taxPercent;
+    if (itemTax == null || isNaN(itemTax)) {
+      if (parsedTaxRows.length === 1) {
+        itemTax = parsedTaxRows[0].netPercent;
+      } else if (raw.hsn && raw.hsn.startsWith('25')) {
+        itemTax = 5;
+      } else if (raw.hsn && raw.hsn.startsWith('9603')) {
+        itemTax = 12;
+      } else {
+        itemTax = 18;
+      }
+    }
+
     return {
       id: Date.now() + idx + Math.random(),
       originalDescription: raw.desc,
@@ -487,7 +519,7 @@ function parseOptechText(rawText) {
       unit: raw.unit || matched?.main_unit || 'Nos',
       quantity: raw.qty,
       sale_rate: effectiveRate,
-      tax_percent: raw.taxPercent || 18,
+      tax_percent: itemTax,
       line_total: lineTotal,
       confidenceScore: Math.round((confidence.score || 0) * 100),
       confidenceTier: confidence.tier || (matched ? 'High' : 'None'),
@@ -496,14 +528,46 @@ function parseOptechText(rawText) {
     };
   });
 
+  // Calculate distinct GST tax slabs across items (5%, 12%, 18%, 28%)
+  const slabsMap = {};
+  for (const it of matchedLineItems) {
+    const rate = parseFloat(it.tax_percent) || 18;
+    if (!slabsMap[rate]) {
+      slabsMap[rate] = {
+        rate: rate,
+        cgstPercent: rate / 2,
+        sgstPercent: rate / 2,
+        taxableValue: 0,
+        cgstAmount: 0,
+        sgstAmount: 0,
+        totalTaxAmount: 0
+      };
+    }
+    slabsMap[rate].taxableValue += (it.line_total || 0);
+  }
+
+  const taxSlabs = Object.values(slabsMap).sort((a, b) => a.rate - b.rate).map(s => {
+    s.taxableValue = Math.round(s.taxableValue * 100) / 100;
+    s.cgstAmount = Math.round(s.taxableValue * (s.cgstPercent / 100) * 100) / 100;
+    s.sgstAmount = Math.round(s.taxableValue * (s.sgstPercent / 100) * 100) / 100;
+    s.totalTaxAmount = Math.round((s.cgstAmount + s.sgstAmount) * 100) / 100;
+    return s;
+  });
+
   // Calculate fallbacks if not explicitly found in footer
   if (!taxableValue && matchedLineItems.length > 0) {
     taxableValue = matchedLineItems.reduce((acc, it) => acc + (it.line_total || 0), 0);
   }
-  if (!totalTaxAmount && taxableValue > 0) {
-    totalTaxAmount = Math.round(taxableValue * 0.18 * 100) / 100;
-    cgstAmount = Math.round(totalTaxAmount / 2 * 100) / 100;
-    sgstAmount = Math.round(totalTaxAmount / 2 * 100) / 100;
+  if (!totalTaxAmount) {
+    if (parsedTaxRows.length > 0) {
+      totalTaxAmount = parsedTaxRows.reduce((acc, r) => acc + r.totalTaxAmount, 0);
+      cgstAmount = parsedTaxRows.reduce((acc, r) => acc + r.cgstAmount, 0);
+      sgstAmount = parsedTaxRows.reduce((acc, r) => acc + r.sgstAmount, 0);
+    } else {
+      totalTaxAmount = taxSlabs.reduce((acc, s) => acc + s.totalTaxAmount, 0);
+      cgstAmount = taxSlabs.reduce((acc, s) => acc + s.cgstAmount, 0);
+      sgstAmount = taxSlabs.reduce((acc, s) => acc + s.sgstAmount, 0);
+    }
   }
   if (!netAmount) {
     netAmount = Math.round((taxableValue + totalTaxAmount + roundedOff) * 100) / 100;
@@ -534,14 +598,15 @@ function parseOptechText(rawText) {
     totals: {
       totalQty: totalQty,
       taxableValue: Math.round(taxableValue * 100) / 100,
-      cgstPercent: 9.0,
+      cgstPercent: taxSlabs.length === 1 ? taxSlabs[0].cgstPercent : 9.0,
       cgstAmount: cgstAmount || Math.round(taxableValue * 0.09 * 100) / 100,
-      sgstPercent: 9.0,
+      sgstPercent: taxSlabs.length === 1 ? taxSlabs[0].sgstPercent : 9.0,
       sgstAmount: sgstAmount || Math.round(taxableValue * 0.09 * 100) / 100,
       totalTaxAmount: Math.round(totalTaxAmount * 100) / 100,
       roundedOff: roundedOff,
       grandTotal: Math.round(netAmount * 100) / 100,
-      amountInWords: amountInWords
+      amountInWords: amountInWords,
+      taxSlabs: taxSlabs
     }
   };
 }

@@ -278,101 +278,70 @@ function generateReceiptPdf(receipt, settings = {}, res = null) {
   doc.fillColor('#D97706').font('Helvetica').fontSize(isA5 ? 6.5 : 8.2)
      .text(balSubtitle, col2X + 12, curY + (isA5 ? 44 : 56));
 
-  curY += r2H + (isA5 ? 8 : 14);
+  curY += r2H + (isA5 ? 10 : 16);
 
   // =========================================================================
-  // 4. ROW 3: WARM MESSAGE FROM UDHAYAM AGENCIES (FULL WIDTH CARD)
+  // 4. ROW 3: CORPORATE ACKNOWLEDGEMENT & SIGNATURES CARD (No redundant bank details)
   // =========================================================================
-  const r3H = isA5 ? 36 : 46;
+  const r3H = isA5 ? 90 : 115;
   doc.roundedRect(margin, curY, contentWidth, r3H, R_CARD).fillAndStroke('#FFFFFF', COLOR_BORDER);
 
-  doc.fillColor(COLOR_TEAL).font('Helvetica-Bold').fontSize(isA5 ? 6.8 : 8)
-     .text(`WARM MESSAGE FROM ${settings.company_name || 'UDHAYAM AGENCIES'}`, margin + 12, curY + (isA5 ? 6 : 8));
-
-  const warmMsg = (receipt.notes && receipt.notes.trim().length > 0 && !/auto-generated/i.test(receipt.notes))
-    ? receipt.notes
-    : 'Thank you for your prompt payment! We sincerely appreciate your business.';
-
-  doc.fillColor(COLOR_MUTED).font('Helvetica').fontSize(isA5 ? 6.5 : 8)
-     .text(warmMsg, margin + 12, curY + (isA5 ? 18 : 23), { width: contentWidth - 24 });
-
-  curY += r3H + (isA5 ? 8 : 14);
-
-  // =========================================================================
-  // 5. ROW 4: BOTTOM 3-PART CARD (BANK DETAILS | UPI QR CODE | SIGNATURES)
-  // =========================================================================
-  const r4H = isA5 ? 84 : 104;
-  doc.roundedRect(margin, curY, contentWidth, r4H, R_CARD).fillAndStroke('#FFFFFF', COLOR_BORDER);
-
-  // Left Section: BANK TRANSFER DETAILS (Width: 38%)
-  const bCol1W = contentWidth * 0.38;
-  doc.fillColor(COLOR_TEAL).font('Helvetica-Bold').fontSize(isA5 ? 6.8 : 8)
-     .text('BANK TRANSFER DETAILS', margin + 10, curY + (isA5 ? 7 : 9));
-
-  let by = curY + (isA5 ? 18 : 23);
-  const bStep = isA5 ? 10.5 : 13;
-  const bankAccountName = settings.bank_account_name || 'Udhayam Agencies';
-  const bankAccNo = settings.bank_account_no || '6659-3301-52';
-  const bankName = settings.bank_name || 'Indian Bank';
-  const bankBranch = settings.bank_branch ? (settings.bank_branch.toLowerCase().includes('branch') ? settings.bank_branch : `${settings.bank_branch} Branch`) : 'Perundurai Branch';
-  const bankIfsc = settings.bank_ifsc ? settings.bank_ifsc.replace(/^IFSC\s*-\s*/i, '') : 'IDIB000P034';
-  const upiId = settings.upi_id || 'paytmqr6vc6b5@ptys';
-
-  doc.fillColor(COLOR_TEXT).font('Helvetica').fontSize(isA5 ? 6.2 : 7.8)
-     .text(`Bank: ${bankName}`, margin + 10, by);
-  by += bStep;
-  doc.text(`A/C: ${bankAccNo}`, margin + 10, by);
-  by += bStep;
-  doc.text(`IFSC: ${bankIfsc}`, margin + 10, by);
-  by += bStep;
-  doc.text(`Branch: ${bankBranch}`, margin + 10, by);
-  by += bStep;
-  doc.text(`UPI: ${upiId}`, margin + 10, by);
-
-  // Vertical Divider 1
-  const vDiv1X = margin + bCol1W;
-  doc.moveTo(vDiv1X, curY + 6).lineTo(vDiv1X, curY + r4H - 6).strokeColor(COLOR_BORDER).lineWidth(0.5).stroke();
-
-  // Center Section: SCAN TO PAY UPI QR CODE (Width: 26%)
-  const bCol2W = contentWidth * 0.26;
-  const qrCenterX = vDiv1X + bCol2W / 2;
-  const qrSize = isA5 ? 44 : 56;
-  const qrX = qrCenterX - qrSize / 2;
-  const qrY = curY + (isA5 ? 8 : 10);
-
-  if (qrSource) {
-    try {
-      doc.image(qrSource, qrX, qrY, { fit: [qrSize, qrSize], align: 'center', valign: 'center' });
-    } catch (e) {
-      console.warn('Receipt QR render error:', e.message);
-    }
-  }
-
-  doc.fillColor(COLOR_MUTED).font('Helvetica').fontSize(isA5 ? 4.5 : 5.8)
-     .text(`UPI ID: ${upiId}`, vDiv1X + 5, qrY + qrSize + (isA5 ? 2 : 3), { width: bCol2W - 10, align: 'center' });
-
-  doc.fillColor(COLOR_TEAL).font('Helvetica-Bold').fontSize(isA5 ? 5.5 : 7)
-     .text('SCAN TO PAY UPI', vDiv1X + 5, qrY + qrSize + (isA5 ? 10 : 13), { width: bCol2W - 10, align: 'center' });
-
-  // Vertical Divider 2
-  const vDiv2X = vDiv1X + bCol2W;
-  doc.moveTo(vDiv2X, curY + 6).lineTo(vDiv2X, curY + r4H - 6).strokeColor(COLOR_BORDER).lineWidth(0.5).stroke();
-
-  // Right Section: SIGNATURES (Width: 36%)
-  const bCol3W = contentWidth - bCol1W - bCol2W;
-  const rightX = vDiv2X + 10;
-  const rightW = bCol3W - 20;
-
-  // Top Right: Customer Signature
-  doc.fillColor(COLOR_TEXT).font('Helvetica-Bold').fontSize(isA5 ? 6.5 : 7.8)
-     .text('Customer Signature', rightX, curY + (isA5 ? 7 : 9));
-
-  // Bottom Right: For UDHAYAM AGENCIES / Authorised Signatory
+  // Left Section: Receipt Acknowledgement & Official Terms (Width: 55%)
+  const ackW = contentWidth * 0.55;
   doc.fillColor(COLOR_TEAL).font('Helvetica-Bold').fontSize(isA5 ? 7 : 8.5)
-     .text(`For ${settings.company_name || 'UDHAYAM AGENCIES'}`, rightX, curY + r4H - (isA5 ? 26 : 32), { width: rightW, align: 'right' });
+     .text('RECEIPT ACKNOWLEDGEMENT & TERMS', margin + 12, curY + (isA5 ? 8 : 10));
 
-  doc.fillColor(COLOR_MUTED).font('Helvetica-Oblique').fontSize(isA5 ? 6 : 7.2)
-     .text('Authorised Signatory', rightX, curY + r4H - (isA5 ? 12 : 15), { width: rightW, align: 'right' });
+  const noteMsg = (receipt.notes && receipt.notes.trim().length > 0 && !/auto-generated/i.test(receipt.notes))
+    ? receipt.notes
+    : 'Payment successfully credited against stated invoice / ledger account.';
+
+  doc.fillColor(COLOR_TEXT).font('Helvetica').fontSize(isA5 ? 6.5 : 8)
+     .text(noteMsg, margin + 12, curY + (isA5 ? 20 : 25), { width: ackW - 20, lineGap: 1 });
+
+  const officialReceiptTerms = '• Official receipt of payment against supply of materials.\n• Cheque / DD payments are subject to realization in bank.\n• Computer-generated receipt; valid without physical signature.\n• Subject to Perundurai jurisdiction only.';
+
+  doc.fillColor(COLOR_MUTED).font('Helvetica').fontSize(isA5 ? 5.2 : 6.8)
+     .text(officialReceiptTerms, margin + 12, curY + (isA5 ? 40 : 50), { width: ackW - 20, lineGap: 2 });
+
+  // Vertical Divider
+  const divX = margin + ackW;
+  doc.moveTo(divX, curY + 6).lineTo(divX, curY + r3H - 6).strokeColor(COLOR_BORDER).lineWidth(0.5).stroke();
+
+  // Right Section: Signatures & Authorisation (Width: 45%)
+  const sigW = contentWidth - ackW;
+  const sigX = divX + 12;
+  const sigInnerW = sigW - 24;
+
+  // Customer Acknowledgment
+  doc.fillColor(COLOR_MUTED).font('Helvetica-Bold').fontSize(isA5 ? 6 : 7.5)
+     .text('CUSTOMER SIGNATURE', sigX, curY + (isA5 ? 8 : 10));
+  doc.moveTo(sigX, curY + (isA5 ? 26 : 32)).lineTo(sigX + (isA5 ? 75 : 100), curY + (isA5 ? 26 : 32)).dash(2, { space: 2 }).strokeColor(COLOR_BORDER).lineWidth(0.5).stroke();
+  doc.undash();
+  doc.fillColor(COLOR_LIGHT_MUTED).font('Helvetica').fontSize(isA5 ? 4.8 : 6)
+     .text('Signature / Seal', sigX, curY + (isA5 ? 28 : 34));
+
+  // Authorised Signatory For Udhayam Agencies
+  doc.fillColor(COLOR_TEAL).font('Helvetica-Bold').fontSize(isA5 ? 6.8 : 8.5)
+     .text(`For ${settings.company_name || 'UDHAYAM AGENCIES'}`, sigX, curY + r3H - (isA5 ? 32 : 40), { width: sigInnerW, align: 'right' });
+
+  doc.moveTo(sigX + sigInnerW - (isA5 ? 80 : 110), curY + r3H - (isA5 ? 16 : 20))
+     .lineTo(sigX + sigInnerW, curY + r3H - (isA5 ? 16 : 20))
+     .dash(2, { space: 2 }).strokeColor(COLOR_BORDER).lineWidth(0.5).stroke();
+  doc.undash();
+
+  doc.fillColor(COLOR_MUTED).font('Helvetica').fontSize(isA5 ? 5.2 : 6.8)
+     .text('Authorised Signatory', sigX, curY + r3H - (isA5 ? 13 : 16), { width: sigInnerW, align: 'right' });
+
+  // =========================================================================
+  // 5. CORPORATE FOOTER BAR
+  // =========================================================================
+  const footY = curY + r3H + (isA5 ? 8 : 14);
+  doc.moveTo(margin, footY).lineTo(margin + contentWidth, footY).strokeColor(COLOR_BORDER).lineWidth(0.5).stroke();
+
+  doc.fillColor(COLOR_MUTED).font('Helvetica').fontSize(isA5 ? 5 : 6.5)
+     .text('Computer-generated payment receipt valid without physical signature.', margin, footY + (isA5 ? 3 : 4), { width: contentWidth, align: 'center' });
+  doc.fillColor(COLOR_TEXT).font('Helvetica-Bold').fontSize(isA5 ? 5.2 : 6.8)
+     .text(`UDHAYAM AGENCIES • 41/10, KMR Complex, Old Bus Stand Road, Perundurai - 638052 • Phone: ${settings.company_phone || '+91 97156 22499'} • GSTIN: ${settings.company_gstin || '33AADFU6496M1ZJ'}`, margin, footY + (isA5 ? 10 : 13), { width: contentWidth, align: 'center' });
 
   // End Document (Guaranteed single page fit!)
   doc.end();

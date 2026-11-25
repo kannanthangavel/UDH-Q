@@ -284,6 +284,7 @@ function initDb() {
   try { db.exec("ALTER TABLE quotations ADD COLUMN is_tax_inclusive INTEGER DEFAULT 1"); } catch (e) {}
   try { db.exec("ALTER TABLE quotation_items ADD COLUMN tax_percent REAL DEFAULT 18"); } catch (e) {}
   try { db.exec("ALTER TABLE customers ADD COLUMN gstin TEXT"); } catch (e) {}
+  try { db.exec("UPDATE settings SET value = 'IDIB000P155' WHERE key = 'bank_ifsc' AND value = 'IDIB000P034'"); } catch (e) {}
 
   seedInitialData();
 }
@@ -320,7 +321,7 @@ function seedInitialData() {
     ['bank_branch', 'Perundurai Branch'],
     ['bank_account_name', 'Udhayam Agencies'],
     ['bank_account_no', '6659330152'],
-    ['bank_ifsc', 'IDIB000P034'],
+    ['bank_ifsc', 'IDIB000P155'],
     ['gpay_number', '+91 97156 22499 (MS Udhayam Agencies)'],
     ['default_paper_format', 'A4'],
     ['default_validity_days', '7'],

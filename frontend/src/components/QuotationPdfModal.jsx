@@ -35,23 +35,55 @@ export default function QuotationPdfModal({ quotation, onClose, onEdit, onDelete
 
   const items = quotation.items || [];
 
-  // Tax calculations (rates are tax-inclusive by default)
+  // Tax calculations with multi-rate GST support (5%, 12%, 18%, 28%)
   const subtotal = Number(quotation.subtotal || 0);
   const discountAmount = Number(quotation.discount_amount || 0);
   const netAmount = Math.max(0, subtotal - discountAmount);
   const gstRate = Number(quotation.gst_rate || 18);
+  const isTaxExclusive = quotation.is_tax_inclusive === 0 || quotation.is_tax_inclusive === false || quotation.is_tax_exclusive === true;
   
-  // Taxable base and included GST
+  // Rate-wise GST slabs
+  const slabsMap = {};
+  for (const it of items) {
+    const r = it.tax_percent != null ? parseFloat(it.tax_percent) : gstRate;
+    if (!slabsMap[r]) {
+      slabsMap[r] = {
+        rate: r,
+        cgstPercent: r / 2,
+        sgstPercent: r / 2,
+        taxableValue: 0,
+        cgstAmount: 0,
+        sgstAmount: 0,
+        totalTaxAmount: 0
+      };
+    }
+    const lineTot = Number(it.line_total || 0);
+    if (!isTaxExclusive) {
+      const lineTaxable = r > 0 ? Math.round((lineTot / (1 + r / 100)) * 100) / 100 : lineTot;
+      slabsMap[r].taxableValue += lineTaxable;
+    } else {
+      slabsMap[r].taxableValue += lineTot;
+    }
+  }
+
+  const taxSlabs = Object.values(slabsMap).sort((a, b) => a.rate - b.rate).map(s => {
+    s.taxableValue = Math.round(s.taxableValue * 100) / 100;
+    s.cgstAmount = Math.round(s.taxableValue * (s.cgstPercent / 100) * 100) / 100;
+    s.sgstAmount = Math.round(s.taxableValue * (s.sgstPercent / 100) * 100) / 100;
+    s.totalTaxAmount = Math.round((s.cgstAmount + s.sgstAmount) * 100) / 100;
+    return s;
+  });
+
   const taxableAmount = quotation.taxable_amount !== undefined 
     ? Number(quotation.taxable_amount) 
-    : Math.round((netAmount / (1 + gstRate / 100)) * 100) / 100;
+    : Math.round(taxSlabs.reduce((acc, s) => acc + s.taxableValue, 0) * 100) / 100;
   
   const gstAmount = quotation.gst_amount !== undefined
     ? Number(quotation.gst_amount)
-    : Math.round((netAmount - taxableAmount) * 100) / 100;
+    : Math.round(taxSlabs.reduce((acc, s) => acc + s.totalTaxAmount, 0) * 100) / 100;
 
-  const cgstAmount = Math.round((gstAmount / 2) * 100) / 100;
-  const sgstAmount = Math.round((gstAmount - cgstAmount) * 100) / 100;
+  const cgstAmount = Math.round(taxSlabs.reduce((acc, s) => acc + s.cgstAmount, 0) * 100) / 100;
+  const sgstAmount = Math.round(taxSlabs.reduce((acc, s) => acc + s.sgstAmount, 0) * 100) / 100;
 
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto bg-black/60 backdrop-blur-sm flex items-center justify-center p-2 sm:p-4">
@@ -289,13 +321,14 @@ export default function QuotationPdfModal({ quotation, onClose, onEdit, onDelete
                 <table className="w-full border-collapse text-left">
                   <thead>
                     <tr className="bg-[#00545C] text-white text-[9px] sm:text-[10px] font-bold uppercase tracking-wider">
-                      <th className={`text-center ${isA5 ? 'py-1.5 px-1.5 w-7' : 'py-2.5 px-3 w-10'}`}>#</th>
+                      <th className={`text-center ${isA5 ? 'py-1.5 px-1.5 w-7' : 'py-2.5 px-3 w-9'}`}>#</th>
                       <th className={`${isA5 ? 'py-1.5 px-2' : 'py-2.5 px-3'}`}>Item Description & Specifications</th>
-                      <th className={`text-center ${isA5 ? 'py-1.5 px-1.5 w-14' : 'py-2.5 px-2.5 w-20'}`}>HSN</th>
-                      <th className={`text-center ${isA5 ? 'py-1.5 px-1 w-10' : 'py-2.5 px-2.5 w-14'}`}>Unit</th>
-                      <th className={`text-center ${isA5 ? 'py-1.5 px-1 w-10' : 'py-2.5 px-2.5 w-14'}`}>Qty</th>
-                      <th className={`text-right ${isA5 ? 'py-1.5 px-2 w-18' : 'py-2.5 px-3 w-24'}`}>Rate (₹)</th>
-                      <th className={`text-right ${isA5 ? 'py-1.5 px-2 w-20' : 'py-2.5 px-3.5 w-28'}`}>Total (₹)</th>
+                      <th className={`text-center ${isA5 ? 'py-1.5 px-1.5 w-12' : 'py-2.5 px-2 w-16'}`}>HSN</th>
+                      <th className={`text-center ${isA5 ? 'py-1.5 px-1 w-8' : 'py-2.5 px-2 w-12'}`}>Qty</th>
+                      <th className={`text-center ${isA5 ? 'py-1.5 px-1 w-8' : 'py-2.5 px-2 w-12'}`}>Unit</th>
+                      <th className={`text-right ${isA5 ? 'py-1.5 px-1.5 w-16' : 'py-2.5 px-2.5 w-20'}`}>Rate (₹)</th>
+                      <th className={`text-center ${isA5 ? 'py-1.5 px-1.5 w-12' : 'py-2.5 px-2 w-16'}`}>Tax %</th>
+                      <th className={`text-right ${isA5 ? 'py-1.5 px-2 w-18' : 'py-2.5 px-3 w-24'}`}>Total (₹)</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-200/80 text-xs">
@@ -314,19 +347,22 @@ export default function QuotationPdfModal({ quotation, onClose, onEdit, onDelete
                             </div>
                           )}
                         </td>
-                        <td className={`text-center text-slate-600 tabular-nums font-medium ${isA5 ? 'py-1.5 px-1.5 text-[10px]' : 'py-2.5 px-2.5 text-[11px]'}`}>
+                        <td className={`text-center text-slate-600 tabular-nums font-medium ${isA5 ? 'py-1.5 px-1.5 text-[10px]' : 'py-2.5 px-2 text-[11px]'}`}>
                           {item.hsn_sac || '-'}
                         </td>
-                        <td className={`text-center text-slate-600 font-medium ${isA5 ? 'py-1.5 px-1 text-[10px]' : 'py-2.5 px-2.5 text-[11px]'}`}>
-                          {item.unit || 'Nos'}
-                        </td>
-                        <td className={`text-center font-extrabold text-slate-900 tabular-nums ${isA5 ? 'py-1.5 px-1 text-[11px]' : 'py-2.5 px-2.5 text-xs sm:text-[13px]'}`}>
+                        <td className={`text-center font-extrabold text-slate-900 tabular-nums ${isA5 ? 'py-1.5 px-1 text-[11px]' : 'py-2.5 px-2 text-xs sm:text-[13px]'}`}>
                           {item.quantity}
                         </td>
-                        <td className={`text-right font-semibold text-slate-700 tabular-nums ${isA5 ? 'py-1.5 px-2 text-[11px]' : 'py-2.5 px-3 text-xs sm:text-[13px]'}`}>
+                        <td className={`text-center text-slate-600 font-medium ${isA5 ? 'py-1.5 px-1 text-[10px]' : 'py-2.5 px-2 text-[11px]'}`}>
+                          {item.unit || 'Nos'}
+                        </td>
+                        <td className={`text-right font-semibold text-slate-700 tabular-nums ${isA5 ? 'py-1.5 px-1.5 text-[11px]' : 'py-2.5 px-2.5 text-xs sm:text-[13px]'}`}>
                           {Number(item.sale_rate).toFixed(2)}
                         </td>
-                        <td className={`text-right font-extrabold text-slate-900 tabular-nums ${isA5 ? 'py-1.5 px-2 text-[11px]' : 'py-2.5 px-3.5 text-xs sm:text-[13px]'}`}>
+                        <td className={`text-center font-extrabold text-slate-800 tabular-nums ${isA5 ? 'py-1.5 px-1.5 text-[11px]' : 'py-2.5 px-2 text-xs sm:text-[12px]'}`}>
+                          {item.tax_percent != null ? item.tax_percent : (quotation.gst_rate || 18)}%
+                        </td>
+                        <td className={`text-right font-extrabold text-slate-900 tabular-nums ${isA5 ? 'py-1.5 px-2 text-[11px]' : 'py-2.5 px-3 text-xs sm:text-[13px]'}`}>
                           {Number(item.line_total).toFixed(2)}
                         </td>
                       </tr>
@@ -357,20 +393,44 @@ export default function QuotationPdfModal({ quotation, onClose, onEdit, onDelete
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-slate-100 text-xs">
+                    {taxSlabs.length > 1 && taxSlabs.map((s, sIdx) => (
+                      <tr key={sIdx} className="bg-slate-50/50">
+                        <td className="py-1.5 px-3 text-right font-mono text-slate-700">
+                          {formatCurrency(s.taxableValue)}
+                        </td>
+                        <td className="py-1.5 px-2 text-center font-mono text-slate-600">
+                          {s.cgstPercent.toFixed(2)}%
+                        </td>
+                        <td className="py-1.5 px-3 text-right font-mono text-slate-700">
+                          {formatCurrency(s.cgstAmount)}
+                        </td>
+                        <td className="py-1.5 px-2 text-center font-mono text-slate-600">
+                          {s.sgstPercent.toFixed(2)}%
+                        </td>
+                        <td className="py-1.5 px-3 text-right font-mono text-slate-700">
+                          {formatCurrency(s.sgstAmount)}
+                        </td>
+                        <td className="py-1.5 px-3 text-right font-mono text-slate-700">
+                          {formatCurrency(s.totalTaxAmount)}
+                        </td>
+                        <td className="py-1.5 px-2 text-right font-mono text-slate-400">—</td>
+                        <td className="py-1.5 px-3 text-right font-mono text-slate-400">—</td>
+                      </tr>
+                    ))}
                     <tr>
                       <td className="py-2.5 px-3 text-right font-mono font-bold text-slate-800">
                         {formatCurrency(taxableAmount)}
                       </td>
-                      <td className="py-2.5 px-2 text-center font-mono text-slate-600">
-                        {(gstRate / 2).toFixed(2)}%
+                      <td className="py-2.5 px-2 text-center font-mono font-bold text-slate-600">
+                        {taxSlabs.length === 1 ? `${taxSlabs[0].cgstPercent.toFixed(2)}%` : 'TOTAL'}
                       </td>
-                      <td className="py-2.5 px-3 text-right font-mono text-slate-700">
+                      <td className="py-2.5 px-3 text-right font-mono font-bold text-slate-700">
                         {formatCurrency(cgstAmount)}
                       </td>
-                      <td className="py-2.5 px-2 text-center font-mono text-slate-600">
-                        {(gstRate / 2).toFixed(2)}%
+                      <td className="py-2.5 px-2 text-center font-mono font-bold text-slate-600">
+                        {taxSlabs.length === 1 ? `${taxSlabs[0].sgstPercent.toFixed(2)}%` : 'TOTAL'}
                       </td>
-                      <td className="py-2.5 px-3 text-right font-mono text-slate-700">
+                      <td className="py-2.5 px-3 text-right font-mono font-bold text-slate-700">
                         {formatCurrency(sgstAmount)}
                       </td>
                       <td className="py-2.5 px-3 text-right font-mono font-bold text-slate-800">
@@ -400,16 +460,15 @@ export default function QuotationPdfModal({ quotation, onClose, onEdit, onDelete
             {/* 2. BANK DETAILS & TERMS HORIZONTAL COLUMNS (FULL WIDTH) */}
             <div className="mt-3 bg-slate-50/90 border border-slate-200 rounded-xl p-3 shadow-2xs">
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 items-stretch">
-                {/* Col 1: Bank & Settlement (Executive 5-Line Structure) */}
+                {/* Col 1: Bank & Settlement (Executive Structure with IDIB000P155) */}
                 <div className="space-y-0.5 text-[11px] text-slate-800 border-r border-slate-200/80 pr-2">
                   <span className="text-[9px] font-black text-[#004D40] uppercase tracking-wider block mb-1">
                     BANK DETAILS:
                   </span>
                   <p className="font-extrabold text-slate-900 leading-tight">{settings?.bank_account_name || 'Udhayam Agencies'}</p>
-                  <p className="font-mono font-bold text-slate-900 leading-tight">{settings?.bank_account_no || '6659330152'}</p>
-                  <p className="text-slate-700 leading-tight">{settings?.bank_name || 'Indian Bank'}</p>
-                  <p className="text-slate-700 leading-tight">{settings?.bank_branch ? (settings.bank_branch.toLowerCase().includes('branch') ? settings.bank_branch : `${settings.bank_branch} Branch`) : 'Perundurai Branch'}</p>
-                  <p className="font-bold text-[#004D40] leading-tight">IFSC - {settings?.bank_ifsc?.replace(/^IFSC\s*-\s*/i, '') || 'IDIB000P034'}</p>
+                  <p className="font-mono font-bold text-slate-900 leading-tight">ACC No: {settings?.bank_account_no || '6659330152'}</p>
+                  <p className="text-slate-700 leading-tight">{settings?.bank_name ? `${settings.bank_name} - ${settings.bank_branch || 'Perundurai Branch'}` : 'Indian Bank - Perundurai Branch'}</p>
+                  <p className="font-bold text-[#004D40] leading-tight">IFSC Code: {settings?.bank_ifsc?.replace(/^IFSC\s*(Code)?\s*[:\-]\s*/i, '') || 'IDIB000P155'}</p>
                 </div>
 
                 {/* Col 2: Terms & Conditions */}
@@ -420,7 +479,7 @@ export default function QuotationPdfModal({ quotation, onClose, onEdit, onDelete
                   <p className="line-clamp-4 leading-relaxed whitespace-pre-line text-[9px] text-slate-600">
                     {(quotation.notes && !/auto-generated|test_msg/i.test(quotation.notes))
                       ? quotation.notes
-                      : (settings?.default_terms || '1. Quotation is valid for 7 days from the date of issue.\n2. Goods once sold/dispatched will not be taken back.\n3. Delivery subject to physical stock availability.\n4. GST and Transport charges applicable as mentioned.')}
+                      : '1. Quotation valid for 15 days from date of issue.\n2. Goods once sold will not be taken back or exchanged.\n3. 100% payment on delivery / as per agreed terms.\n4. Subject to Perundurai jurisdiction only.'}
                   </p>
                 </div>
 
@@ -458,27 +517,11 @@ export default function QuotationPdfModal({ quotation, onClose, onEdit, onDelete
               </div>
             </div>
 
-              {/* Footer Signature & Verification Bar */}
-              <div className={`pt-2 border-t border-slate-300 flex items-end justify-between ${
-                isA5 ? 'text-[10px]' : 'text-xs'
-              } text-slate-600`}>
-                <div className="space-y-0.5">
-                  <p className={`font-bold text-slate-700 ${isA5 ? 'text-[10px]' : 'text-xs'}`}>Customer Acceptance</p>
-                  <div className={`border-b border-dashed border-slate-300 ${isA5 ? 'h-6 w-32' : 'h-8 w-44'}`}></div>
-                  <p className={`${isA5 ? 'text-[8.5px]' : 'text-[10px]'} text-slate-400`}>Signature / Seal & Date</p>
-                </div>
-
-                <div className={`text-center text-slate-400 max-w-xs hidden sm:block ${isA5 ? 'text-[8.5px]' : 'text-[10px]'}`}>
-                  <p>Computer-generated quotation valid without physical signature.</p>
-                  <p className="font-medium text-slate-500">UDHAYAM AGENCIES • GSTIN: {settings?.company_gstin || '33AADFU6496M1ZJ'}</p>
-                </div>
-
-                <div className="text-right space-y-0.5">
-                  <p className={`font-black text-slate-900 ${isA5 ? 'text-[10px]' : 'text-xs'}`}>For {settings?.company_name || 'UDHAYAM AGENCIES'}</p>
-                  <div className={`border-b border-dashed border-slate-300 ml-auto ${isA5 ? 'h-6 w-32' : 'h-8 w-44'}`}></div>
-                  <p className={`font-semibold text-slate-700 ${isA5 ? 'text-[8.5px]' : 'text-[10px]'}`}>Authorised Signatory</p>
-                </div>
-              </div>
+            {/* Footer Corporate Verification Bar */}
+            <div className="pt-2 border-t border-slate-200 text-center text-slate-500 text-[10px] space-y-0.5">
+              <p>Computer-generated quotation valid without physical signature.</p>
+              <p className="font-bold text-slate-700">UDHAYAM AGENCIES • 41/10, KMR Complex, Old Bus Stand Road, Perundurai - 638052 • Phone: +91 97156 22499 • GSTIN: {settings?.company_gstin || '33AADFU6496M1ZJ'}</p>
+            </div>
 
             </div>
 
