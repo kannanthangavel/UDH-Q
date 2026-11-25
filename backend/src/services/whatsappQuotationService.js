@@ -494,7 +494,7 @@ class WhatsAppQuotationService {
         gstRate,
         gstAmount,
         grandTotal,
-        `Auto-generated from WhatsApp requirement (${messageId})`
+        '1. Quotation is valid for 7 days from the date of issue.\n2. Goods once sold/dispatched will not be taken back.\n3. Delivery subject to physical stock availability.\n4. GST and Transport charges applicable as mentioned.'
       );
 
       quotationId = result.lastInsertRowid;

@@ -86,19 +86,24 @@ function generateQuotationPdf(quotation, settings = {}, res = null) {
   const R_SM = isA5 ? 4 : 5;
 
   // Top Header Banner with sleek rounded card corners & Lime bottom accent strip
-  const headerHeight = isA5 ? 52 : 74;
+  const headerHeight = isA5 ? 52 : 72;
   doc.roundedRect(margin, margin, contentWidth, headerHeight, R_CARD).fill(COLOR_TEAL);
 
   // Sleek Lime accent strip at bottom of header banner
   const accentHeight = isA5 ? 2.5 : 3.5;
   doc.roundedRect(margin, margin + headerHeight - accentHeight, contentWidth, accentHeight, 1).fill(COLOR_LIME);
 
+  // Pre-calculate exact quote number and date displays
+  const quoteNoDisplay = quotation.quotation_number || 'UDQ-2026-0001';
+  const quoteDateDisplay = formatToDMY(quotation.quotation_date) || formatToDMY(new Date());
+  const validDateDisplay = formatToDMY(quotation.validity_date, quotation.quotation_date, 7);
+
   // Logo in clean rounded white square container (fills allocated space fully!)
   let textLeft = margin + (isA5 ? 6 : 10);
   if (logoSource) {
     try {
-      const logoBoxW = isA5 ? 46 : 64;
-      const logoBoxH = isA5 ? 46 : 64;
+      const logoBoxW = isA5 ? 46 : 60;
+      const logoBoxH = isA5 ? 46 : 60;
       const pad = isA5 ? 3 : 4;
       const boxX = margin + (isA5 ? 4 : 5);
       const boxY = margin + (isA5 ? 3 : 5);
@@ -123,55 +128,57 @@ function generateQuotationPdf(quotation, settings = {}, res = null) {
   doc.font('Helvetica-Bold')
      .fontSize(isA5 ? 6.5 : 8.5)
      .fillColor(COLOR_LIME)
-     .text(settings.company_division || 'Paint Division Quotation Management', textLeft, margin + (isA5 ? 17 : 24));
+     .text(settings.company_division || 'PAINT DIVISION', textLeft, margin + (isA5 ? 17 : 24));
 
   doc.font('Helvetica')
-     .fontSize(isA5 ? 5.5 : 7.5)
+     .fontSize(isA5 ? 5.5 : 7.2)
      .fillColor('#E2E8F0')
-     .text(settings.company_address || '', textLeft, margin + (isA5 ? 25 : 36), { width: contentWidth - (textLeft - margin) - (isA5 ? 68 : 95) })
-     .text(`Phone: ${settings.company_phone || '+91 97156 22499'} | GSTIN: ${settings.company_gstin || '33AADFU6496M1ZJ'}`, textLeft, margin + (isA5 ? 35 : 49));
+     .text(settings.company_address || '41/10, KMR Complex, Old Bus Stand Road, Perundurai, Erode - 638052', textLeft, margin + (isA5 ? 25 : 35), { width: contentWidth - (textLeft - margin) - (isA5 ? 75 : 110) })
+     .text(`Phone: ${settings.company_phone || '+91 97156 22499'} | GSTIN: ${settings.company_gstin || '33AADFU6496M1ZJ'}`, textLeft, margin + (isA5 ? 35 : 47));
 
-  // "QUOTATION" Title Badge at top-right
+  // Top-Right Header Elements (QUOTATION pill + Quote No + Date, strictly matching Image 1)
   const badgeWidth = isA5 ? 64 : 86;
-  const badgeHeight = isA5 ? 18 : 22;
+  const badgeHeight = isA5 ? 16 : 20;
   const badgeX = pageWidth - margin - badgeWidth - (isA5 ? 5 : 8);
-  const badgeY = margin + (isA5 ? 6 : 8);
-  doc.roundedRect(badgeX, badgeY, badgeWidth, badgeHeight, R_SM)
-     .fill(COLOR_LIME);
+  const badgeY = margin + (isA5 ? 5 : 7);
+
+  doc.roundedRect(badgeX, badgeY, badgeWidth, badgeHeight, R_SM).fill(COLOR_LIME);
   doc.fillColor(COLOR_TEAL_DARK)
      .font('Helvetica-Bold')
+     .fontSize(isA5 ? 7.5 : 9.5)
+     .text('QUOTATION', badgeX, badgeY + (isA5 ? 4 : 5), { width: badgeWidth, align: 'center' });
+
+  const metaRightW = isA5 ? 95 : 130;
+  const metaRightX = pageWidth - margin - metaRightW - (isA5 ? 5 : 8);
+  doc.fillColor('#FFFFFF')
+     .font('Helvetica-Bold')
      .fontSize(isA5 ? 7.5 : 10)
-     .text('QUOTATION', badgeX, badgeY + (isA5 ? 5 : 6), { width: badgeWidth, align: 'center' });
+     .text(quoteNoDisplay, metaRightX, badgeY + badgeHeight + (isA5 ? 3 : 5), { width: metaRightW, align: 'right' });
+  doc.font('Helvetica')
+     .fontSize(isA5 ? 6 : 7.8)
+     .text(`Date: ${quoteDateDisplay}`, metaRightX, badgeY + badgeHeight + (isA5 ? 13 : 17), { width: metaRightW, align: 'right' });
 
   let curY = margin + headerHeight + (isA5 ? 4 : 6);
 
   // Customer & Quotation Meta Box (Rounded Card)
-  const infoBoxHeight = isA5 ? 46 : 60;
+  const infoBoxHeight = isA5 ? 46 : 58;
   doc.roundedRect(margin, curY, contentWidth, infoBoxHeight, R_CARD)
-     .fillAndStroke('#F8FAFC', COLOR_BORDER);
+     .fillAndStroke('#FFFFFF', COLOR_BORDER);
 
   const colWidth = (contentWidth - 16) / 2;
 
-  // Left: Customer Details
+  // Left: BILLED TO / CUSTOMER DETAILS (Matching Image 1)
   doc.fillColor(COLOR_TEAL)
      .font('Helvetica-Bold')
      .fontSize(isA5 ? 6.5 : 8)
-     .text('CUSTOMER DETAILS:', margin + 6, curY + (isA5 ? 4 : 6));
+     .text('BILLED TO / CUSTOMER DETAILS:', margin + 8, curY + (isA5 ? 4 : 6));
 
   doc.fillColor(COLOR_TEXT)
      .font('Helvetica-Bold')
-     .fontSize(isA5 ? 7.5 : 9.5)
-     .text(quotation.customer_name || 'Valued Customer', margin + 6, curY + (isA5 ? 12 : 16));
+     .fontSize(isA5 ? 8 : 10.5)
+     .text(quotation.customer_name || 'Valued Customer', margin + 8, curY + (isA5 ? 14 : 18));
 
-  let custDetailsY = curY + (isA5 ? 20 : 26);
-  if (quotation.customer_address) {
-    doc.font('Helvetica')
-       .fontSize(isA5 ? 5.5 : 7)
-       .fillColor(COLOR_MUTED)
-       .text(`Address: ${quotation.customer_address}`, margin + 6, custDetailsY, { width: colWidth, height: 12, ellipsis: true });
-    custDetailsY += (isA5 ? 9 : 11);
-  }
-
+  let custDetailsY = curY + (isA5 ? 24 : 31);
   const contactParts = [];
   if (quotation.customer_phone && quotation.customer_phone !== '-') {
     contactParts.push(`Phone: ${quotation.customer_phone}`);
@@ -180,10 +187,18 @@ function generateQuotationPdf(quotation, settings = {}, res = null) {
     contactParts.push(`GSTIN: ${quotation.customer_gstin}`);
   }
   if (contactParts.length > 0) {
-    doc.font('Helvetica-Bold')
+    doc.font('Helvetica')
+       .fontSize(isA5 ? 5.8 : 7.5)
+       .fillColor(COLOR_MUTED)
+       .text(contactParts.join('  |  '), margin + 8, custDetailsY, { width: colWidth, height: 11, ellipsis: true });
+    custDetailsY += (isA5 ? 8 : 10);
+  }
+
+  if (quotation.customer_address) {
+    doc.font('Helvetica')
        .fontSize(isA5 ? 5.5 : 7)
-       .fillColor(COLOR_TEXT)
-       .text(contactParts.join('  |  '), margin + 6, custDetailsY, { width: colWidth, height: 11, ellipsis: true });
+       .fillColor(COLOR_MUTED)
+       .text(`Address: ${quotation.customer_address}`, margin + 8, custDetailsY, { width: colWidth, height: 11, ellipsis: true });
   }
 
   // Vertical subtle divider between Customer & Quote details
@@ -193,65 +208,73 @@ function generateQuotationPdf(quotation, settings = {}, res = null) {
      .lineWidth(0.5)
      .stroke();
 
-  // Right: Quotation Meta
+  // Right: QUOTATION META (Matching Image 1)
   const rightX = margin + colWidth + 10;
+  const rightInnerW = colWidth - 10;
+
   doc.fillColor(COLOR_TEAL)
      .font('Helvetica-Bold')
      .fontSize(isA5 ? 6.5 : 8)
-     .text('QUOTATION DETAILS:', rightX, curY + (isA5 ? 4 : 6));
+     .text('QUOTATION META:', rightX, curY + (isA5 ? 4 : 6), { width: rightInnerW, align: 'right' });
 
-  // Strictly use exact quote number without appending reference numbers or extra suffix
-  const quoteNoDisplay = quotation.quotation_number || 'UDQ-2026-0001';
-  const quoteDateDisplay = formatToDMY(quotation.quotation_date) || formatToDMY(new Date());
-  const validDateDisplay = formatToDMY(quotation.validity_date, quotation.quotation_date, 7);
+  const metaLineY = curY + (isA5 ? 14 : 17);
+  const stepY = isA5 ? 9 : 11.5;
 
-  doc.font('Helvetica')
-     .fontSize(isA5 ? 5.8 : 7.5)
-     .fillColor(COLOR_TEXT)
-     .text(`Quote No: `, rightX, curY + (isA5 ? 12 : 16), { continued: true })
-     .font('Helvetica-Bold').text(quoteNoDisplay)
-     .font('Helvetica').text(`Date: `, rightX, curY + (isA5 ? 20 : 25), { continued: true })
-     .font('Helvetica-Bold').text(quoteDateDisplay)
-     .font('Helvetica').text(`Valid Till: `, rightX, curY + (isA5 ? 28 : 34), { continued: true })
-     .font('Helvetica-Bold').text(validDateDisplay);
+  doc.font('Helvetica').fontSize(isA5 ? 5.8 : 7.5).fillColor(COLOR_MUTED)
+     .text(`Quote No: `, rightX, metaLineY, { width: rightInnerW - 75, align: 'right' });
+  doc.font('Helvetica-Bold').fillColor(COLOR_TEXT)
+     .text(quoteNoDisplay, rightX + rightInnerW - 72, metaLineY, { width: 72, align: 'right' });
 
-  // Terms badge: CASH vs CREDIT pill
+  doc.font('Helvetica').fontSize(isA5 ? 5.8 : 7.5).fillColor(COLOR_MUTED)
+     .text(`Date: `, rightX, metaLineY + stepY, { width: rightInnerW - 75, align: 'right' });
+  doc.font('Helvetica-Bold').fillColor(COLOR_TEXT)
+     .text(quoteDateDisplay, rightX + rightInnerW - 72, metaLineY + stepY, { width: 72, align: 'right' });
+
+  doc.font('Helvetica').fontSize(isA5 ? 5.8 : 7.5).fillColor(COLOR_MUTED)
+     .text(`Valid Till: `, rightX, metaLineY + stepY * 2, { width: rightInnerW - 75, align: 'right' });
+  doc.font('Helvetica-Bold').fillColor(COLOR_TEXT)
+     .text(validDateDisplay, rightX + rightInnerW - 72, metaLineY + stepY * 2, { width: 72, align: 'right' });
+
+  // Terms badge: CASH vs CREDIT pill (Matching Image 1)
   const pTerms = (quotation.payment_terms || 'Cash').trim();
   const isCredit = /credit/i.test(pTerms);
   const pillBg = isCredit ? '#FEF3C7' : '#DCFCE7';
   const pillFg = isCredit ? '#92400E' : '#166534';
   const pillBorder = isCredit ? '#FCD34D' : '#86EFAC';
-  const pillW = isA5 ? 78 : 105;
-  const pillH = isA5 ? 11 : 14;
-  const pillY = curY + (isA5 ? 35 : 43);
+  const pillW = isA5 ? 64 : 80;
+  const pillH = isA5 ? 10 : 13;
+  const pillX = margin + contentWidth - pillW - 4;
+  const pillY = curY + infoBoxHeight - pillH - 4;
 
-  doc.roundedRect(rightX, pillY, pillW, pillH, 3)
-     .fillAndStroke(pillBg, pillBorder);
+  doc.roundedRect(pillX, pillY, pillW, pillH, 3).fillAndStroke(pillBg, pillBorder);
   doc.fillColor(pillFg)
      .font('Helvetica-Bold')
-     .fontSize(isA5 ? 5.2 : 6.8)
-     .text(`Terms: ${pTerms}`, rightX + 2, pillY + (isA5 ? 2 : 2.5), { width: pillW - 4, align: 'center', ellipsis: true });
+     .fontSize(isA5 ? 5 : 6.8)
+     .text(`TERMS: ${pTerms.toUpperCase()}`, pillX, pillY + (isA5 ? 2 : 2.5), { width: pillW, align: 'center' });
 
   curY += infoBoxHeight + (isA5 ? 4 : 6);
 
   // Target bottom coordinates for true Full-Page A4 / A5 printing layout
-  const bankCardHeight = isA5 ? 58 : 74;
-  const taxTableHeight = isA5 ? 41 : 50;
-  const targetBankY = pageHeight - margin - bankCardHeight;
-  const targetTaxY = targetBankY - taxTableHeight - (isA5 ? 5 : 8);
-  const tableBottomY = targetTaxY - (isA5 ? 4 : 6);
-  const tableHeaderHeight = isA5 ? 16 : 20;
+  const footerBarHeight = isA5 ? 20 : 25;
+  const bankCardHeight = isA5 ? 56 : 70;
+  const taxTableHeight = isA5 ? 38 : 46;
 
-  // Line Items Table Columns with clean (Rs.) currency labels in Optech Layout Design
-  // Columns: S.No | Item Description & Specifications | HSN/SAC | Qty | Rate (Rs.) | Tax % | Amount (Rs.)
+  const targetFooterY = pageHeight - margin - footerBarHeight;
+  const targetBankY = targetFooterY - bankCardHeight - (isA5 ? 4 : 6);
+  const targetTaxY = targetBankY - taxTableHeight - (isA5 ? 4 : 6);
+  const tableBottomY = targetTaxY - (isA5 ? 4 : 6);
+  const tableHeaderHeight = isA5 ? 15 : 19;
+
+  // Exact 7 Columns matching Image 1:
+  // # | ITEM DESCRIPTION & SPECIFICATIONS | HSN | UNIT | QTY | RATE (Rs.) | TOTAL (Rs.)
   const colDef = [
-    { label: 'S.No', width: isA5 ? 20 : 28, align: 'center' },
-    { label: 'Item Description & Specifications', width: isA5 ? 165 : 235, align: 'left' },
-    { label: 'HSN/SAC', width: isA5 ? 42 : 56, align: 'center' },
-    { label: 'Qty', width: isA5 ? 38 : 50, align: 'center' },
-    { label: 'Rate (Rs.)', width: isA5 ? 44 : 58, align: 'right' },
-    { label: 'Tax %', width: isA5 ? 30 : 42, align: 'center' },
-    { label: 'Amount (Rs.)', width: isA5 ? 48 : 70, align: 'right' }
+    { label: '#', width: isA5 ? 18 : 26, align: 'center' },
+    { label: 'ITEM DESCRIPTION & SPECIFICATIONS', width: isA5 ? (contentWidth - 18 - 42 - 32 - 32 - 50 - 58) : (contentWidth - 26 - 56 - 40 - 40 - 70 - 80), align: 'left' },
+    { label: 'HSN', width: isA5 ? 42 : 56, align: 'center' },
+    { label: 'UNIT', width: isA5 ? 32 : 40, align: 'center' },
+    { label: 'QTY', width: isA5 ? 32 : 40, align: 'center' },
+    { label: 'RATE (Rs.)', width: isA5 ? 50 : 70, align: 'right' },
+    { label: 'TOTAL (Rs.)', width: isA5 ? 58 : 80, align: 'right' }
   ];
 
   function drawTableHeader(y) {
@@ -259,14 +282,13 @@ function generateQuotationPdf(quotation, settings = {}, res = null) {
        .fill(COLOR_TEAL);
     doc.fillColor('#FFFFFF')
        .font('Helvetica-Bold')
-       .fontSize(isA5 ? 6.5 : 8);
+       .fontSize(isA5 ? 6 : 7.8);
 
     let x = margin;
     for (let i = 0; i < colDef.length; i++) {
       const col = colDef[i];
-      doc.text(col.label, x + 2, y + (isA5 ? 4.5 : 5.5), { width: col.width - 4, align: col.align });
+      doc.text(col.label, x + 2, y + (isA5 ? 4 : 5), { width: col.width - 4, align: col.align });
       x += col.width;
-      // White vertical column divider in the header
       if (i < colDef.length - 1) {
         doc.moveTo(x, y + 2).lineTo(x, y + tableHeaderHeight - 2).strokeColor('#003B40').lineWidth(0.75).stroke();
       }
@@ -279,7 +301,6 @@ function generateQuotationPdf(quotation, settings = {}, res = null) {
   curY = drawTableHeader(curY);
   let currentPageTableStartY = curY;
 
-  // Function to draw vertical column divider lines
   function drawVerticalGridLines(startY, endY) {
     let colX = margin;
     for (let i = 0; i < colDef.length - 1; i++) {
@@ -296,9 +317,7 @@ function generateQuotationPdf(quotation, settings = {}, res = null) {
     const hasDetails = item.details && item.details.trim().length > 0;
     const rowHeight = hasDetails ? (isA5 ? 20 : 23) : (isA5 ? 15 : 18);
 
-    // Multi-page check: break if next row exceeds tableBottomY
     if (curY + rowHeight > tableBottomY) {
-      // Complete table on current page
       drawVerticalGridLines(currentPageTableStartY, curY);
       doc.moveTo(margin, curY).lineTo(margin + contentWidth, curY).strokeColor(COLOR_BORDER).lineWidth(0.5).stroke();
       doc.rect(margin, currentPageTableStartY - tableHeaderHeight, contentWidth, curY - (currentPageTableStartY - tableHeaderHeight))
@@ -311,58 +330,52 @@ function generateQuotationPdf(quotation, settings = {}, res = null) {
 
     const isEven = rowIdx % 2 === 0;
     if (isEven) {
+      doc.rect(margin, curY, contentWidth, rowHeight).fill('#FFFFFF');
+    } else {
       doc.rect(margin, curY, contentWidth, rowHeight).fill('#F8FAFC');
     }
 
-    // Row horizontal bottom border
     doc.moveTo(margin, curY + rowHeight).lineTo(margin + contentWidth, curY + rowHeight).strokeColor(COLOR_BORDER).lineWidth(0.5).stroke();
 
-    doc.fillColor(COLOR_TEXT)
-       .font('Helvetica')
-       .fontSize(isA5 ? 6 : 7.5);
-
     let x = margin;
-    // S.No
+    // 1. #
+    doc.fillColor(COLOR_MUTED).font('Helvetica').fontSize(isA5 ? 6 : 7.5);
     doc.text(String(rowIdx + 1), x + 2, curY + (isA5 ? 3 : 4.5), { width: colDef[0].width - 4, align: 'center' });
     x += colDef[0].width;
 
-    // Item Name and Details
-    doc.font('Helvetica-Bold')
-       .text(item.item_name || '', x + 3, curY + (isA5 ? 2.5 : 3.5), { width: colDef[1].width - 6, height: 10, ellipsis: true });
+    // 2. ITEM DESCRIPTION & SPECIFICATIONS
+    doc.fillColor(COLOR_TEXT).font('Helvetica-Bold').fontSize(isA5 ? 6.5 : 8);
+    doc.text(item.item_name || '', x + 3, curY + (isA5 ? 2.5 : 3.5), { width: colDef[1].width - 6, height: 10, ellipsis: true });
     if (hasDetails) {
       doc.font('Helvetica-Oblique')
-         .fontSize(isA5 ? 5.5 : 6.5)
+         .fontSize(isA5 ? 5 : 6.5)
          .fillColor(COLOR_MUTED)
          .text(item.details, x + 3, curY + (isA5 ? 11 : 13.5), { width: colDef[1].width - 6, height: 8, ellipsis: true });
-      doc.fillColor(COLOR_TEXT).fontSize(isA5 ? 6 : 7.5);
     }
     x += colDef[1].width;
 
-    // HSN/SAC
-    doc.font('Helvetica')
-       .text(item.hsn_sac || '-', x + 2, curY + (isA5 ? 3 : 4.5), { width: colDef[2].width - 4, align: 'center' });
+    // 3. HSN
+    doc.font('Helvetica').fontSize(isA5 ? 6 : 7.5).fillColor(COLOR_MUTED);
+    doc.text(item.hsn_sac || '-', x + 2, curY + (isA5 ? 3 : 4.5), { width: colDef[2].width - 4, align: 'center' });
     x += colDef[2].width;
 
-    // Qty (combined quantity and unit, matching Optech layout)
-    const qtyText = `${item.quantity} ${item.unit || 'Nos'}`;
-    doc.font('Helvetica-Bold')
-       .text(qtyText, x + 2, curY + (isA5 ? 3 : 4.5), { width: colDef[3].width - 4, align: 'center' });
+    // 4. UNIT
+    doc.text(item.unit || 'Nos', x + 2, curY + (isA5 ? 3 : 4.5), { width: colDef[3].width - 4, align: 'center' });
     x += colDef[3].width;
 
-    // Rate (Rs.)
-    doc.font('Helvetica')
-       .text(Number(item.sale_rate).toFixed(2), x + 2, curY + (isA5 ? 3 : 4.5), { width: colDef[4].width - 4, align: 'right' });
+    // 5. QTY
+    doc.font('Helvetica-Bold').fillColor(COLOR_TEXT);
+    doc.text(String(item.quantity || 1), x + 2, curY + (isA5 ? 3 : 4.5), { width: colDef[4].width - 4, align: 'center' });
     x += colDef[4].width;
 
-    // Tax %
-    const taxVal = item.tax_percent != null ? item.tax_percent : (quotation.gst_rate || 18);
-    doc.font('Helvetica')
-       .text(`${taxVal}%`, x + 2, curY + (isA5 ? 3 : 4.5), { width: colDef[5].width - 4, align: 'center' });
+    // 6. RATE (Rs.)
+    doc.font('Helvetica').fillColor(COLOR_TEXT);
+    doc.text(Number(item.sale_rate || 0).toFixed(2), x + 2, curY + (isA5 ? 3 : 4.5), { width: colDef[5].width - 4, align: 'right' });
     x += colDef[5].width;
 
-    // Amount (Rs.)
-    doc.font('Helvetica-Bold')
-       .text(Number(item.line_total).toFixed(2), x + 2, curY + (isA5 ? 3 : 4.5), { width: colDef[6].width - 4, align: 'right' });
+    // 7. TOTAL (Rs.)
+    doc.font('Helvetica-Bold').fillColor(COLOR_TEXT);
+    doc.text(Number(item.line_total || 0).toFixed(2), x + 2, curY + (isA5 ? 3 : 4.5), { width: colDef[6].width - 4, align: 'right' });
 
     curY += rowHeight;
     rowIdx++;
@@ -372,7 +385,6 @@ function generateQuotationPdf(quotation, settings = {}, res = null) {
   const endTableY = Math.max(curY, tableBottomY);
   drawVerticalGridLines(currentPageTableStartY, endTableY);
 
-  // Bottom table closing line and outer frame
   doc.moveTo(margin, endTableY).lineTo(margin + contentWidth, endTableY).strokeColor(COLOR_BORDER).lineWidth(0.5).stroke();
   doc.rect(margin, currentPageTableStartY - tableHeaderHeight, contentWidth, endTableY - (currentPageTableStartY - tableHeaderHeight))
      .strokeColor(COLOR_BORDER).lineWidth(0.75).stroke();
@@ -381,30 +393,38 @@ function generateQuotationPdf(quotation, settings = {}, res = null) {
   // 1. Horizontal Tax Breakdown Table (Full Width)
   // ==========================================
   curY = targetTaxY;
-  const taxHeaderH = isA5 ? 13 : 16;
-  const taxRowH = isA5 ? 15 : 18;
-  const wordsRowH = isA5 ? 13 : 16;
+  const taxHeaderH = isA5 ? 12 : 15;
+  const taxRowH = isA5 ? 14 : 17;
+  const wordsRowH = isA5 ? 12 : 15;
 
-  // 8 Columns across contentWidth:
-  // Taxable Value | CGST Rate | CGST Amt | SGST Rate | SGST Amt | Total Tax | Round Off | Net Grand Total
   const taxCols = [
-    { label: 'Taxable Value', w: isA5 ? 56 : 78, align: 'right' },
+    { label: 'TAXABLE VALUE', w: isA5 ? 56 : 78, align: 'right' },
     { label: 'CGST %', w: isA5 ? 30 : 42, align: 'center' },
-    { label: 'CGST Amt', w: isA5 ? 42 : 58, align: 'right' },
+    { label: 'CGST AMT', w: isA5 ? 42 : 58, align: 'right' },
     { label: 'SGST %', w: isA5 ? 30 : 42, align: 'center' },
-    { label: 'SGST Amt', w: isA5 ? 42 : 58, align: 'right' },
-    { label: 'Total Tax', w: isA5 ? 48 : 66, align: 'right' },
-    { label: 'Round Off', w: isA5 ? 36 : 50, align: 'right' },
-    { label: 'Net Grand Total', w: isA5 ? (contentWidth - 284) : (contentWidth - 394), align: 'right' }
+    { label: 'SGST AMT', w: isA5 ? 42 : 58, align: 'right' },
+    { label: 'TOTAL TAX', w: isA5 ? 48 : 66, align: 'right' },
+    { label: 'ROUND OFF', w: isA5 ? 36 : 50, align: 'right' },
+    { label: 'NET GRAND TOTAL', w: isA5 ? (contentWidth - 284) : (contentWidth - 394), align: 'right' }
   ];
 
   // Draw Horizontal Tax Table Header
   doc.roundedRect(margin, curY, contentWidth, taxHeaderH, R_SM).fill(COLOR_TEAL);
-  doc.fillColor('#FFFFFF').font('Helvetica-Bold').fontSize(isA5 ? 5.5 : 7.2);
+
+  // Accent highlight Net Grand Total Header Cell in Lime Green (Matching Image 1)
+  const lastColW = taxCols[7].w;
+  const lastColX = margin + contentWidth - lastColW;
+  doc.roundedRect(lastColX, curY, lastColW, taxHeaderH, R_SM).fill(COLOR_LIME);
+
   let txX = margin;
   for (let i = 0; i < taxCols.length; i++) {
     const col = taxCols[i];
-    doc.text(col.label, txX + 2, curY + (isA5 ? 3.5 : 4.5), { width: col.w - 4, align: col.align });
+    if (i === 7) {
+      doc.fillColor(COLOR_TEAL_DARK).font('Helvetica-Bold').fontSize(isA5 ? 5.5 : 7.2);
+    } else {
+      doc.fillColor('#FFFFFF').font('Helvetica-Bold').fontSize(isA5 ? 5.2 : 6.8);
+    }
+    doc.text(col.label, txX + 2, curY + (isA5 ? 3 : 4), { width: col.w - 4, align: col.align });
     txX += col.w;
     if (i < taxCols.length - 1) {
       doc.moveTo(txX, curY + 2).lineTo(txX, curY + taxHeaderH - 2).strokeColor('#003B40').lineWidth(0.75).stroke();
@@ -421,7 +441,6 @@ function generateQuotationPdf(quotation, settings = {}, res = null) {
   let grandTotalVal = Number(quotation.grand_total) || 0;
 
   if (!isTaxExclusive) {
-    // Tax inclusive reverse calculation
     const netBefore = quotation.subtotal - (quotation.discount_amount || 0);
     taxableVal = gstRateVal > 0 ? Math.round((netBefore / (1 + (gstRateVal / 100))) * 100) / 100 : netBefore;
     totalTaxVal = Math.round((netBefore - taxableVal) * 100) / 100;
@@ -432,10 +451,6 @@ function generateQuotationPdf(quotation, settings = {}, res = null) {
 
   // Draw Horizontal Tax Data Row
   doc.rect(margin, curY, contentWidth, taxRowH).fillAndStroke('#FFFFFF', COLOR_BORDER);
-
-  // Grand Total cell accent highlight
-  const lastColW = taxCols[7].w;
-  const lastColX = margin + contentWidth - lastColW;
   doc.rect(lastColX, curY, lastColW, taxRowH).fill(COLOR_LIME);
 
   txX = margin;
@@ -457,7 +472,7 @@ function generateQuotationPdf(quotation, settings = {}, res = null) {
     } else {
       doc.fillColor(COLOR_TEXT).font(i === 0 || i === 5 ? 'Helvetica-Bold' : 'Helvetica').fontSize(isA5 ? 5.8 : 7.2);
     }
-    doc.text(taxValues[i], txX + 2, curY + (isA5 ? 3.5 : 4.5), { width: col.w - 4, align: col.align });
+    doc.text(taxValues[i], txX + 2, curY + (isA5 ? 3 : 4), { width: col.w - 4, align: col.align });
     txX += col.w;
     if (i < taxCols.length - 1) {
       doc.moveTo(txX, curY).lineTo(txX, curY + taxRowH).strokeColor(COLOR_BORDER).lineWidth(0.5).stroke();
@@ -465,13 +480,23 @@ function generateQuotationPdf(quotation, settings = {}, res = null) {
   }
   curY += taxRowH;
 
-  // Full-width Amount in Words strip with left accent border callout
+  // Amount in Words strip with GST Applicable badge (Matching Image 1)
   doc.rect(margin, curY, contentWidth, wordsRowH).fillAndStroke('#F8FAFC', COLOR_BORDER);
   doc.rect(margin, curY, isA5 ? 3.5 : 4.5, wordsRowH).fill(COLOR_TEAL);
+
   doc.fillColor(COLOR_TEAL).font('Helvetica-Bold').fontSize(isA5 ? 5.2 : 6.8)
-     .text('Amount in Words:', margin + 8, curY + (isA5 ? 3.5 : 4.5), { continued: true })
+     .text('Amount in Words:', margin + 8, curY + (isA5 ? 3 : 4), { continued: true })
      .fillColor(COLOR_TEXT).font('Helvetica-Oblique')
-     .text(`  ${numberToIndianWords(grandTotalVal)}`, { width: contentWidth - 16 });
+     .text(`  ${numberToIndianWords(grandTotalVal)}`, { width: contentWidth - (isA5 ? 80 : 100) });
+
+  // GST Applicable Pill Badge on Right (Matching Image 1)
+  const gstPillW = isA5 ? 60 : 76;
+  const gstPillH = isA5 ? 9 : 11;
+  const gstPillX = margin + contentWidth - gstPillW - 4;
+  const gstPillY = curY + (wordsRowH - gstPillH) / 2;
+  doc.roundedRect(gstPillX, gstPillY, gstPillW, gstPillH, 3).fillAndStroke('#ECFDF5', '#10B981');
+  doc.fillColor('#065F46').font('Helvetica-Bold').fontSize(isA5 ? 4.8 : 6.2)
+     .text('GST Applicable', gstPillX, gstPillY + (isA5 ? 1.5 : 2), { width: gstPillW, align: 'center' });
 
   // ==========================================
   // 2. Bank Details Last Horizontal Columns (Full Width)
@@ -480,15 +505,9 @@ function generateQuotationPdf(quotation, settings = {}, res = null) {
   doc.roundedRect(margin, curY, contentWidth, bankCardHeight, R_CARD)
      .fillAndStroke('#F8FAFC', COLOR_BORDER);
 
-  // 4 Horizontal Columns:
-  // Col 1: Bank & Settlement Details
-  // Col 2: Terms & Conditions
-  // Col 3: UPI QR Code
-  // Col 4: Authorised Signatory
-
-  const bCol1W = isA5 ? 112 : 156;
-  const bCol2W = isA5 ? 120 : 166;
-  const bCol3W = isA5 ? 56 : 76;
+  const bCol1W = isA5 ? 108 : 150;
+  const bCol2W = isA5 ? 124 : 172;
+  const bCol3W = isA5 ? 54 : 74;
   const bCol4W = contentWidth - bCol1W - bCol2W - bCol3W;
 
   // Col 1: Bank & Settlement (Executive 5-Line Structure)
@@ -504,53 +523,47 @@ function generateQuotationPdf(quotation, settings = {}, res = null) {
   const ifscRaw = (settings.bank_ifsc || 'IDIB000P034').trim();
   const ifscLine = ifscRaw.startsWith('IFSC') ? ifscRaw : `IFSC - ${ifscRaw}`;
 
-  // Line 1: Account Name (Udhayam Agencies)
-  doc.fillColor(COLOR_TEXT).font('Helvetica-Bold').fontSize(isA5 ? 6.2 : 8.2)
-     .text(accName, cx + 6, curY + (isA5 ? 13 : 16), { width: bCol1W - 10 });
-
-  // Line 2: Account Number (6659330152)
-  doc.font('Helvetica-Bold').fontSize(isA5 ? 6.2 : 8.2)
-     .text(accNo, cx + 6, curY + (isA5 ? 22 : 27), { width: bCol1W - 10 });
-
-  // Line 3: Bank Name (Indian Bank)
-  doc.font('Helvetica').fontSize(isA5 ? 5.5 : 7.2)
-     .text(bName, cx + 6, curY + (isA5 ? 31 : 38), { width: bCol1W - 10 });
-
-  // Line 4: Branch Name (Perundurai Branch)
-  doc.text(bBranch, cx + 6, curY + (isA5 ? 39 : 48), { width: bCol1W - 10 });
-
-  // Line 5: IFSC (IFSC - IDIB000P034)
-  doc.font('Helvetica-Bold').fillColor(COLOR_TEAL).fontSize(isA5 ? 5.8 : 7.5)
-     .text(ifscLine, cx + 6, curY + (isA5 ? 48 : 59), { width: bCol1W - 10 });
+  doc.fillColor(COLOR_TEXT).font('Helvetica-Bold').fontSize(isA5 ? 6 : 8)
+     .text(accName, cx + 6, curY + (isA5 ? 12 : 15), { width: bCol1W - 10 });
+  doc.font('Helvetica-Bold').fontSize(isA5 ? 6 : 8)
+     .text(accNo, cx + 6, curY + (isA5 ? 20 : 25), { width: bCol1W - 10 });
+  doc.font('Helvetica').fontSize(isA5 ? 5.2 : 7)
+     .text(bName, cx + 6, curY + (isA5 ? 28 : 35), { width: bCol1W - 10 });
+  doc.text(bBranch, cx + 6, curY + (isA5 ? 36 : 44), { width: bCol1W - 10 });
+  doc.font('Helvetica-Bold').fillColor(COLOR_TEAL).fontSize(isA5 ? 5.5 : 7.2)
+     .text(ifscLine, cx + 6, curY + (isA5 ? 44 : 54), { width: bCol1W - 10 });
 
   // Vertical Divider 1
   cx += bCol1W;
   doc.moveTo(cx, curY + 4).lineTo(cx, curY + bankCardHeight - 4).strokeColor(COLOR_BORDER).lineWidth(0.5).stroke();
 
-  // Col 2: Terms & Conditions
+  // Col 2: Terms & Conditions (Strictly the official 4 conditions requested by user!)
   doc.fillColor(COLOR_TEAL).font('Helvetica-Bold').fontSize(isA5 ? 5.5 : 7.2)
-     .text('TERMS & CONDITIONS:', cx + 6, curY + 5);
+     .text('TERMS & CONDITIONS:', cx + 6, curY + (isA5 ? 4 : 5));
+
+  const officialTerms = '1. Quotation is valid for 7 days from the date of issue.\n2. Goods once sold/dispatched will not be taken back.\n3. Delivery subject to physical stock availability.\n4. GST and Transport charges applicable as mentioned.';
+
   doc.fillColor(COLOR_MUTED).font('Helvetica').fontSize(isA5 ? 4.5 : 5.8)
      .text(
-       quotation.notes || settings.default_terms || '1. Quotation valid for 7 days.\n2. Goods once sold will not be taken back.\n3. Delivery subject to physical stock.\n4. GST and Transport as applicable.',
-       cx + 6, curY + (isA5 ? 14 : 17),
-       { width: bCol2W - 12, height: bankCardHeight - 20, lineGap: 1 }
+       officialTerms,
+       cx + 6, curY + (isA5 ? 13 : 16),
+       { width: bCol2W - 12, height: bankCardHeight - 18, lineGap: 1 }
      );
 
   // Vertical Divider 2
   cx += bCol2W;
   doc.moveTo(cx, curY + 4).lineTo(cx, curY + bankCardHeight - 4).strokeColor(COLOR_BORDER).lineWidth(0.5).stroke();
 
-  // Col 3: UPI QR Code Card
-  const qrSize = isA5 ? 34 : 46;
+  // Col 3: UPI QR Code Card (Paytm UPI QR)
+  const qrSize = isA5 ? 32 : 44;
   const qrSource = getQrSource(settings);
   if (qrSource) {
     try {
       const qrImgX = cx + (bCol3W - qrSize) / 2;
       const qrImgY = curY + (isA5 ? 4 : 5);
       doc.image(qrSource, qrImgX, qrImgY, { fit: [qrSize, qrSize] });
-      doc.fillColor(COLOR_TEAL_DARK).font('Helvetica-Bold').fontSize(isA5 ? 4.2 : 5.2)
-         .text('SCAN TO PAY UPI', cx, qrImgY + qrSize + (isA5 ? 2.5 : 3.5), { width: bCol3W, align: 'center' });
+      doc.fillColor(COLOR_TEAL_DARK).font('Helvetica-Bold').fontSize(isA5 ? 4 : 5)
+         .text('SCAN TO PAY UPI', cx, qrImgY + qrSize + (isA5 ? 2 : 3), { width: bCol3W, align: 'center' });
     } catch (e) {
       console.warn('QR render error:', e.message);
     }
@@ -560,36 +573,54 @@ function generateQuotationPdf(quotation, settings = {}, res = null) {
   cx += bCol3W;
   doc.moveTo(cx, curY + 4).lineTo(cx, curY + bankCardHeight - 4).strokeColor(COLOR_BORDER).lineWidth(0.5).stroke();
 
-  // Col 4: Authorised Signatory
-  doc.fillColor(COLOR_TEXT).font('Helvetica-Bold').fontSize(isA5 ? 5.2 : 6.8)
-     .text('Customer Acceptance', cx + 6, curY + 5)
-     .text(`For ${settings.company_name || 'UDHAYAM AGENCIES'}`, cx + 6, curY + (isA5 ? 24 : 30), { width: bCol4W - 10, align: 'right' });
-
-  // Dotted signature lines
-  doc.moveTo(cx + 6, curY + (isA5 ? 17 : 21)).lineTo(cx + (isA5 ? 50 : 70), curY + (isA5 ? 17 : 21)).dash(2, { space: 2 }).strokeColor(COLOR_BORDER).lineWidth(0.5).stroke();
-  doc.moveTo(cx + bCol4W - (isA5 ? 65 : 85), curY + bankCardHeight - (isA5 ? 10 : 13)).lineTo(cx + bCol4W - 6, curY + bankCardHeight - (isA5 ? 10 : 13)).dash(2, { space: 2 }).strokeColor(COLOR_BORDER).lineWidth(0.5).stroke();
+  // Col 4: Customer Acceptance & For UDHAYAM AGENCIES inside card (Matching Image 1)
+  doc.fillColor(COLOR_MUTED).font('Helvetica-Bold').fontSize(isA5 ? 4.8 : 6.2)
+     .text('CUSTOMER ACCEPTANCE', cx + 6, curY + 5);
+  doc.moveTo(cx + 6, curY + (isA5 ? 15 : 19)).lineTo(cx + (isA5 ? 48 : 68), curY + (isA5 ? 15 : 19)).dash(2, { space: 2 }).strokeColor(COLOR_BORDER).lineWidth(0.5).stroke();
   doc.undash();
+  doc.fillColor(COLOR_MUTED).font('Helvetica').fontSize(isA5 ? 4 : 5.2)
+     .text('Signature / Seal', cx + 6, curY + (isA5 ? 17 : 21));
 
-  doc.fillColor(COLOR_MUTED).font('Helvetica').fontSize(isA5 ? 4.2 : 5.5)
-     .text('Signature / Seal', cx + 6, curY + (isA5 ? 19 : 23))
-     .text('Authorised Signatory', cx + 6, curY + bankCardHeight - (isA5 ? 8 : 11), { width: bCol4W - 10, align: 'right' });
+  doc.fillColor(COLOR_TEAL).font('Helvetica-Bold').fontSize(isA5 ? 5.2 : 6.8)
+     .text(`For ${settings.company_name || 'UDHAYAM AGENCIES'}`, cx + 6, curY + (isA5 ? 28 : 36), { width: bCol4W - 10, align: 'right' });
+  doc.moveTo(cx + bCol4W - (isA5 ? 58 : 78), curY + bankCardHeight - (isA5 ? 11 : 14)).lineTo(cx + bCol4W - 6, curY + bankCardHeight - (isA5 ? 11 : 14)).dash(2, { space: 2 }).strokeColor(COLOR_BORDER).lineWidth(0.5).stroke();
+  doc.undash();
+  doc.fillColor(COLOR_MUTED).font('Helvetica').fontSize(isA5 ? 4 : 5.2)
+     .text('Authorised Signatory', cx + 6, curY + bankCardHeight - (isA5 ? 9 : 12), { width: bCol4W - 10, align: 'right' });
 
-  // Footer Page Numbering across all pages (zero bottom margin prevents auto-addPage!)
-  const range = doc.bufferedPageRange();
-  for (let i = range.start; i < range.start + range.count; i++) {
-    doc.switchToPage(i);
-    doc.page.margins.bottom = 0; // CRITICAL: Prevents PDFKit from creating extra page!
-    doc.fillColor(COLOR_MUTED)
-       .font('Helvetica')
-       .fontSize(6)
-       .text(
-         `Page ${i + 1} of ${range.count} | Quotation: ${quotation.quotation_number} | Computer-generated quotation`,
-         margin,
-         pageHeight - 12,
-         { width: contentWidth, align: 'center', lineBreak: false }
-       );
-  }
+  // ==========================================
+  // 3. Final Signature & Verification Bar (Underneath Card, Matching Image 1)
+  // ==========================================
+  const footY = targetFooterY;
+  doc.moveTo(margin, footY).lineTo(margin + contentWidth, footY).strokeColor(COLOR_BORDER).lineWidth(0.5).stroke();
 
+  // Left: Customer Acceptance
+  doc.fillColor(COLOR_TEXT).font('Helvetica-Bold').fontSize(isA5 ? 5.2 : 6.8)
+     .text('Customer Acceptance', margin, footY + 3);
+  doc.moveTo(margin, footY + (isA5 ? 12 : 15)).lineTo(margin + (isA5 ? 70 : 95), footY + (isA5 ? 12 : 15)).dash(2, { space: 2 }).strokeColor(COLOR_BORDER).lineWidth(0.5).stroke();
+  doc.undash();
+  doc.fillColor(COLOR_MUTED).font('Helvetica').fontSize(isA5 ? 4 : 5.2)
+     .text('Signature / Seal & Date', margin, footY + (isA5 ? 13 : 17));
+
+  // Center: Computer generated quotation disclaimer
+  const centerW = isA5 ? 140 : 190;
+  const centerX = margin + (contentWidth - centerW) / 2;
+  doc.fillColor(COLOR_MUTED).font('Helvetica').fontSize(isA5 ? 4.2 : 5.2)
+     .text('Computer-generated quotation valid without physical signature.', centerX, footY + 4, { width: centerW, align: 'center' })
+     .font('Helvetica-Bold')
+     .text(`UDHAYAM AGENCIES • GSTIN: ${settings.company_gstin || '33AADFU6496M1ZJ'}`, centerX, footY + (isA5 ? 10 : 12), { width: centerW, align: 'center' });
+
+  // Right: Authorised Signatory
+  const rightFootW = isA5 ? 75 : 100;
+  const rightFootX = margin + contentWidth - rightFootW;
+  doc.fillColor(COLOR_TEXT).font('Helvetica-Bold').fontSize(isA5 ? 5.2 : 6.8)
+     .text(`For ${settings.company_name || 'UDHAYAM AGENCIES'}`, rightFootX, footY + 3, { width: rightFootW, align: 'right' });
+  doc.moveTo(rightFootX, footY + (isA5 ? 12 : 15)).lineTo(margin + contentWidth, footY + (isA5 ? 12 : 15)).dash(2, { space: 2 }).strokeColor(COLOR_BORDER).lineWidth(0.5).stroke();
+  doc.undash();
+  doc.fillColor(COLOR_MUTED).font('Helvetica').fontSize(isA5 ? 4 : 5.2)
+     .text('Authorised Signatory', rightFootX, footY + (isA5 ? 13 : 17), { width: rightFootW, align: 'right' });
+
+  // End Document (Guaranteed single page fit!)
   doc.end();
   return bufferPromise;
 }

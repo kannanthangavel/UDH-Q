@@ -417,8 +417,10 @@ export default function QuotationPdfModal({ quotation, onClose, onEdit, onDelete
                   <span className="text-[9px] font-black text-[#00545C] uppercase tracking-wider block mb-1">
                     TERMS & CONDITIONS:
                   </span>
-                  <p className="line-clamp-3 leading-relaxed">
-                    {quotation.notes || settings?.default_terms || '1. Quotation valid for 7 days.\n2. Goods once sold will not be taken back.\n3. Delivery subject to physical stock.'}
+                  <p className="line-clamp-4 leading-relaxed whitespace-pre-line text-[9px] text-slate-600">
+                    {(quotation.notes && !/auto-generated|test_msg/i.test(quotation.notes))
+                      ? quotation.notes
+                      : (settings?.default_terms || '1. Quotation is valid for 7 days from the date of issue.\n2. Goods once sold/dispatched will not be taken back.\n3. Delivery subject to physical stock availability.\n4. GST and Transport charges applicable as mentioned.')}
                   </p>
                 </div>
 

@@ -91,6 +91,23 @@ export default function Settings() {
     e.preventDefault();
     try {
       setIsSaving(true);
+      if (qrFile) {
+        const qrData = new FormData();
+        qrData.append('qr_code', qrFile);
+        qrData.append('qr', qrFile);
+        const resQr = await api.uploadQrCode(qrData);
+        setPaymentQrCode(resQr.filename);
+        setQrFile(null);
+        setQrPreviewUrl('');
+      }
+      if (logoFile) {
+        const logoData = new FormData();
+        logoData.append('logo', logoFile);
+        const resLogo = await api.uploadLogo(logoData);
+        setCompanyLogo(resLogo.filename);
+        setLogoFile(null);
+        setLogoPreviewUrl('');
+      }
       await api.updateSettings(formData);
       updateLocalSettings(formData);
       await refreshSettings();
@@ -132,14 +149,31 @@ export default function Settings() {
     }
   }
 
-  // QR Code file selection and upload
-  function handleQrFileChange(e) {
+  // QR Code file selection and auto-upload
+  async function handleQrFileChange(e) {
     const file = e.target.files[0];
     if (file) {
       setQrFile(file);
       const reader = new FileReader();
       reader.onload = () => setQrPreviewUrl(reader.result);
       reader.readAsDataURL(file);
+
+      // Auto-upload immediately so user never encounters an upload glitch
+      try {
+        setIsUploadingQr(true);
+        const data = new FormData();
+        data.append('qr_code', file);
+        data.append('qr', file);
+        const res = await api.uploadQrCode(data);
+        setPaymentQrCode(res.filename);
+        setQrFile(null);
+        await refreshSettings();
+        showToast('✓ UPI payment QR code uploaded & saved successfully');
+      } catch (err) {
+        console.warn('Auto-upload QR failed:', err);
+      } finally {
+        setIsUploadingQr(false);
+      }
     }
   }
 
