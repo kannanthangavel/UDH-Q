@@ -6,6 +6,7 @@ import {
 import { useAuth } from '../context/AuthContext';
 import { getApiUrl, getUploadUrl } from '../api/client';
 import { numberToIndianWords } from '../utils/numberToWords';
+import { formatToDMY } from '../utils/dateHelper';
 
 export default function QuotationPdfModal({ quotation, onClose, onEdit, onDelete, onGoToQuotes, onNewQuotation, onShareWhatsApp }) {
   if (!quotation) return null;
@@ -261,11 +262,15 @@ export default function QuotationPdfModal({ quotation, onClose, onEdit, onDelete
                   </p>
                   <p className={`${isA5 ? 'text-[10px]' : 'text-[11px]'} text-slate-700 mt-0.5`}>
                     <span className="text-slate-500">Date:</span>{' '}
-                    <span className="font-bold text-slate-900 tabular-nums">{quotation.quotation_date}</span>
+                    <span className="font-bold text-slate-900 tabular-nums">
+                      {formatToDMY(quotation.quotation_date) || formatToDMY(new Date())}
+                    </span>
                   </p>
                   <p className={`${isA5 ? 'text-[10px]' : 'text-[11px]'} text-slate-700 mt-0.5`}>
                     <span className="text-slate-500">Valid Till:</span>{' '}
-                    <span className="font-bold text-slate-900 tabular-nums">{quotation.validity_date || '7 days'}</span>
+                    <span className="font-bold text-slate-900 tabular-nums">
+                      {formatToDMY(quotation.validity_date, quotation.quotation_date, 7)}
+                    </span>
                   </p>
                   <div className="mt-1">
                     <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-extrabold uppercase ${

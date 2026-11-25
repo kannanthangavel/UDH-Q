@@ -9,6 +9,7 @@ import QuotationPdfModal from '../components/QuotationPdfModal';
 import WhatsAppShareModal from '../components/WhatsAppShareModal';
 import EmailShareModal from '../components/EmailShareModal';
 import ThemedConfirmDialog from '../components/ThemedConfirmDialog';
+import { formatToDMY } from '../utils/dateHelper';
 
 export default function Quotations({ setActivePage, onEditQuotation }) {
   const [quotations, setQuotations] = useState([]);
@@ -305,8 +306,8 @@ export default function Quotations({ setActivePage, onEditQuotation }) {
 
                     {/* Date */}
                     <td className="py-3.5 px-4 text-slate-600">
-                      <div>Issued: <span className="font-medium text-slate-800">{quote.quotation_date}</span></div>
-                      <div className="text-[11px] text-slate-400">Valid: {quote.validity_date}</div>
+                      <div>Issued: <span className="font-medium text-slate-800">{formatToDMY(quote.quotation_date)}</span></div>
+                      <div className="text-[11px] text-slate-400">Valid: {formatToDMY(quote.validity_date, quote.quotation_date, 7)}</div>
                     </td>
 
                     {/* Grand Total */}

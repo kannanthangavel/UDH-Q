@@ -3,6 +3,7 @@ const path = require('path');
 const fs = require('fs');
 const { numberToIndianWords, formatINR } = require('../utils/numberToWords');
 const { resolveUploadedFile } = require('../utils/storagePaths');
+const { formatToDMY } = require('../utils/dateHelper');
 
 // Brand Colors & Corporate Executive Palette
 const COLOR_TEAL = '#004D40';          // Deep corporate spruce
@@ -201,6 +202,8 @@ function generateQuotationPdf(quotation, settings = {}, res = null) {
 
   // Strictly use exact quote number without appending reference numbers or extra suffix
   const quoteNoDisplay = quotation.quotation_number || 'UDQ-2026-0001';
+  const quoteDateDisplay = formatToDMY(quotation.quotation_date) || formatToDMY(new Date());
+  const validDateDisplay = formatToDMY(quotation.validity_date, quotation.quotation_date, 7);
 
   doc.font('Helvetica')
      .fontSize(isA5 ? 5.8 : 7.5)
@@ -208,9 +211,9 @@ function generateQuotationPdf(quotation, settings = {}, res = null) {
      .text(`Quote No: `, rightX, curY + (isA5 ? 12 : 16), { continued: true })
      .font('Helvetica-Bold').text(quoteNoDisplay)
      .font('Helvetica').text(`Date: `, rightX, curY + (isA5 ? 20 : 25), { continued: true })
-     .font('Helvetica-Bold').text(quotation.quotation_date)
+     .font('Helvetica-Bold').text(quoteDateDisplay)
      .font('Helvetica').text(`Valid Till: `, rightX, curY + (isA5 ? 28 : 34), { continued: true })
-     .font('Helvetica-Bold').text(quotation.validity_date || '7 Days');
+     .font('Helvetica-Bold').text(validDateDisplay);
 
   // Terms badge: CASH vs CREDIT pill
   const pTerms = (quotation.payment_terms || 'Cash').trim();

@@ -2,6 +2,7 @@ const PDFDocument = require('pdfkit');
 const path = require('path');
 const fs = require('fs');
 const { resolveUploadedFile } = require('../utils/storagePaths');
+const { formatToDMY } = require('../utils/dateHelper');
 
 // Corporate Executive Color Palette
 const COLOR_PRIMARY = '#004D40';      // Deep Corporate Spruce Teal
@@ -161,7 +162,7 @@ function generateReceiptPdf(receipt, settings = {}, res = null) {
 
   doc.fillColor(COLOR_TEXT).font('Helvetica-Bold').fontSize(isA5 ? 6.5 : 8)
      .text(receipt.receipt_number || 'UDR-2026-000001', metaX + (isA5 ? 52 : 66), curY + (isA5 ? 34 : 42), { width: metaBlockW - (isA5 ? 52 : 66), align: 'right' })
-     .text(receipt.payment_date || new Date().toISOString().split('T')[0], metaX + (isA5 ? 52 : 66), curY + (isA5 ? 44 : 54), { width: metaBlockW - (isA5 ? 52 : 66), align: 'right' });
+     .text(formatToDMY(receipt.payment_date) || formatToDMY(new Date()), metaX + (isA5 ? 52 : 66), curY + (isA5 ? 44 : 54), { width: metaBlockW - (isA5 ? 52 : 66), align: 'right' });
 
   curY += Math.max(logoSize, isA5 ? 54 : 68) + (isA5 ? 10 : 14);
 

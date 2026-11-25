@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { api, getApiUrl, getAbsoluteApiUrl, getQuickDownloadUrl } from '../api/client';
 import { useAuth } from '../context/AuthContext';
+import { formatToDMY } from '../utils/dateHelper';
 
 function formatItemsList(items) {
   if (!items || items.length === 0) return '• No items listed';
@@ -105,19 +106,8 @@ export default function WhatsAppShareModal({ quotation, onClose, onShared }) {
     maximumFractionDigits: 2
   });
 
-  const quoteDateFormatted = formatDateDMY(quotation.quotation_date) || new Date().toLocaleDateString('en-GB');
-
-  let validTillFormatted = formatDateDMY(quotation.validity_date);
-  if (!validTillFormatted) {
-    try {
-      const baseDate = quotation.quotation_date ? new Date(quotation.quotation_date) : new Date();
-      const d = isNaN(baseDate.getTime()) ? new Date() : baseDate;
-      d.setDate(d.getDate() + 8);
-      validTillFormatted = `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
-    } catch (e) {
-      validTillFormatted = '26/11/2026';
-    }
-  }
+  const quoteDateFormatted = formatToDMY(quotation.quotation_date) || formatToDMY(new Date());
+  const validTillFormatted = formatToDMY(quotation.validity_date, quotation.quotation_date, 7);
 
   const pdfFormat = quotation.paper_format || 'A4';
   const cleanCustomerName = (quotation.customer_name || 'Customer').trim().replace(/[^A-Za-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
