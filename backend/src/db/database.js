@@ -289,18 +289,19 @@ function initDb() {
 }
 
 function seedInitialData() {
-  // 1. Seed Single User: Username 'Kids' / Password '22499'
-  const existingKids = db.prepare('SELECT id FROM users WHERE name = ? OR email = ?').get('Kids', 'kids@udhayam.com');
-  if (!existingKids) {
+  // 1. Seed Master User: Username 'Sash' / Password 'UDH@22499'
+  const existingSash = db.prepare('SELECT id FROM users WHERE LOWER(name) = ? OR LOWER(email) = ? OR LOWER(name) = ?').get('sash', 'sash@udhayam.com', 'kids');
+  if (!existingSash) {
     db.prepare('DELETE FROM users').run(); // Clean old users
     const insertUser = db.prepare(`
       INSERT INTO users (name, email, password_hash, role)
       VALUES (?, ?, ?, ?)
     `);
-    insertUser.run('Kids', 'kids@udhayam.com', hashPassword('22499'), 'admin');
+    insertUser.run('Sash', 'sash@udhayam.com', hashPassword('UDH@22499'), 'admin');
   } else {
-    // Ensure password is reset to 22499
-    db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(hashPassword('22499'), existingKids.id);
+    // Ensure credentials match Sash and password UDH@22499
+    db.prepare('UPDATE users SET name = ?, email = ?, password_hash = ? WHERE id = ?')
+      .run('Sash', 'sash@udhayam.com', hashPassword('UDH@22499'), existingSash.id);
   }
 
   // 2. Seed Settings
@@ -316,7 +317,7 @@ function seedInitialData() {
     ['company_logo', 'udhayam_logo.png'],
     ['payment_qr_code', 'default_upi_qr.png'],
     ['bank_name', 'Indian Bank'],
-    ['bank_branch', 'Perundurai'],
+    ['bank_branch', 'Perundurai Branch'],
     ['bank_account_name', 'Udhayam Agencies'],
     ['bank_account_no', '6659330152'],
     ['bank_ifsc', 'IDIB000P034'],

@@ -128,7 +128,7 @@ export default function Sidebar({ activePage, setActivePage, onOpenWhatsAppParse
         })}
       </nav>
 
-      {/* User Account Profile Footer Card (Single user Kids) */}
+      {/* User Account Profile Footer Card */}
       <div className="p-4 border-t border-[#003B40] bg-[#003B40]/40">
         <div 
           onClick={() => handleNav('settings')}
@@ -136,7 +136,7 @@ export default function Sidebar({ activePage, setActivePage, onOpenWhatsAppParse
         >
           <div className="relative">
             <div className="w-9 h-9 rounded-xl bg-[#7DBA00] text-[#003B40] font-black text-sm flex items-center justify-center shadow">
-              {user?.name ? user.name[0].toUpperCase() : 'K'}
+              {user?.name ? user.name[0].toUpperCase() : 'S'}
             </div>
             <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 border-2 border-[#00545C] absolute -bottom-0.5 -right-0.5"></span>
           </div>
@@ -144,14 +144,14 @@ export default function Sidebar({ activePage, setActivePage, onOpenWhatsAppParse
           <div className="flex-1 min-w-0">
             <div className="flex items-center justify-between">
               <p className="text-xs font-bold text-white truncate leading-tight">
-                {user?.name || 'Kids'}
+                {user?.name || 'Sash'}
               </p>
               <span className="text-[9px] font-bold text-emerald-300 uppercase bg-[#00545C] px-1.5 py-0.2 rounded">
                 Admin
               </span>
             </div>
             <p className="text-[10px] text-emerald-200/70 truncate mt-0.5">
-              {user?.email || 'paints@udhayam.com'}
+              {user?.email || 'sash@udhayam.com'}
             </p>
           </div>
         </div>

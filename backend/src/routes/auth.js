@@ -4,18 +4,18 @@ const { db, logAudit } = require('../db/database');
 const { verifyPassword, generateToken, hashPassword } = require('../utils/security');
 const { requireAdmin, requireAuth } = require('../middleware/auth');
 
-// POST /api/auth/login - Login with Username 'Kids' or email and Password '22499'
+// POST /api/auth/login - Secure login with Username 'Sash' and Password
 router.post('/login', (req, res) => {
   const { email, username, password } = req.body;
   const identifier = (username || email || '').trim();
 
   if (!identifier || !password) {
-    return res.status(400).json({ error: 'Username / Email and password are required' });
+    return res.status(400).json({ error: 'Username and password are required' });
   }
 
   const user = db.prepare('SELECT * FROM users WHERE LOWER(email) = LOWER(?) OR LOWER(name) = LOWER(?) LIMIT 1').get(identifier, identifier);
   if (!user || !verifyPassword(password, user.password_hash)) {
-    return res.status(401).json({ error: 'Invalid username/email or password. Use Username: Kids, Password: 22499' });
+    return res.status(401).json({ error: 'Invalid username or password' });
   }
 
   const token = generateToken();
@@ -131,7 +131,7 @@ router.post('/users', requireAdmin, (req, res) => {
 
 // PUT /api/auth/profile - Update current user profile / password
 router.put('/profile', (req, res) => {
-  const userId = req.user?.id || 4; // Default to Kids
+  const userId = req.user?.id || 4; // Default to Sash
   const { name, email, password } = req.body;
 
   if (!name || !email) {
@@ -168,6 +168,38 @@ router.put('/profile', (req, res) => {
     }
     res.status(500).json({ error: 'Failed to update profile: ' + err.message });
   }
+});
+
+// POST /api/auth/change-password - Change current user password
+router.post('/change-password', (req, res) => {
+  const { currentPassword, newPassword } = req.body;
+  if (!currentPassword || !newPassword) {
+    return res.status(400).json({ error: 'Current password and new password are required' });
+  }
+
+  const userId = req.user?.id || 4;
+  const user = db.prepare('SELECT * FROM users WHERE id = ?').get(userId);
+  if (!user) {
+    return res.status(404).json({ error: 'User account not found' });
+  }
+
+  if (!verifyPassword(currentPassword, user.password_hash)) {
+    return res.status(400).json({ error: 'Current password is incorrect' });
+  }
+
+  if (newPassword.length < 6) {
+    return res.status(400).json({ error: 'New password must be at least 6 characters long' });
+  }
+
+  db.prepare(`
+    UPDATE users
+    SET password_hash = ?, updated_at = datetime('now')
+    WHERE id = ?
+  `).run(hashPassword(newPassword), userId);
+
+  logAudit(userId, user.email, user.role, 'CHANGE_PASSWORD', 'USER', userId, `Changed password for user ${user.name}`);
+
+  res.json({ success: true, message: 'Password changed successfully' });
 });
 
 module.exports = router;

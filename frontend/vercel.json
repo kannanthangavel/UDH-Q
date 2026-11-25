@@ -10,6 +10,10 @@
       "destination": "https://ud-qm-backend.onrender.com/uploads/$1"
     },
     {
+      "source": "/download/(.*)",
+      "destination": "https://ud-qm-backend.onrender.com/download/$1"
+    },
+    {
       "source": "/(.*)",
       "destination": "/index.html"
     }

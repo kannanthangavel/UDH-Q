@@ -395,15 +395,16 @@ export default function QuotationPdfModal({ quotation, onClose, onEdit, onDelete
             {/* 2. BANK DETAILS & TERMS HORIZONTAL COLUMNS (FULL WIDTH) */}
             <div className="mt-3 bg-slate-50/90 border border-slate-200 rounded-xl p-3 shadow-2xs">
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 items-stretch">
-                {/* Col 1: Bank & Settlement */}
-                <div className="space-y-0.5 text-[11px] text-slate-700 border-r border-slate-200/80 pr-2">
-                  <span className="text-[9px] font-black text-[#00545C] uppercase tracking-wider block mb-1">
-                    BANK & PAYMENT DETAILS:
+                {/* Col 1: Bank & Settlement (Executive 5-Line Structure) */}
+                <div className="space-y-0.5 text-[11px] text-slate-800 border-r border-slate-200/80 pr-2">
+                  <span className="text-[9px] font-black text-[#004D40] uppercase tracking-wider block mb-1">
+                    BANK DETAILS:
                   </span>
-                  <p><span className="text-slate-500">Bank:</span> <strong>{settings?.bank_name || 'Indian Bank'}</strong> ({settings?.bank_branch || 'Perundurai'})</p>
-                  <p><span className="text-slate-500">A/c:</span> <strong>{settings?.bank_account_no || '6659330152'}</strong></p>
-                  <p><span className="text-slate-500">IFSC:</span> <strong>{settings?.bank_ifsc || 'IDIB000P034'}</strong></p>
-                  <p className="text-[#00545C] font-bold">GPay: {settings?.gpay_number || '+91 97156 22499'}</p>
+                  <p className="font-extrabold text-slate-900 leading-tight">{settings?.bank_account_name || 'Udhayam Agencies'}</p>
+                  <p className="font-mono font-bold text-slate-900 leading-tight">{settings?.bank_account_no || '6659330152'}</p>
+                  <p className="text-slate-700 leading-tight">{settings?.bank_name || 'Indian Bank'}</p>
+                  <p className="text-slate-700 leading-tight">{settings?.bank_branch ? (settings.bank_branch.toLowerCase().includes('branch') ? settings.bank_branch : `${settings.bank_branch} Branch`) : 'Perundurai Branch'}</p>
+                  <p className="font-bold text-[#004D40] leading-tight">IFSC - {settings?.bank_ifsc?.replace(/^IFSC\s*-\s*/i, '') || 'IDIB000P034'}</p>
                 </div>
 
                 {/* Col 2: Terms & Conditions */}

@@ -114,7 +114,7 @@ export default function Navbar({ activePage, setActivePage, onOpenWhatsAppParser
                 {user?.name ? user.name[0].toUpperCase() : 'K'}
               </div>
               <div className="text-left">
-                <p className="text-xs font-bold text-white leading-tight">{user?.name || 'Kids'}</p>
+                <p className="text-xs font-bold text-white leading-tight">{user?.name || 'Sash'}</p>
                 <span className="text-[10px] text-emerald-200 font-semibold uppercase tracking-wider">
                   Admin • UD-QM
                 </span>

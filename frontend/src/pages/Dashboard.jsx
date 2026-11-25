@@ -66,7 +66,7 @@ export default function Dashboard({ setActivePage, onStartQuoteWithImport }) {
           <div>
             <div className="inline-flex items-center space-x-2 px-3 py-1 rounded-full bg-white/10 backdrop-blur-sm border border-white/15 text-xs font-semibold text-emerald-200 mb-3">
               <span className="w-2 h-2 rounded-full bg-[#7DBA00] animate-pulse"></span>
-              <span>UDHAYAM AGENCIES • Paint Division (Kids)</span>
+              <span>UDHAYAM AGENCIES • Paint Division</span>
             </div>
             <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight">
               UD-QM Quotation Management

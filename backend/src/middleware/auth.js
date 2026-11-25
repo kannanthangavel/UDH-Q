@@ -65,9 +65,9 @@ function authMiddleware(req, res, next) {
     }
   }
 
-  // Default to master admin user Kids in single-user mode so operations don't get blocked
-  const masterAdmin = db.prepare('SELECT id, name, email, role, avatar_url FROM users WHERE role = ? LIMIT 1').get('admin');
-  req.user = masterAdmin || null;
+  // Default to master admin user Sash in single-user mode so operations don't get blocked
+  const masterAdmin = db.prepare("SELECT id, name, email, role, avatar_url FROM users WHERE role = 'admin' LIMIT 1").get();
+  req.user = masterAdmin || { id: 4, name: 'Sash', email: 'sash@udhayam.com', role: 'admin' };
   next();
 }
 

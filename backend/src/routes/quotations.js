@@ -41,9 +41,9 @@ router.post('/', (req, res) => {
     return res.status(400).json({ error: 'At least one product item is required to create a quotation' });
   }
 
-  const userId = req.user?.id || 1;
-  const userEmail = req.user?.email || 'kids@udhayam.com';
-  const userName = req.user?.name || 'Kids';
+  const userId = req.user?.id || 4;
+  const userEmail = req.user?.email || 'sash@udhayam.com';
+  const userName = req.user?.name || 'Sash';
   const userRole = req.user?.role || 'admin';
 
   let finalCustomerId = customer_id;
@@ -180,12 +180,12 @@ router.post('/', (req, res) => {
 
   const transaction = db.transaction(() => {
     if (quotation_number && quotation_number.trim()) {
-      let desired = quotation_number.trim();
-      const existing = db.prepare('SELECT id FROM quotations WHERE quotation_number = ?').get(desired);
+      quoteNumber = quotation_number.trim();
+      const existing = db.prepare('SELECT id FROM quotations WHERE quotation_number = ?').get(quoteNumber);
       if (existing) {
-        quoteNumber = `${desired}-${Date.now().toString().slice(-4)}`;
-      } else {
-        quoteNumber = desired;
+        // Strictly preserve exact quotation number by replacing previous version without adding any suffix numbers
+        db.prepare('DELETE FROM quotation_items WHERE quotation_id = ?').run(existing.id);
+        db.prepare('DELETE FROM quotations WHERE id = ?').run(existing.id);
       }
     } else {
       quoteNumber = getNextQuotationNumber();
@@ -399,9 +399,9 @@ router.put('/:id', (req, res) => {
     return res.status(400).json({ error: 'At least one product item is required to update a quotation' });
   }
 
-  const userId = req.user?.id || 1;
-  const userEmail = req.user?.email || 'kids@udhayam.com';
-  const userName = req.user?.name || 'Kids';
+  const userId = req.user?.id || 4;
+  const userEmail = req.user?.email || 'sash@udhayam.com';
+  const userName = req.user?.name || 'Sash';
   const userRole = req.user?.role || 'admin';
 
   let finalCustomerId = customer_id;

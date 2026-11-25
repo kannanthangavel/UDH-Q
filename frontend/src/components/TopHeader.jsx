@@ -1,9 +1,9 @@
 import React from 'react';
-import { Menu, MessageSquare, Sparkles, Building2, Phone } from 'lucide-react';
+import { Menu, MessageSquare, Sparkles, Building2, Phone, LogOut, User } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
 export default function TopHeader({ activePage, onToggleMobileSidebar, onOpenWhatsAppParser }) {
-  const { settings, user } = useAuth();
+  const { settings, user, logout } = useAuth();
 
   const pageTitles = {
     'dashboard': 'Dashboard Overview',
@@ -60,6 +60,22 @@ export default function TopHeader({ activePage, onToggleMobileSidebar, onOpenWha
           <div className="w-2 h-2 rounded-full bg-[#7DBA00] animate-pulse"></div>
           <span className="font-semibold text-slate-700">Official Rate Sheet Grounded</span>
         </div>
+
+        {user && (
+          <div className="flex items-center space-x-2 pl-2 sm:border-l sm:border-slate-200">
+            <span className="text-xs font-bold text-[#004D40] bg-emerald-50 px-2 py-0.5 rounded-lg border border-emerald-200 hidden sm:inline">
+              {user.name}
+            </span>
+            <button
+              type="button"
+              onClick={logout}
+              className="p-1.5 rounded-xl text-slate-500 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
+              title="Sign Out"
+            >
+              <LogOut className="w-4 h-4" />
+            </button>
+          </div>
+        )}
       </div>
 
     </header>

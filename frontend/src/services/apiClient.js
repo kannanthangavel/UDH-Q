@@ -90,7 +90,7 @@ export function getUploadUrl(url) {
 
 export function getStoredToken() {
   try {
-    return localStorage.getItem('udqm_token') || '';
+    return (typeof window !== 'undefined' && (sessionStorage.getItem('udqm_token') || localStorage.getItem('udqm_token'))) || '';
   } catch (e) {
     return '';
   }
@@ -155,6 +155,9 @@ export async function request(endpoint, options = {}) {
     const headers = {
       Accept: 'application/json',
       'Content-Type': 'application/json',
+      'Cache-Control': 'no-cache, no-store, must-revalidate',
+      'Pragma': 'no-cache',
+      'Expires': '0',
       ...options.headers
     };
 
@@ -180,6 +183,7 @@ export async function request(endpoint, options = {}) {
 
     try {
       response = await fetch(url, {
+        cache: 'no-store',
         ...options,
         headers,
         signal: options.signal || controller.signal

@@ -199,9 +199,8 @@ function generateQuotationPdf(quotation, settings = {}, res = null) {
      .fontSize(isA5 ? 6.5 : 8)
      .text('QUOTATION DETAILS:', rightX, curY + (isA5 ? 4 : 6));
 
-  const quoteNoDisplay = (quotation.reference_no && quotation.reference_no !== quotation.quotation_number)
-    ? `${quotation.quotation_number} (Ref: ${quotation.reference_no})`
-    : (quotation.quotation_number || 'UDQ-2026-0001');
+  // Strictly use exact quote number without appending reference numbers or extra suffix
+  const quoteNoDisplay = quotation.quotation_number || 'UDQ-2026-0001';
 
   doc.font('Helvetica')
      .fontSize(isA5 ? 5.8 : 7.5)
@@ -489,16 +488,37 @@ function generateQuotationPdf(quotation, settings = {}, res = null) {
   const bCol3W = isA5 ? 56 : 76;
   const bCol4W = contentWidth - bCol1W - bCol2W - bCol3W;
 
-  // Col 1: Bank & Settlement
+  // Col 1: Bank & Settlement (Executive 5-Line Structure)
   let cx = margin;
-  doc.fillColor(COLOR_TEAL).font('Helvetica-Bold').fontSize(isA5 ? 5.5 : 7.2)
-     .text('BANK & PAYMENT DETAILS:', cx + 6, curY + 5);
-  doc.fillColor(COLOR_TEXT).font('Helvetica').fontSize(isA5 ? 5 : 6.5)
-     .text(`Bank: ${settings.bank_name || 'Indian Bank'} (${settings.bank_branch || 'Perundurai'})`, cx + 6, curY + (isA5 ? 14 : 17), { width: bCol1W - 10 })
-     .text(`A/c: ${settings.bank_account_no || '6659330152'} (${settings.bank_account_name || 'Udhayam Agencies'})`, cx + 6, curY + (isA5 ? 23 : 28), { width: bCol1W - 10 })
-     .text(`IFSC: ${settings.bank_ifsc || 'IDIB000P034'}`, cx + 6, curY + (isA5 ? 32 : 39), { width: bCol1W - 10 })
-     .font('Helvetica-Bold').fillColor(COLOR_TEAL)
-     .text(`GPay: ${settings.gpay_number || '+91 97156 22499'}`, cx + 6, curY + (isA5 ? 41 : 50), { width: bCol1W - 10 });
+  doc.fillColor(COLOR_TEAL).font('Helvetica-Bold').fontSize(isA5 ? 6 : 7.8)
+     .text('BANK DETAILS:', cx + 6, curY + (isA5 ? 4 : 5));
+
+  const accName = settings.bank_account_name || 'Udhayam Agencies';
+  const accNo = settings.bank_account_no || '6659330152';
+  const bName = settings.bank_name || 'Indian Bank';
+  let bBranch = settings.bank_branch || 'Perundurai Branch';
+  if (!bBranch.toLowerCase().includes('branch')) bBranch = `${bBranch} Branch`;
+  const ifscRaw = (settings.bank_ifsc || 'IDIB000P034').trim();
+  const ifscLine = ifscRaw.startsWith('IFSC') ? ifscRaw : `IFSC - ${ifscRaw}`;
+
+  // Line 1: Account Name (Udhayam Agencies)
+  doc.fillColor(COLOR_TEXT).font('Helvetica-Bold').fontSize(isA5 ? 6.2 : 8.2)
+     .text(accName, cx + 6, curY + (isA5 ? 13 : 16), { width: bCol1W - 10 });
+
+  // Line 2: Account Number (6659330152)
+  doc.font('Helvetica-Bold').fontSize(isA5 ? 6.2 : 8.2)
+     .text(accNo, cx + 6, curY + (isA5 ? 22 : 27), { width: bCol1W - 10 });
+
+  // Line 3: Bank Name (Indian Bank)
+  doc.font('Helvetica').fontSize(isA5 ? 5.5 : 7.2)
+     .text(bName, cx + 6, curY + (isA5 ? 31 : 38), { width: bCol1W - 10 });
+
+  // Line 4: Branch Name (Perundurai Branch)
+  doc.text(bBranch, cx + 6, curY + (isA5 ? 39 : 48), { width: bCol1W - 10 });
+
+  // Line 5: IFSC (IFSC - IDIB000P034)
+  doc.font('Helvetica-Bold').fillColor(COLOR_TEAL).fontSize(isA5 ? 5.8 : 7.5)
+     .text(ifscLine, cx + 6, curY + (isA5 ? 48 : 59), { width: bCol1W - 10 });
 
   // Vertical Divider 1
   cx += bCol1W;

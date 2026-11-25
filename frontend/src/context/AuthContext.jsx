@@ -4,30 +4,18 @@ import { api } from '../api/client';
 const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
-  const [user, setUser] = useState({
-    id: 1,
-    name: 'Kids',
-    email: 'kids@udhayam.com',
-    role: 'admin'
-  });
+  const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [settings, setSettings] = useState(null);
 
   useEffect(() => {
-    loadUserAndSettings();
+    loadSettings();
   }, []);
 
-  async function loadUserAndSettings() {
+  async function loadSettings() {
     try {
       setLoading(true);
-      const [meRes, settingsRes] = await Promise.all([
-        api.getMe().catch(() => null),
-        api.getSettings().catch(() => null)
-      ]);
-
-      if (meRes?.user) {
-        setUser(meRes.user);
-      }
+      const settingsRes = await api.getSettings().catch(() => null);
       if (settingsRes?.settings) {
         setSettings(settingsRes.settings);
       }
@@ -41,7 +29,7 @@ export function AuthProvider({ children }) {
   async function login(username, password) {
     const res = await api.login(username, password);
     if (res.token) {
-      localStorage.setItem('udqm_token', res.token);
+      sessionStorage.setItem('udqm_token', res.token);
       setUser(res.user);
     }
     return res;
@@ -51,8 +39,14 @@ export function AuthProvider({ children }) {
     try {
       await api.logout();
     } catch (e) {}
+    sessionStorage.removeItem('udqm_token');
     localStorage.removeItem('udqm_token');
     setUser(null);
+  }
+
+  async function changePassword(currentPassword, newPassword) {
+    const res = await api.changePassword(currentPassword, newPassword);
+    return res;
   }
 
   function updateLocalSettings(newSettings) {
@@ -61,13 +55,14 @@ export function AuthProvider({ children }) {
 
   const value = {
     user,
-    role: 'admin',
-    isAdmin: true,
+    role: user?.role || 'admin',
+    isAdmin: (user?.role || 'admin') === 'admin',
     loading,
     settings,
     login,
     logout,
-    refreshSettings: loadUserAndSettings,
+    changePassword,
+    refreshSettings: loadSettings,
     updateLocalSettings
   };
 
