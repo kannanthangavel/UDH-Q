@@ -36,6 +36,32 @@ export default function CustomerDocumentViewer() {
   const directDownloadUrl = getApiUrl(downloadEndpoint);
   const pdfPreviewUrl = getApiUrl(previewEndpoint);
 
+  const [isDownloading, setIsDownloading] = useState(false);
+
+  async function handleDownloadPdf() {
+    if (isDownloading) return;
+    setIsDownloading(true);
+    const targetFilename = `${docType === 'receipt' ? 'Payment_Receipt' : 'Quotation'}_${identifier}.pdf`;
+    try {
+      const response = await fetch(directDownloadUrl);
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const blob = await response.blob();
+      const objectUrl = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = objectUrl;
+      link.download = targetFilename;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      setTimeout(() => window.URL.revokeObjectURL(objectUrl), 1500);
+    } catch (e) {
+      console.warn('Direct download fallback:', e);
+      window.open(directDownloadUrl, '_blank');
+    } finally {
+      setIsDownloading(false);
+    }
+  }
+
   return (
     <div className="min-h-screen bg-slate-100 flex flex-col font-sans text-slate-900 selection:bg-[#7DBA00] selection:text-[#004D40]">
       
@@ -70,14 +96,15 @@ export default function CustomerDocumentViewer() {
           </div>
 
           <div className="flex items-center space-x-2">
-            <a
-              href={directDownloadUrl}
-              download
-              className="inline-flex items-center space-x-1.5 px-4 py-2 rounded-xl bg-[#7DBA00] hover:bg-[#8ee000] text-[#003B40] font-black text-xs shadow-md transition-all transform active:scale-95"
+            <button
+              type="button"
+              onClick={handleDownloadPdf}
+              disabled={isDownloading}
+              className="inline-flex items-center space-x-1.5 px-4 py-2 rounded-xl bg-[#7DBA00] hover:bg-[#8ee000] text-[#003B40] font-black text-xs shadow-md transition-all transform active:scale-95 cursor-pointer disabled:opacity-50"
             >
               <Download className="w-4 h-4" />
-              <span>Download PDF</span>
-            </a>
+              <span>{isDownloading ? 'Downloading…' : 'Download PDF'}</span>
+            </button>
             <button
               type="button"
               onClick={() => window.print()}
@@ -134,9 +161,9 @@ export default function CustomerDocumentViewer() {
         <div className="w-full mt-4 text-center">
           <p className="text-xs text-slate-500">
             If preview does not open automatically on your mobile device, please tap{' '}
-            <a href={directDownloadUrl} download className="font-bold text-[#004D40] underline">
+            <button type="button" onClick={handleDownloadPdf} className="font-bold text-[#004D40] underline cursor-pointer">
               Download PDF
-            </a>{' '}
+            </button>{' '}
             to save the file directly.
           </p>
         </div>

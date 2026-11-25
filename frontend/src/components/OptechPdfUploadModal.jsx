@@ -221,14 +221,27 @@ export default function OptechPdfUploadModal({
 
       if (res && res.quotation) {
         if (action === 'download') {
-          // Trigger instant download of the converted PDF
+          // Trigger instant reliable download of the converted PDF
           const downloadUrl = api.getApiUrl(`/quotations/${res.quotation.id}/pdf?format=${paperFormat}&download=true`);
-          const link = document.createElement('a');
-          link.href = downloadUrl;
-          link.download = `${res.quotation.quotation_number}.pdf`;
-          document.body.appendChild(link);
-          link.click();
-          link.remove();
+          const safeCust = (res.quotation.customer_name || 'Customer').trim().replace(/[^A-Za-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+          const safeQuoteNo = (res.quotation.quotation_number || 'Quote').trim().replace(/[^A-Za-z0-9\-]+/g, '_');
+          const targetFilename = `${safeCust}_${safeQuoteNo}.pdf`;
+          try {
+            const blobRes = await fetch(downloadUrl);
+            if (!blobRes.ok) throw new Error(`HTTP ${blobRes.status}`);
+            const blob = await blobRes.blob();
+            const objectUrl = window.URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = objectUrl;
+            link.download = targetFilename;
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+            setTimeout(() => window.URL.revokeObjectURL(objectUrl), 1500);
+          } catch (e) {
+            console.warn('Direct blob download failed, falling back to window.open:', e);
+            window.open(downloadUrl, '_blank');
+          }
         }
 
         if (onQuotationCreated) {

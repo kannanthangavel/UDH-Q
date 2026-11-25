@@ -100,7 +100,7 @@ async function generateQuotationPdf(quotation, settings = {}, res = null) {
   // Pre-calculate heights
   const headerHeight = isA5 ? 52 : 72;
   const accentHeight = isA5 ? 2.5 : 3.5;
-  const infoBoxHeight = isA5 ? 46 : 58;
+  const infoBoxHeight = isA5 ? 52 : 66;
   const tableHeaderHeight = isA5 ? 15 : 19;
   const footerBarHeight = isA5 ? 16 : 20;
   const bankCardHeight = isA5 ? 56 : 70;
@@ -215,27 +215,32 @@ async function generateQuotationPdf(quotation, settings = {}, res = null) {
      .text(settings.company_address || '41/10, KMR Complex, Old Bus Stand Road, Perundurai, Erode - 638052', textLeft, margin + (isA5 ? 25 : 35), { width: contentWidth - (textLeft - margin) - (isA5 ? 75 : 110) })
      .text(`Phone: ${settings.company_phone || '+91 97156 22499'} | GSTIN: ${settings.company_gstin || '33AADFU6496M1ZJ'}`, textLeft, margin + (isA5 ? 35 : 47));
 
-  // Top-Right Header Elements (QUOTATION pill + Quote No + Date)
+  // Top-Right Header Elements (QUOTATION pill + Quote No + Date + Valid Till at page top)
   const badgeWidth = isA5 ? 64 : 86;
-  const badgeHeight = isA5 ? 16 : 20;
+  const badgeHeight = isA5 ? 15 : 18;
   const badgeX = pageWidth - margin - badgeWidth - (isA5 ? 5 : 8);
-  const badgeY = margin + (isA5 ? 5 : 7);
+  const badgeY = margin + (isA5 ? 4 : 6);
 
   doc.roundedRect(badgeX, badgeY, badgeWidth, badgeHeight, R_SM).fill(COLOR_LIME);
   doc.fillColor(COLOR_TEAL_DARK)
      .font('Helvetica-Bold')
-     .fontSize(isA5 ? 7.5 : 9.5)
-     .text('QUOTATION', badgeX, badgeY + (isA5 ? 4 : 5), { width: badgeWidth, align: 'center' });
+     .fontSize(isA5 ? 7 : 9)
+     .text('QUOTATION', badgeX, badgeY + (isA5 ? 3.5 : 4.5), { width: badgeWidth, align: 'center' });
 
-  const metaRightW = isA5 ? 95 : 130;
+  const metaRightW = isA5 ? 100 : 135;
   const metaRightX = pageWidth - margin - metaRightW - (isA5 ? 5 : 8);
+  const metaTopY = badgeY + badgeHeight + (isA5 ? 2.5 : 3.5);
+
   doc.fillColor('#FFFFFF')
      .font('Helvetica-Bold')
-     .fontSize(isA5 ? 7.5 : 10)
-     .text(quoteNoDisplay, metaRightX, badgeY + badgeHeight + (isA5 ? 3 : 5), { width: metaRightW, align: 'right' });
+     .fontSize(isA5 ? 7.5 : 9.5)
+     .text(quoteNoDisplay, metaRightX, metaTopY, { width: metaRightW, align: 'right' });
+
   doc.font('Helvetica')
-     .fontSize(isA5 ? 6 : 7.8)
-     .text(`Date: ${quoteDateDisplay}`, metaRightX, badgeY + badgeHeight + (isA5 ? 13 : 17), { width: metaRightW, align: 'right' });
+     .fontSize(isA5 ? 5.8 : 7.2)
+     .fillColor('#E2E8F0')
+     .text(`Date: ${quoteDateDisplay}`, metaRightX, metaTopY + (isA5 ? 10 : 13), { width: metaRightW, align: 'right' })
+     .text(`Valid Till: ${validDateDisplay}`, metaRightX, metaTopY + (isA5 ? 19 : 24), { width: metaRightW, align: 'right' });
 
   let curY = margin + headerHeight + (isA5 ? 4 : 6);
 
@@ -293,8 +298,8 @@ async function generateQuotationPdf(quotation, settings = {}, res = null) {
      .fontSize(isA5 ? 6.5 : 8)
      .text('QUOTATION META:', rightX, curY + (isA5 ? 4 : 6), { width: rightInnerW, align: 'right' });
 
-  const metaLineY = curY + (isA5 ? 14 : 17);
-  const stepY = isA5 ? 9 : 11.5;
+  const metaLineY = curY + (isA5 ? 11 : 14);
+  const stepY = isA5 ? 8.5 : 11;
 
   doc.font('Helvetica').fontSize(isA5 ? 5.8 : 7.5).fillColor(COLOR_MUTED)
      .text(`Quote No: `, rightX, metaLineY, { width: rightInnerW - 75, align: 'right' });
@@ -311,22 +316,22 @@ async function generateQuotationPdf(quotation, settings = {}, res = null) {
   doc.font('Helvetica-Bold').fillColor(COLOR_TEXT)
      .text(validDateDisplay, rightX + rightInnerW - 72, metaLineY + stepY * 2, { width: 72, align: 'right' });
 
-  // Payment Terms badge
+  // Payment Terms badge positioned safely below Valid Till
   const pTerms = (quotation.payment_terms || 'Cash').trim();
   const isCredit = /credit/i.test(pTerms);
   const pillBg = isCredit ? '#FEF3C7' : '#DCFCE7';
   const pillFg = isCredit ? '#92400E' : '#166534';
   const pillBorder = isCredit ? '#FCD34D' : '#86EFAC';
   const pillW = isA5 ? 64 : 80;
-  const pillH = isA5 ? 10 : 13;
-  const pillX = margin + contentWidth - pillW - 4;
-  const pillY = curY + infoBoxHeight - pillH - 4;
+  const pillH = isA5 ? 9.5 : 12;
+  const pillX = margin + contentWidth - pillW - 6;
+  const pillY = curY + infoBoxHeight - pillH - (isA5 ? 3 : 5);
 
   doc.roundedRect(pillX, pillY, pillW, pillH, 3).fillAndStroke(pillBg, pillBorder);
   doc.fillColor(pillFg)
      .font('Helvetica-Bold')
      .fontSize(isA5 ? 5 : 6.8)
-     .text(`TERMS: ${pTerms.toUpperCase()}`, pillX, pillY + (isA5 ? 2 : 2.5), { width: pillW, align: 'center' });
+     .text(`TERMS: ${pTerms.toUpperCase()}`, pillX, pillY + (isA5 ? 1.8 : 2.5), { width: pillW, align: 'center' });
 
   curY += infoBoxHeight + (isA5 ? 4 : 6);
 

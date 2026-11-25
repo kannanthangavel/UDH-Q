@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { 
   Printer, Download, X, FileText, CheckCircle2, ShieldCheck, 
-  Building2, Edit3, Trash2, ArrowRight, MessageSquare, Plus 
+  Building2, Edit3, Trash2, ArrowRight, MessageSquare, Plus, Loader2 
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { getApiUrl, getUploadUrl } from '../api/client';
@@ -16,6 +16,7 @@ export default function QuotationPdfModal({ quotation, onClose, onEdit, onDelete
   const { settings } = useAuth();
   const [paperFormat, setPaperFormat] = useState(quotation.paper_format || 'A4');
   const [dynamicQrUrl, setDynamicQrUrl] = useState('');
+  const [isDownloading, setIsDownloading] = useState(false);
 
   const logoUrl = getUploadUrl(
     settings?.company_logo
@@ -73,6 +74,35 @@ export default function QuotationPdfModal({ quotation, onClose, onEdit, onDelete
     return () => { isMounted = false; };
   }, [quotation, settings, grandTotal]);
 
+  async function handleDownloadPdf() {
+    if (isDownloading) return;
+    setIsDownloading(true);
+    const downloadEndpoint = `/quotations/${quotation.id}/pdf?download=true&format=${paperFormat}`;
+    const directUrl = getApiUrl(downloadEndpoint);
+    const safeCust = (quotation.customer_name || 'Customer').trim().replace(/[^A-Za-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+    const safeQuoteNo = (quotation.quotation_number || 'Quote').trim().replace(/[^A-Za-z0-9\-]+/g, '_');
+    const targetFilename = `${safeCust}_${safeQuoteNo}.pdf`;
+
+    try {
+      const response = await fetch(directUrl);
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const blob = await response.blob();
+      const objectUrl = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = objectUrl;
+      link.download = targetFilename;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      setTimeout(() => window.URL.revokeObjectURL(objectUrl), 1500);
+    } catch (err) {
+      console.warn('Direct blob download failed, falling back to window.open:', err);
+      window.open(directUrl, '_blank');
+    } finally {
+      setIsDownloading(false);
+    }
+  }
+
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto bg-black/60 backdrop-blur-sm flex items-center justify-center p-2 sm:p-4">
       <div className="bg-slate-100 rounded-2xl max-w-5xl w-full shadow-2xl border border-slate-300 overflow-hidden flex flex-col max-h-[96vh] animate-in fade-in zoom-in-95 font-sans">
@@ -116,14 +146,20 @@ export default function QuotationPdfModal({ quotation, onClose, onEdit, onDelete
             </div>
 
             {/* Download Button */}
-            <a
-              href={getApiUrl(`/quotations/${quotation.id}/pdf?download=true&format=${paperFormat}`)}
-              download={`${(quotation.customer_name || 'Customer').trim().replace(/[^A-Za-z0-9]+/g, '_').replace(/^_+|_+$/g, '')}_${(quotation.quotation_number || 'Quote').trim().replace(/[^A-Za-z0-9\-]+/g, '_')}.pdf`}
-              className="flex items-center space-x-1 px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white text-xs font-bold border border-white/20 transition-colors"
+            <button
+              type="button"
+              onClick={handleDownloadPdf}
+              disabled={isDownloading}
+              className="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-[#7DBA00] hover:bg-[#8ee000] text-[#003B40] text-xs font-black shadow transition-all active:scale-95 cursor-pointer disabled:opacity-50"
+              title="Download Official Quotation PDF"
             >
-              <Download className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">Download</span> PDF
-            </a>
+              {isDownloading ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              ) : (
+                <Download className="w-3.5 h-3.5 text-[#003B40]" />
+              )}
+              <span>{isDownloading ? 'Downloading…' : 'Download PDF'}</span>
+            </button>
 
             {/* Edit Button */}
             {onEdit && (
@@ -244,9 +280,10 @@ export default function QuotationPdfModal({ quotation, onClose, onEdit, onDelete
                   }`}>
                     QUOTATION
                   </div>
-                  <div className={`mt-1 text-emerald-100 ${isA5 ? 'text-[9.5px]' : 'text-[11px]'}`}>
+                  <div className={`mt-1 text-emerald-100 ${isA5 ? 'text-[9px]' : 'text-[10.5px]'} leading-tight`}>
                     <p className="font-bold text-white text-xs tracking-wider tabular-nums">{quotation.quotation_number}</p>
-                    <p className="tabular-nums">Date: {quotation.quotation_date}</p>
+                    <p className="tabular-nums">Date: {formatToDMY(quotation.quotation_date) || formatToDMY(new Date())}</p>
+                    <p className="tabular-nums text-slate-200">Valid Till: {formatToDMY(quotation.validity_date, quotation.quotation_date, 15)}</p>
                   </div>
                 </div>
               </div>
@@ -270,35 +307,37 @@ export default function QuotationPdfModal({ quotation, onClose, onEdit, onDelete
                     <p className={`${isA5 ? 'text-[10px]' : 'text-[11px]'} text-slate-600 mt-0.5 leading-snug`}>{quotation.customer_address}</p>
                   )}
                 </div>
-                <div className="text-right">
-                  <span className={`${
-                    isA5 ? 'text-[8px]' : 'text-[9px]'
-                  } font-extrabold text-[#00545C] uppercase tracking-wider block mb-0.5`}>
-                    QUOTATION META:
-                  </span>
-                  <p className={`${isA5 ? 'text-[10px]' : 'text-[11px]'} text-slate-700`}>
-                    <span className="text-slate-500">Quote No:</span>{' '}
-                    <span className="font-bold text-slate-900 tabular-nums">{quotation.quotation_number}</span>
-                  </p>
-                  <p className={`${isA5 ? 'text-[10px]' : 'text-[11px]'} text-slate-700 mt-0.5`}>
-                    <span className="text-slate-500">Date:</span>{' '}
-                    <span className="font-bold text-slate-900 tabular-nums">
-                      {formatToDMY(quotation.quotation_date) || formatToDMY(new Date())}
+                <div className="text-right flex flex-col justify-between">
+                  <div>
+                    <span className={`${
+                      isA5 ? 'text-[8px]' : 'text-[9px]'
+                    } font-extrabold text-[#00545C] uppercase tracking-wider block mb-0.5`}>
+                      QUOTATION META:
                     </span>
-                  </p>
-                  <p className={`${isA5 ? 'text-[10px]' : 'text-[11px]'} text-slate-700 mt-0.5`}>
-                    <span className="text-slate-500">Valid Till:</span>{' '}
-                    <span className="font-bold text-slate-900 tabular-nums">
-                      {formatToDMY(quotation.validity_date, quotation.quotation_date, 7)}
-                    </span>
-                  </p>
-                  <div className="mt-1">
-                    <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-extrabold uppercase ${
+                    <p className={`${isA5 ? 'text-[10px]' : 'text-[11px]'} text-slate-700`}>
+                      <span className="text-slate-500">Quote No:</span>{' '}
+                      <span className="font-bold text-slate-900 tabular-nums">{quotation.quotation_number}</span>
+                    </p>
+                    <p className={`${isA5 ? 'text-[10px]' : 'text-[11px]'} text-slate-700 mt-0.5`}>
+                      <span className="text-slate-500">Date:</span>{' '}
+                      <span className="font-bold text-slate-900 tabular-nums">
+                        {formatToDMY(quotation.quotation_date) || formatToDMY(new Date())}
+                      </span>
+                    </p>
+                    <p className={`${isA5 ? 'text-[10px]' : 'text-[11px]'} text-slate-700 mt-0.5`}>
+                      <span className="text-slate-500">Valid Till:</span>{' '}
+                      <span className="font-bold text-slate-900 tabular-nums">
+                        {formatToDMY(quotation.validity_date, quotation.quotation_date, 15)}
+                      </span>
+                    </p>
+                  </div>
+                  <div className="mt-2 flex justify-end">
+                    <span className={`inline-block px-2.5 py-0.5 rounded text-[10px] font-extrabold uppercase shadow-2xs ${
                       /credit/i.test(quotation.payment_terms || '')
                         ? 'bg-amber-100 text-amber-900 border border-amber-300'
                         : 'bg-emerald-100 text-emerald-900 border border-emerald-300'
                     }`}>
-                      Terms: {quotation.payment_terms || 'Cash'}
+                      TERMS: {(quotation.payment_terms || 'Cash').toUpperCase()}
                     </span>
                   </div>
                 </div>
