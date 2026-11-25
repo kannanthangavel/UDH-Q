@@ -2,6 +2,10 @@
   "version": 2,
   "rewrites": [
     {
+      "source": "/api",
+      "destination": "https://ud-qm-backend.onrender.com/api"
+    },
+    {
       "source": "/api/(.*)",
       "destination": "https://ud-qm-backend.onrender.com/api/$1"
     },

@@ -31,7 +31,7 @@ export default function Receipts() {
   const [amountPaid, setAmountPaid] = useState('');
   const [balanceAmount, setBalanceAmount] = useState('0');
   const [paperFormat, setPaperFormat] = useState('A4');
-  const [notes, setNotes] = useState('Thank you for your prompt payment! We sincerely appreciate your business.');
+  const [notes, setNotes] = useState('');
 
   // View PDF Modal
   const [viewPdfReceipt, setViewPdfReceipt] = useState(null);
@@ -68,7 +68,10 @@ export default function Receipts() {
       setTotalPages(res.totalPages || 1);
       setTotalCount(res.total || 0);
     } catch (err) {
-      showToast('Failed to load receipts: ' + err.message, true);
+      console.warn('Failed to load receipts:', err);
+      if (search || page > 1) {
+        showToast(err.message || 'Connecting to server...', true);
+      }
     } finally {
       setLoading(false);
     }
@@ -135,7 +138,7 @@ export default function Receipts() {
     setAmountPaid('');
     setBalanceAmount('0');
     setPaperFormat('A4');
-    setNotes('Thank you for your prompt payment! We sincerely appreciate your business.');
+    setNotes('');
   }
 
   function handleDeleteReceipt(r) {
@@ -551,16 +554,17 @@ UDHAYAM AGENCIES - Perundurai`;
                 </div>
               </div>
 
-              {/* Warm Message Notes */}
+              {/* Remarks / Notes (Optional) */}
               <div>
                 <label className="block font-bold text-slate-700 mb-1">
-                  Warm Thank You Message
+                  Payment Remarks / Notes (Optional)
                 </label>
-                <textarea
-                  rows={2}
+                <input
+                  type="text"
                   value={notes}
                   onChange={(e) => setNotes(e.target.value)}
-                  className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#00545C]"
+                  placeholder="e.g. Cleared bill in full / advance settlement"
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#00545C]"
                 />
               </div>
 

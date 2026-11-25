@@ -88,6 +88,19 @@ export function getUploadUrl(url) {
   return `${baseUrl}${cleanPath}`;
 }
 
+export const CANONICAL_RENDER_URL = 'https://ud-qm-backend.onrender.com';
+
+export function warmUpBackend() {
+  if (typeof window === 'undefined') return;
+  try {
+    fetch(`${CANONICAL_RENDER_URL}/api/health`, { mode: 'no-cors', cache: 'no-store' }).catch(() => {});
+  } catch (e) {}
+}
+
+if (typeof window !== 'undefined') {
+  setTimeout(warmUpBackend, 100);
+}
+
 export function getStoredToken() {
   try {
     return (typeof window !== 'undefined' && (sessionStorage.getItem('udqm_token') || localStorage.getItem('udqm_token'))) || '';
@@ -102,7 +115,7 @@ export async function checkBackendHealth(customOrigin = null) {
     : getApiBase();
 
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 35000);
+  const timer = setTimeout(() => controller.abort(), 20000);
 
   try {
     const res = await fetch(`${base}/health`, {
@@ -113,43 +126,43 @@ export async function checkBackendHealth(customOrigin = null) {
     clearTimeout(timer);
 
     const contentType = res.headers.get('content-type') || '';
-    if (!contentType.includes('application/json')) {
-      return {
-        ok: false,
-        reason: 'HTML_RESPONSE',
-        message: 'Backend API is not connected to this deployment (received HTML page instead of JSON API).'
-      };
+    if (contentType.includes('application/json')) {
+      const data = await res.json().catch(() => null);
+      if (res.ok && data?.status === 'ok') {
+        return { ok: true, data };
+      }
     }
-
-    const data = await res.json();
-    if (res.ok && data?.status === 'ok') {
-      return { ok: true, data };
-    }
-    return {
-      ok: false,
-      reason: 'UNHEALTHY',
-      message: data?.error || `Backend returned status ${res.status}`
-    };
   } catch (err) {
     clearTimeout(timer);
-    if (err.name === 'AbortError') {
-      return {
-        ok: false,
-        reason: 'TIMEOUT',
-        message: 'Backend server timed out (if hosted on Render free tier, it may take ~30 seconds to wake up).'
-      };
-    }
-    return {
-      ok: false,
-      reason: 'NETWORK_ERROR',
-      message: 'Cannot reach backend API server. Check your internet connection or backend URL.'
-    };
   }
+
+  // Fallback: If same-origin proxy is waking up, check Render directly
+  try {
+    const directRes = await fetch(`${CANONICAL_RENDER_URL}/api/health`, {
+      method: 'GET',
+      headers: { Accept: 'application/json' },
+      cache: 'no-store'
+    });
+    const directType = directRes.headers.get('content-type') || '';
+    if (directType.includes('application/json')) {
+      const data = await directRes.json().catch(() => null);
+      if (directRes.ok && data?.status === 'ok') {
+        return { ok: true, data, direct: true };
+      }
+    }
+  } catch (e) {}
+
+  return {
+    ok: false,
+    reason: 'WAKING_UP',
+    message: 'Secure cloud server is starting up. Connecting automatically...'
+  };
 }
 
 export async function request(endpoint, options = {}) {
-  const maxRetries = options.retries !== undefined ? options.retries : 2;
+  const maxRetries = options.retries !== undefined ? options.retries : 5;
   const timeoutMs = options.timeoutMs || 45000;
+  const cleanEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
 
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     const headers = {
@@ -174,7 +187,15 @@ export async function request(endpoint, options = {}) {
       delete headers['content-type'];
     }
 
-    const url = getApiUrl(endpoint);
+    // On retry attempts (if same-origin proxy returned cold-start status or HTML),
+    // alternate with direct Render URL to bypass proxy timeouts
+    let url;
+    if (attempt > 0 && typeof window !== 'undefined' && window.location.hostname.includes('vercel.app')) {
+      url = `${CANONICAL_RENDER_URL}/api${cleanEndpoint}`;
+    } else {
+      url = getApiUrl(endpoint);
+    }
+
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
 
@@ -197,14 +218,11 @@ export async function request(endpoint, options = {}) {
     // If fetch failed due to abort or network error, and we have retries left:
     if (networkError) {
       if (attempt < maxRetries) {
-        // Sleep 2.5s before retrying
-        await new Promise(r => setTimeout(r, 2500));
+        const delays = [2000, 3000, 4000, 5000, 5000, 5000];
+        await new Promise(r => setTimeout(r, delays[attempt] || 4000));
         continue;
       }
-      if (networkError.name === 'AbortError') {
-        throw new Error('UD-QM server took longer than expected to respond. Please click retry in a few seconds.');
-      }
-      throw new Error('Unable to connect to the UD-QM backend. The server may be waking up — please try again in a few moments.');
+      throw new Error('UD-QM cloud server is starting up. Please click retry in a few moments.');
     }
 
     const contentType = response.headers.get('content-type') || '';
@@ -222,7 +240,8 @@ export async function request(endpoint, options = {}) {
 
     if (isColdStart && attempt < maxRetries) {
       // Backend is waking up on Render, pause and retry seamlessly
-      await new Promise(r => setTimeout(r, 2500));
+      const delays = [2000, 3000, 4000, 5000, 5000, 5000];
+      await new Promise(r => setTimeout(r, delays[attempt] || 4000));
       continue;
     }
 
@@ -232,7 +251,7 @@ export async function request(endpoint, options = {}) {
         throw new Error(errorData.error || `Request failed with status ${response.status}`);
       }
       if (response.status === 502 || response.status === 503 || response.status === 504 || response.status === 405) {
-        throw new Error('UD-QM cloud backend is waking up. Please retry in 10-15 seconds.');
+        throw new Error('UD-QM cloud backend is finishing startup. Please retry in 10-15 seconds.');
       }
       throw new Error(`Server returned status ${response.status}. Please try again.`);
     }

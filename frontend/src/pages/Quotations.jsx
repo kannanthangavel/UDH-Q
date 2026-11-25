@@ -62,7 +62,9 @@ export default function Quotations({ setActivePage, onEditQuotation }) {
       setTotalCount(res.total || 0);
     } catch (err) {
       console.warn('Failed to load quotations:', err);
-      showToast('Failed to load quotations: ' + err.message, true);
+      if (search || page > 1) {
+        showToast(err.message || 'Connecting to server...', true);
+      }
     } finally {
       setLoading(false);
     }
