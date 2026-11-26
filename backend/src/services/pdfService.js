@@ -103,7 +103,7 @@ async function generateQuotationPdf(quotation, settings = {}, res = null) {
   const subheaderBoxH = isA5 ? 46 : 58;
   const tableHeaderHeight = isA5 ? 15 : 19;
   const footerBarHeight = isA5 ? 16 : 20;
-  const bankCardHeight = isA5 ? 56 : 70;
+  const bankCardHeight = isA5 ? 60 : 76;
 
   const taxSlabs = financials.taxSlabs || [];
   const taxHeaderH = isA5 ? 12 : 15;
@@ -336,10 +336,10 @@ async function generateQuotationPdf(quotation, settings = {}, res = null) {
     const rowHeight = getItemRowHeight(item);
 
     if (curY + rowHeight > maxTableBottomY) {
-      // Close current page table
+      // Close current page table cleanly (vertical lines only over actual rows)
       drawVerticalGridLines(currentPageTableStartY, curY);
       doc.moveTo(margin, curY).lineTo(margin + contentWidth, curY).strokeColor(COLOR_BORDER).lineWidth(0.5).stroke();
-      doc.rect(margin, currentPageTableStartY - tableHeaderHeight, contentWidth, curY - (currentPageTableStartY - tableHeaderHeight))
+      doc.roundedRect(margin, currentPageTableStartY - tableHeaderHeight, contentWidth, curY - (currentPageTableStartY - tableHeaderHeight), R_SM)
          .strokeColor(COLOR_BORDER).lineWidth(0.75).stroke();
 
       // Add new page with the same executive header & compact continuation customer subheader
@@ -409,11 +409,13 @@ async function generateQuotationPdf(quotation, settings = {}, res = null) {
     rowIdx++;
   }
 
-  // Gracefully extend vertical lines down
+  // Draw vertical column dividers ONLY over actual item rows (never through empty whitespace)
   const endTableY = isSinglePageFit ? Math.max(curY, maxTableBottomY) : curY;
-  drawVerticalGridLines(currentPageTableStartY, endTableY);
-  doc.moveTo(margin, endTableY).lineTo(margin + contentWidth, endTableY).strokeColor(COLOR_BORDER).lineWidth(0.5).stroke();
-  doc.rect(margin, currentPageTableStartY - tableHeaderHeight, contentWidth, endTableY - (currentPageTableStartY - tableHeaderHeight))
+  drawVerticalGridLines(currentPageTableStartY, curY);
+  if (curY < endTableY) {
+    doc.moveTo(margin, curY).lineTo(margin + contentWidth, curY).strokeColor(COLOR_BORDER).lineWidth(0.5).stroke();
+  }
+  doc.roundedRect(margin, currentPageTableStartY - tableHeaderHeight, contentWidth, endTableY - (currentPageTableStartY - tableHeaderHeight), R_SM)
      .strokeColor(COLOR_BORDER).lineWidth(0.75).stroke();
 
   // If multi-page and not enough room for bottom cards on current page, wrap to final summary page with same header/subheader
@@ -493,7 +495,7 @@ async function generateQuotationPdf(quotation, settings = {}, res = null) {
 
   // Summary / Net Grand Total Row
   doc.rect(margin, curY, contentWidth, taxRowH).fillAndStroke('#FFFFFF', COLOR_BORDER);
-  doc.rect(lastColX, curY, lastColW, taxRowH).fill(COLOR_LIME);
+  doc.rect(lastColX, curY, lastColW, taxRowH).fillAndStroke('#ECFCCB', COLOR_BORDER);
 
   const singleCgstPct = taxSlabs.length === 1 ? (financials.isInterstate ? `${taxSlabs[0].igstPercent.toFixed(2)}%` : `${taxSlabs[0].cgstPercent.toFixed(2)}%`) : 'TOTAL';
   const singleSgstPct = taxSlabs.length === 1 ? (financials.isInterstate ? 'INTER' : `${taxSlabs[0].sgstPercent.toFixed(2)}%`) : (financials.isInterstate ? 'STATE' : 'TOTAL');
@@ -513,14 +515,14 @@ async function generateQuotationPdf(quotation, settings = {}, res = null) {
   for (let i = 0; i < taxCols.length; i++) {
     const col = taxCols[i];
     if (i === 7) {
-      doc.fillColor(COLOR_TEAL_DARK).font('Helvetica-Bold').fontSize(isA5 ? 6.8 : 8.8);
+      doc.fillColor(COLOR_TEAL_DARK).font('Helvetica-Bold').fontSize(isA5 ? 7 : 9);
     } else {
-      doc.fillColor(COLOR_TEXT).font('Helvetica-Bold').fontSize(isA5 ? 5.8 : 7.2);
+      doc.fillColor(COLOR_TEXT).font('Helvetica-Bold').fontSize(isA5 ? 5.6 : 7);
     }
-    doc.text(taxValues[i], txX + 2, curY + (isA5 ? 3 : 4), { width: col.w - 4, align: col.align });
+    doc.text(taxValues[i], txX + 3, curY + (isA5 ? 3 : 4), { width: col.w - 6, align: col.align });
     txX += col.w;
     if (i < taxCols.length - 1) {
-      doc.moveTo(txX, curY + 2).lineTo(txX, curY + taxRowH).strokeColor(COLOR_BORDER).lineWidth(0.5).stroke();
+      doc.moveTo(txX, curY).lineTo(txX, curY + taxRowH).strokeColor(COLOR_BORDER).lineWidth(0.5).stroke();
     }
   }
   curY += taxRowH;
@@ -533,35 +535,29 @@ async function generateQuotationPdf(quotation, settings = {}, res = null) {
 
   const gstPillW = isA5 ? 75 : 100;
   const gstPillH = wordsRowH - 4;
-  const gstPillX = margin + contentWidth - gstPillW - 3;
+  const gstPillX = margin + contentWidth - gstPillW - 4;
   const gstPillY = curY + 2;
   doc.roundedRect(gstPillX, gstPillY, gstPillW, gstPillH, 2).fill('#DCFCE7');
   doc.fillColor('#166534').font('Helvetica-Bold').fontSize(isA5 ? 5 : 6.8)
      .text(financials.isInterstate ? 'IGST Applicable' : 'GST Invoice Applicable', gstPillX, gstPillY + (isA5 ? 1.5 : 2), { width: gstPillW, align: 'center' });
 
-  curY += wordsRowH + (isA5 ? 4 : 6);
+  curY += wordsRowH + (isA5 ? 5 : 7);
 
   // -------------------------------------------------------------
-  // 2. BANK DETAILS & TERMS HORIZONTAL COLUMNS (FULL WIDTH CARD)
-  // Exact Structure Requested:
-  // Bank Details:
-  // Udhayam Agencies
-  // ACC No: 6659330152
-  // IFSC Code: IDIB000P155
-  // Indian Bank - Perundurai Branch
+  // 2. BANK DETAILS, TERMS, UPI QR & SIGNATORY (EXECUTIVE CARD)
   // -------------------------------------------------------------
   doc.roundedRect(margin, curY, contentWidth, bankCardHeight, R_CARD)
      .fillAndStroke('#F8FAFC', COLOR_BORDER);
 
-  const bCol1W = isA5 ? 116 : 160;
-  const bCol2W = isA5 ? 116 : 162;
-  const bCol3W = isA5 ? 54 : 74;
+  const bCol1W = isA5 ? 114 : 156;
+  const bCol2W = isA5 ? 122 : 172;
+  const bCol3W = isA5 ? 58 : 80;
   const bCol4W = contentWidth - bCol1W - bCol2W - bCol3W;
 
-  // Col 1: Bank & Settlement (Executive Structure with IDIB000P155)
+  // Col 1: Bank Details
   let cx = margin;
   doc.fillColor(COLOR_TEAL).font('Helvetica-Bold').fontSize(isA5 ? 6 : 7.8)
-     .text('BANK DETAILS:', cx + 6, curY + (isA5 ? 4 : 5));
+     .text('BANK DETAILS:', cx + 8, curY + (isA5 ? 5 : 7));
 
   const accName = settings.bank_account_name || 'Udhayam Agencies';
   const accNo = settings.bank_account_no || '6659330152';
@@ -572,40 +568,42 @@ async function generateQuotationPdf(quotation, settings = {}, res = null) {
   const ifscClean = ifscRaw.replace(/^IFSC\s*(Code)?\s*[:\-]\s*/i, '');
 
   doc.fillColor(COLOR_TEXT).font('Helvetica-Bold').fontSize(isA5 ? 6 : 8)
-     .text(accName, cx + 6, curY + (isA5 ? 12 : 15), { width: bCol1W - 10 });
+     .text(accName, cx + 8, curY + (isA5 ? 14 : 18), { width: bCol1W - 14 });
   doc.font('Helvetica-Bold').fontSize(isA5 ? 5.8 : 7.8)
-     .text(`Acc Number: ${accNo}`, cx + 6, curY + (isA5 ? 20 : 25), { width: bCol1W - 10 });
+     .text(`Acc Number: ${accNo}`, cx + 8, curY + (isA5 ? 23 : 29), { width: bCol1W - 14 });
   doc.font('Helvetica').fontSize(isA5 ? 5.2 : 7)
-     .text(`${bName} | ${bBranch}`, cx + 6, curY + (isA5 ? 28 : 35), { width: bCol1W - 10 });
+     .text(`${bName} | ${bBranch}`, cx + 8, curY + (isA5 ? 32 : 40), { width: bCol1W - 14 });
   doc.font('Helvetica-Bold').fillColor(COLOR_TEAL).fontSize(isA5 ? 5.5 : 7.2)
-     .text(`IFSC Code: ${ifscClean}`, cx + 6, curY + (isA5 ? 36 : 45), { width: bCol1W - 10 });
+     .text(`IFSC Code: ${ifscClean}`, cx + 8, curY + (isA5 ? 41 : 51), { width: bCol1W - 14 });
 
   // Vertical Divider 1
   cx += bCol1W;
-  doc.moveTo(cx, curY + 4).lineTo(cx, curY + bankCardHeight - 4).strokeColor(COLOR_BORDER).lineWidth(0.5).stroke();
+  doc.moveTo(cx, curY + 6).lineTo(cx, curY + bankCardHeight - 6).strokeColor(COLOR_BORDER).lineWidth(0.5).stroke();
 
   // Col 2: Terms & Conditions
-  doc.fillColor(COLOR_TEAL).font('Helvetica-Bold').fontSize(isA5 ? 5.5 : 7.2)
-     .text('TERMS & CONDITIONS:', cx + 6, curY + (isA5 ? 4 : 5));
+  doc.fillColor(COLOR_TEAL).font('Helvetica-Bold').fontSize(isA5 ? 5.8 : 7.5)
+     .text('TERMS & CONDITIONS:', cx + 8, curY + (isA5 ? 5 : 7));
 
   const officialTerms = '1. Quotation valid for 15 days from date of issue.\n2. Goods once sold will not be taken back or exchanged.\n3. 100% payment on delivery / as per agreed terms.\n4. Subject to Perundurai jurisdiction only.';
 
-  doc.fillColor(COLOR_MUTED).font('Helvetica').fontSize(isA5 ? 4.5 : 5.8)
-     .text(officialTerms, cx + 6, curY + (isA5 ? 13 : 16), { width: bCol2W - 12, height: bankCardHeight - 18, lineGap: 1.2 });
+  doc.fillColor(COLOR_MUTED).font('Helvetica').fontSize(isA5 ? 4.6 : 6)
+     .text(officialTerms, cx + 8, curY + (isA5 ? 14 : 18), { width: bCol2W - 14, height: bankCardHeight - 20, lineGap: 1.6 });
 
   // Vertical Divider 2
   cx += bCol2W;
-  doc.moveTo(cx, curY + 4).lineTo(cx, curY + bankCardHeight - 4).strokeColor(COLOR_BORDER).lineWidth(0.5).stroke();
+  doc.moveTo(cx, curY + 6).lineTo(cx, curY + bankCardHeight - 6).strokeColor(COLOR_BORDER).lineWidth(0.5).stroke();
 
-  // Col 3: Dynamic UPI QR Code Card (Guaranteed latest UPI ID)
-  const qrSize = isA5 ? 32 : 44;
+  // Col 3: Dynamic UPI QR Code Card
+  const qrSize = isA5 ? 34 : 46;
   if (qrBuffer) {
     try {
-      const qrImgX = cx + (bCol3W - qrSize) / 2;
-      const qrImgY = curY + (isA5 ? 4 : 5);
-      doc.image(qrBuffer, qrImgX, qrImgY, { fit: [qrSize, qrSize] });
-      doc.fillColor(COLOR_TEAL_DARK).font('Helvetica-Bold').fontSize(isA5 ? 4 : 5)
-         .text('SCAN TO PAY UPI', cx, qrImgY + qrSize + (isA5 ? 2 : 3), { width: bCol3W, align: 'center' });
+      const qrBoxSize = qrSize + (isA5 ? 4 : 6);
+      const qrBoxX = cx + (bCol3W - qrBoxSize) / 2;
+      const qrBoxY = curY + (isA5 ? 5 : 7);
+      doc.roundedRect(qrBoxX, qrBoxY, qrBoxSize, qrBoxSize, 3).fillAndStroke('#FFFFFF', COLOR_BORDER);
+      doc.image(qrBuffer, qrBoxX + (isA5 ? 2 : 3), qrBoxY + (isA5 ? 2 : 3), { fit: [qrSize, qrSize] });
+      doc.fillColor(COLOR_TEAL_DARK).font('Helvetica-Bold').fontSize(isA5 ? 4.2 : 5.4)
+         .text('SCAN TO PAY UPI', cx, qrBoxY + qrBoxSize + (isA5 ? 3 : 4), { width: bCol3W, align: 'center' });
     } catch (e) {
       console.warn('QR render error:', e.message);
     }
@@ -613,22 +611,17 @@ async function generateQuotationPdf(quotation, settings = {}, res = null) {
 
   // Vertical Divider 3
   cx += bCol3W;
-  doc.moveTo(cx, curY + 4).lineTo(cx, curY + bankCardHeight - 4).strokeColor(COLOR_BORDER).lineWidth(0.5).stroke();
+  doc.moveTo(cx, curY + 6).lineTo(cx, curY + bankCardHeight - 6).strokeColor(COLOR_BORDER).lineWidth(0.5).stroke();
 
-  // Col 4: Customer Acceptance & Authorised Signatory inside card
+  // Col 4: Dedicated Authorised Signatory Block
+  doc.fillColor(COLOR_TEAL).font('Helvetica-Bold').fontSize(isA5 ? 5.8 : 7.5)
+     .text(`For ${settings.company_name || 'UDHAYAM AGENCIES'}`, cx + 6, curY + (isA5 ? 6 : 8), { width: bCol4W - 14, align: 'right' });
+  doc.moveTo(cx + bCol4W - (isA5 ? 64 : 88), curY + bankCardHeight - (isA5 ? 16 : 20))
+     .lineTo(cx + bCol4W - 8, curY + bankCardHeight - (isA5 ? 16 : 20))
+     .dash(2, { space: 2 }).strokeColor('#94A3B8').lineWidth(0.75).stroke();
+  doc.undash();
   doc.fillColor(COLOR_MUTED).font('Helvetica-Bold').fontSize(isA5 ? 4.8 : 6.2)
-     .text('CUSTOMER ACCEPTANCE', cx + 6, curY + 5);
-  doc.moveTo(cx + 6, curY + (isA5 ? 15 : 19)).lineTo(cx + (isA5 ? 48 : 68), curY + (isA5 ? 15 : 19)).dash(2, { space: 2 }).strokeColor(COLOR_BORDER).lineWidth(0.5).stroke();
-  doc.undash();
-  doc.fillColor(COLOR_MUTED).font('Helvetica').fontSize(isA5 ? 4 : 5.2)
-     .text('Signature / Seal', cx + 6, curY + (isA5 ? 17 : 21));
-
-  doc.fillColor(COLOR_TEAL).font('Helvetica-Bold').fontSize(isA5 ? 5.2 : 6.8)
-     .text(`For ${settings.company_name || 'UDHAYAM AGENCIES'}`, cx + 6, curY + (isA5 ? 28 : 36), { width: bCol4W - 10, align: 'right' });
-  doc.moveTo(cx + bCol4W - (isA5 ? 58 : 78), curY + bankCardHeight - (isA5 ? 11 : 14)).lineTo(cx + bCol4W - 6, curY + bankCardHeight - (isA5 ? 11 : 14)).dash(2, { space: 2 }).strokeColor(COLOR_BORDER).lineWidth(0.5).stroke();
-  doc.undash();
-  doc.fillColor(COLOR_MUTED).font('Helvetica').fontSize(isA5 ? 4 : 5.2)
-     .text('Authorised Signatory', cx + 6, curY + bankCardHeight - (isA5 ? 9 : 12), { width: bCol4W - 10, align: 'right' });
+     .text('Authorised Signatory', cx + 6, curY + bankCardHeight - (isA5 ? 12 : 15), { width: bCol4W - 14, align: 'right' });
 
   curY += bankCardHeight + (isA5 ? 4 : 6);
 

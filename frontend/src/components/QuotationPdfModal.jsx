@@ -503,16 +503,11 @@ export default function QuotationPdfModal({ quotation, onClose, onEdit, onDelete
                 </div>
 
                 {/* Col 4: Authorised Signatory */}
-                <div className="flex flex-col justify-between text-right text-[11px] text-slate-700 pl-1">
-                  <div className="text-left">
-                    <span className="text-[9px] font-black text-slate-500 uppercase tracking-wider block">Customer Acceptance</span>
-                    <div className="border-b border-dashed border-slate-300 w-28 h-5"></div>
-                    <span className="text-[8px] text-slate-400">Signature / Seal</span>
-                  </div>
-                  <div className="mt-2 text-right">
-                    <p className="font-extrabold text-[#00545C] text-xs">For {settings?.company_name || 'UDHAYAM AGENCIES'}</p>
-                    <div className="border-b border-dashed border-slate-300 w-32 h-5 ml-auto"></div>
-                    <p className="text-[9px] font-semibold text-slate-500 mt-0.5">Authorised Signatory</p>
+                <div className="flex flex-col justify-between text-right text-[11px] text-slate-700 pl-2 py-0.5">
+                  <p className="font-extrabold text-[#00545C] text-xs">For {settings?.company_name || 'UDHAYAM AGENCIES'}</p>
+                  <div className="mt-auto">
+                    <div className="border-b border-dashed border-slate-400 w-32 h-5 ml-auto"></div>
+                    <p className="text-[9px] font-bold text-slate-500 mt-1">Authorised Signatory</p>
                   </div>
                 </div>
               </div>
