@@ -295,17 +295,12 @@ async function generateQuotationPdf(quotation, settings = {}, res = null) {
        .lineWidth(0.5)
        .stroke();
 
-    // Right: QUOTATION META
+    // Right: Quotation Details (Quote No, Date, Valid Till, Terms)
     const rightX = margin + colWidth + 10;
     const rightInnerW = colWidth - 10;
 
-    doc.fillColor(COLOR_TEAL)
-       .font('Helvetica-Bold')
-       .fontSize(isA5 ? 6.5 : 8)
-       .text('QUOTATION META:', rightX, y + (isA5 ? 4 : 6), { width: rightInnerW, align: 'right' });
-
-    const metaLineY = y + (isA5 ? 14 : 18);
-    const stepY = isA5 ? 10.5 : 13;
+    const metaLineY = y + (isA5 ? 9 : 12);
+    const stepY = isA5 ? 11.5 : 14.5;
 
     // Line 1: Quote No
     doc.font('Helvetica').fontSize(isA5 ? 5.8 : 7.5).fillColor(COLOR_MUTED)
@@ -335,9 +330,6 @@ async function generateQuotationPdf(quotation, settings = {}, res = null) {
     const pillH = isA5 ? 10 : 12;
     const pillX = rightX + rightInnerW - pillW;
     const pillY = metaLineY + stepY * 3 - (isA5 ? 1 : 1.5);
-
-    doc.font('Helvetica').fontSize(isA5 ? 5.8 : 7.5).fillColor(COLOR_MUTED)
-       .text('Payment Terms: ', rightX, metaLineY + stepY * 3, { width: rightInnerW - pillW - 6, align: 'right' });
 
     doc.roundedRect(pillX, pillY, pillW, pillH, 3).fillAndStroke(pillBg, pillBorder);
     doc.fillColor(pillFg)

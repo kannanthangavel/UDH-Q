@@ -309,11 +309,6 @@ export default function QuotationPdfModal({ quotation, onClose, onEdit, onDelete
                 </div>
                 <div className="text-right flex flex-col justify-between">
                   <div>
-                    <span className={`${
-                      isA5 ? 'text-[8px]' : 'text-[9px]'
-                    } font-extrabold text-[#00545C] uppercase tracking-wider block mb-0.5`}>
-                      QUOTATION META:
-                    </span>
                     <p className={`${isA5 ? 'text-[10px]' : 'text-[11px]'} text-slate-700`}>
                       <span className="text-slate-500">Quote No:</span>{' '}
                       <span className="font-bold text-slate-900 tabular-nums">{quotation.quotation_number}</span>
