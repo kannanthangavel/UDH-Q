@@ -5,6 +5,7 @@
  */
 
 const QRCode = require('qrcode');
+const { resolveUploadedFile } = require('../utils/storagePaths');
 
 /**
  * Validates a UPI ID against Indian NPCI specifications
@@ -109,13 +110,28 @@ async function generateDynamicQrDataUrl({ upiId, payeeName = 'UDHAYAM AGENCIES',
  * @returns {Promise<Buffer|null>}
  */
 async function resolveQuotationQrSource(quotation = {}, settings = {}) {
+  // 1. Prefer explicit Base64 image uploaded in settings
+  if (settings.payment_qr_code_data && typeof settings.payment_qr_code_data === 'string' && settings.payment_qr_code_data.startsWith('data:image')) {
+    try {
+      const base64Data = settings.payment_qr_code_data.replace(/^data:image\/\w+;base64,/, '');
+      return Buffer.from(base64Data, 'base64');
+    } catch (e) {
+      console.warn('[QR Service] Buffer conversion failed for fallback payment_qr_code_data:', e.message);
+    }
+  }
+
+  // 2. Prefer saved/uploaded official QR image file from disk (e.g. Paytm QR uploaded by user)
+  const fileQr = resolveUploadedFile('qr', settings.payment_qr_code, 'default_upi_qr.png');
+  if (fileQr) {
+    return fileQr;
+  }
+
+  // 3. Fallback to dynamic UPI QR generation if valid UPI is available
   const activeUpi = quotation.upi_id || settings.upi_id || 'paytmqr6vc6b5@ptys';
   const payeeName = settings.bank_account_name || settings.company_name || 'UDHAYAM AGENCIES';
   const quoteNo = quotation.quotation_number || '';
   const totalAmount = quotation.grand_total;
 
-  // 1. If explicit Base64 image is uploaded in settings AND user hasn't changed UPI ID, verify if it should be used
-  // But if dynamic generation from latest valid UPI is preferred, generate freshly
   if (activeUpi && validateUpiId(activeUpi)) {
     const dynamicBuffer = await generateDynamicQrBuffer({
       upiId: activeUpi,
@@ -126,16 +142,6 @@ async function resolveQuotationQrSource(quotation = {}, settings = {}) {
     });
     if (dynamicBuffer) {
       return dynamicBuffer;
-    }
-  }
-
-  // 2. Fallback to settings.payment_qr_code_data if present
-  if (settings.payment_qr_code_data && typeof settings.payment_qr_code_data === 'string' && settings.payment_qr_code_data.startsWith('data:image')) {
-    try {
-      const base64Data = settings.payment_qr_code_data.replace(/^data:image\/\w+;base64,/, '');
-      return Buffer.from(base64Data, 'base64');
-    } catch (e) {
-      console.warn('[QR Service] Buffer conversion failed for fallback payment_qr_code_data:', e.message);
     }
   }
 

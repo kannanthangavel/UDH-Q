@@ -56,7 +56,7 @@ async function generateQuotationPdf(quotation, settings = {}, res = null) {
     compress: false,
     margins: {
       top: isA5 ? 16 : 24,
-      bottom: isA5 ? 14 : 20,
+      bottom: isA5 ? 6 : 8,
       left: isA5 ? 16 : 24,
       right: isA5 ? 16 : 24
     },
@@ -100,7 +100,7 @@ async function generateQuotationPdf(quotation, settings = {}, res = null) {
   // Pre-calculate heights
   const headerHeight = isA5 ? 52 : 72;
   const accentHeight = isA5 ? 2.5 : 3.5;
-  const infoBoxHeight = isA5 ? 52 : 66;
+  const infoBoxHeight = isA5 ? 56 : 72;
   const tableHeaderHeight = isA5 ? 15 : 19;
   const footerBarHeight = isA5 ? 16 : 20;
   const bankCardHeight = isA5 ? 56 : 70;
@@ -151,13 +151,179 @@ async function generateQuotationPdf(quotation, settings = {}, res = null) {
     }
   }
 
-  function drawContinuationHeader(y) {
-    doc.roundedRect(margin, y, contentWidth, isA5 ? 18 : 22, R_SM).fill('#F1F5F9');
-    doc.fillColor(COLOR_TEAL).font('Helvetica-Bold').fontSize(isA5 ? 6.5 : 8)
-       .text(settings.company_name || 'UDHAYAM AGENCIES', margin + 8, y + (isA5 ? 5 : 6));
-    doc.fillColor(COLOR_MUTED).font('Helvetica').fontSize(isA5 ? 6 : 7.5)
-       .text(`QUOTATION CONTINUATION • Quote No: ${quoteNoDisplay} • Date: ${quoteDateDisplay}`, margin + 8, y + (isA5 ? 5 : 6), { width: contentWidth - 16, align: 'right' });
-    return y + (isA5 ? 22 : 28);
+  function drawExecutiveHeader(topY) {
+    doc.roundedRect(margin, topY, contentWidth, headerHeight, R_CARD).fill(COLOR_TEAL);
+    doc.roundedRect(margin, topY + headerHeight - accentHeight, contentWidth, accentHeight, 1).fill(COLOR_LIME);
+
+    let textLeft = margin + (isA5 ? 6 : 10);
+    if (logoSource) {
+      try {
+        const logoBoxW = isA5 ? 46 : 60;
+        const logoBoxH = isA5 ? 46 : 60;
+        const pad = isA5 ? 3 : 4;
+        const boxX = margin + (isA5 ? 4 : 5);
+        const boxY = topY + (isA5 ? 3 : 5);
+        doc.roundedRect(boxX, boxY, logoBoxW, logoBoxH, R_SM).fill('#FFFFFF');
+        doc.image(logoSource, boxX + pad, boxY + pad, {
+          fit: [logoBoxW - pad * 2, logoBoxH - pad * 2],
+          align: 'center',
+          valign: 'center'
+        });
+        textLeft = margin + logoBoxW + (isA5 ? 9 : 14);
+      } catch (e) {
+        console.warn('Logo load error:', e.message);
+      }
+    }
+
+    // Company Details
+    doc.fillColor('#FFFFFF')
+       .font('Helvetica-Bold')
+       .fontSize(isA5 ? 11 : 15)
+       .text(settings.company_name || 'UDHAYAM AGENCIES', textLeft, topY + (isA5 ? 5 : 7));
+
+    doc.font('Helvetica-Bold')
+       .fontSize(isA5 ? 6.5 : 8.5)
+       .fillColor(COLOR_LIME)
+       .text(settings.company_division || 'PAINT DIVISION', textLeft, topY + (isA5 ? 17 : 24));
+
+    doc.font('Helvetica')
+       .fontSize(isA5 ? 5.5 : 7.2)
+       .fillColor('#E2E8F0')
+       .text(settings.company_address || '41/10, KMR Complex, Old Bus Stand Road, Perundurai, Erode - 638052', textLeft, topY + (isA5 ? 25 : 35), { width: contentWidth - (textLeft - margin) - (isA5 ? 75 : 110) });
+
+    doc.font('Helvetica')
+       .fontSize(isA5 ? 5.5 : 7.2)
+       .fillColor('#E2E8F0')
+       .text(`Phone: ${settings.company_phone || '+91 97156 22499'} | GSTIN: ${settings.company_gstin || '33AADFU6496M1ZJ'}`, textLeft, topY + (isA5 ? 35 : 47));
+
+    // Top-Right Header Elements (QUOTATION pill + Quote No + Date + Valid Till at page top)
+    const badgeWidth = isA5 ? 64 : 86;
+    const badgeHeight = isA5 ? 15 : 18;
+    const badgeX = pageWidth - margin - badgeWidth - (isA5 ? 5 : 8);
+    const badgeY = topY + (isA5 ? 4 : 6);
+
+    doc.roundedRect(badgeX, badgeY, badgeWidth, badgeHeight, R_SM).fill(COLOR_LIME);
+    doc.fillColor(COLOR_TEAL_DARK)
+       .font('Helvetica-Bold')
+       .fontSize(isA5 ? 7 : 9)
+       .text('QUOTATION', badgeX, badgeY + (isA5 ? 3.5 : 4.5), { width: badgeWidth, align: 'center' });
+
+    const metaRightW = isA5 ? 100 : 135;
+    const metaRightX = pageWidth - margin - metaRightW - (isA5 ? 5 : 8);
+    const metaTopY = badgeY + badgeHeight + (isA5 ? 2.5 : 3.5);
+
+    doc.fillColor('#FFFFFF')
+       .font('Helvetica-Bold')
+       .fontSize(isA5 ? 7.5 : 9.5)
+       .text(quoteNoDisplay, metaRightX, metaTopY, { width: metaRightW, align: 'right' });
+
+    doc.font('Helvetica')
+       .fontSize(isA5 ? 5.8 : 7.2)
+       .fillColor('#E2E8F0')
+       .text(`Date: ${quoteDateDisplay}`, metaRightX, metaTopY + (isA5 ? 10 : 13), { width: metaRightW, align: 'right' });
+
+    doc.font('Helvetica')
+       .fontSize(isA5 ? 5.8 : 7.2)
+       .fillColor('#E2E8F0')
+       .text(`Valid Till: ${validDateDisplay}`, metaRightX, metaTopY + (isA5 ? 19 : 24), { width: metaRightW, align: 'right' });
+
+    return topY + headerHeight + (isA5 ? 4 : 6);
+  }
+
+  function drawCustomerSubheader(y, isContinuation = false) {
+    const boxH = isA5 ? 60 : 74;
+    doc.roundedRect(margin, y, contentWidth, boxH, R_CARD).fillAndStroke('#FFFFFF', COLOR_BORDER);
+    const colWidth = (contentWidth - 16) / 2;
+
+    // Left: BILLED TO / CUSTOMER DETAILS
+    doc.fillColor(COLOR_TEAL)
+       .font('Helvetica-Bold')
+       .fontSize(isA5 ? 6.5 : 8)
+       .text(isContinuation ? 'BILLED TO / CUSTOMER DETAILS (Contd.):' : 'BILLED TO / CUSTOMER DETAILS:', margin + 8, y + (isA5 ? 4 : 6));
+
+    doc.fillColor(COLOR_TEXT)
+       .font('Helvetica-Bold')
+       .fontSize(isA5 ? 8 : 10.5)
+       .text(quotation.customer_name || 'Valued Customer', margin + 8, y + (isA5 ? 13 : 18), { width: colWidth, height: 12, ellipsis: true });
+
+    let custDetailsY = y + (isA5 ? 24 : 32);
+    const contactParts = [];
+    if (quotation.customer_phone && quotation.customer_phone !== '-') {
+      contactParts.push(`Phone: ${quotation.customer_phone}`);
+    }
+    if (quotation.customer_gstin) {
+      contactParts.push(`GSTIN: ${quotation.customer_gstin}`);
+    }
+    if (contactParts.length > 0) {
+      doc.font('Helvetica')
+         .fontSize(isA5 ? 5.8 : 7.5)
+         .fillColor(COLOR_MUTED)
+         .text(contactParts.join('  |  '), margin + 8, custDetailsY, { width: colWidth, height: 10, ellipsis: true });
+      custDetailsY += (isA5 ? 8 : 11);
+    }
+
+    if (quotation.customer_address) {
+      doc.font('Helvetica')
+         .fontSize(isA5 ? 5.5 : 7)
+         .fillColor(COLOR_MUTED)
+         .text(`Address: ${quotation.customer_address}`, margin + 8, custDetailsY, { width: colWidth, height: 18, ellipsis: true });
+    }
+
+    // Vertical divider between Customer & Quote details
+    doc.moveTo(margin + colWidth + 4, y + 6)
+       .lineTo(margin + colWidth + 4, y + boxH - 6)
+       .strokeColor(COLOR_BORDER)
+       .lineWidth(0.5)
+       .stroke();
+
+    // Right: QUOTATION META
+    const rightX = margin + colWidth + 10;
+    const rightInnerW = colWidth - 10;
+
+    doc.fillColor(COLOR_TEAL)
+       .font('Helvetica-Bold')
+       .fontSize(isA5 ? 6.5 : 8)
+       .text('QUOTATION META:', rightX, y + (isA5 ? 4 : 6), { width: rightInnerW, align: 'right' });
+
+    const metaLineY = y + (isA5 ? 13 : 17);
+    const stepY = isA5 ? 9 : 11.5;
+
+    // Line 1: Quote No
+    doc.font('Helvetica').fontSize(isA5 ? 5.8 : 7.5).fillColor(COLOR_MUTED)
+       .text(`Quote No: `, rightX, metaLineY, { width: rightInnerW - 75, align: 'right' });
+    doc.font('Helvetica-Bold').fillColor(COLOR_TEXT)
+       .text(quoteNoDisplay, rightX + rightInnerW - 72, metaLineY, { width: 72, align: 'right' });
+
+    // Line 2: Date
+    doc.font('Helvetica').fontSize(isA5 ? 5.8 : 7.5).fillColor(COLOR_MUTED)
+       .text(`Date: `, rightX, metaLineY + stepY, { width: rightInnerW - 75, align: 'right' });
+    doc.font('Helvetica-Bold').fillColor(COLOR_TEXT)
+       .text(quoteDateDisplay, rightX + rightInnerW - 72, metaLineY + stepY, { width: 72, align: 'right' });
+
+    // Line 3: Valid Till
+    doc.font('Helvetica').fontSize(isA5 ? 5.8 : 7.5).fillColor(COLOR_MUTED)
+       .text(`Valid Till: `, rightX, metaLineY + stepY * 2, { width: rightInnerW - 75, align: 'right' });
+    doc.font('Helvetica-Bold').fillColor(COLOR_TEXT)
+       .text(validDateDisplay, rightX + rightInnerW - 72, metaLineY + stepY * 2, { width: 72, align: 'right' });
+
+    // Payment Terms badge positioned safely on its own row below Valid Till (Zero overlap!)
+    const pTerms = (quotation.payment_terms || 'Cash').trim();
+    const isCredit = /credit/i.test(pTerms);
+    const pillBg = isCredit ? '#FEF3C7' : '#DCFCE7';
+    const pillFg = isCredit ? '#92400E' : '#166534';
+    const pillBorder = isCredit ? '#FCD34D' : '#86EFAC';
+    const pillW = isA5 ? 64 : 80;
+    const pillH = isA5 ? 9.5 : 12;
+    const pillX = margin + contentWidth - pillW - 6;
+    const pillY = y + boxH - pillH - (isA5 ? 3 : 5);
+
+    doc.roundedRect(pillX, pillY, pillW, pillH, 3).fillAndStroke(pillBg, pillBorder);
+    doc.fillColor(pillFg)
+       .font('Helvetica-Bold')
+       .fontSize(isA5 ? 5 : 6.8)
+       .text(`TERMS: ${pTerms.toUpperCase()}`, pillX, pillY + (isA5 ? 1.8 : 2.5), { width: pillW, align: 'center' });
+
+    return y + boxH + (isA5 ? 4 : 6);
   }
 
   // Check if everything fits on a single page
@@ -168,177 +334,17 @@ async function generateQuotationPdf(quotation, settings = {}, res = null) {
     estimatedTableHeight += hasDetails ? (isA5 ? 20 : 23) : (isA5 ? 15 : 18);
   }
 
-  const spaceOnFirstPage = pageHeight - margin - headerHeight - (isA5 ? 4 : 6) - infoBoxHeight - (isA5 ? 4 : 6) - tableHeaderHeight - bottomBlocksHeight;
+  const spaceOnFirstPage = pageHeight - margin - headerHeight - (isA5 ? 4 : 6) - (isA5 ? 60 : 74) - (isA5 ? 4 : 6) - tableHeaderHeight - bottomBlocksHeight;
   const isSinglePageFit = estimatedTableHeight <= spaceOnFirstPage;
 
-  // -------------------------------------------------------------
-  // PAGE 1: FULL EXECUTIVE HEADER & CUSTOMER DETAILS
-  // -------------------------------------------------------------
-  doc.roundedRect(margin, margin, contentWidth, headerHeight, R_CARD).fill(COLOR_TEAL);
-  doc.roundedRect(margin, margin + headerHeight - accentHeight, contentWidth, accentHeight, 1).fill(COLOR_LIME);
-
-  // Logo in clean white container
-  let textLeft = margin + (isA5 ? 6 : 10);
-  if (logoSource) {
-    try {
-      const logoBoxW = isA5 ? 46 : 60;
-      const logoBoxH = isA5 ? 46 : 60;
-      const pad = isA5 ? 3 : 4;
-      const boxX = margin + (isA5 ? 4 : 5);
-      const boxY = margin + (isA5 ? 3 : 5);
-      doc.roundedRect(boxX, boxY, logoBoxW, logoBoxH, R_SM).fill('#FFFFFF');
-      doc.image(logoSource, boxX + pad, boxY + pad, {
-        fit: [logoBoxW - pad * 2, logoBoxH - pad * 2],
-        align: 'center',
-        valign: 'center'
-      });
-      textLeft = margin + logoBoxW + (isA5 ? 9 : 14);
-    } catch (e) {
-      console.warn('Logo load error:', e.message);
-    }
-  }
-
-  // Company Details
-  doc.fillColor('#FFFFFF')
-     .font('Helvetica-Bold')
-     .fontSize(isA5 ? 11 : 15)
-     .text(settings.company_name || 'UDHAYAM AGENCIES', textLeft, margin + (isA5 ? 5 : 7));
-
-  doc.font('Helvetica-Bold')
-     .fontSize(isA5 ? 6.5 : 8.5)
-     .fillColor(COLOR_LIME)
-     .text(settings.company_division || 'PAINT DIVISION', textLeft, margin + (isA5 ? 17 : 24));
-
-  doc.font('Helvetica')
-     .fontSize(isA5 ? 5.5 : 7.2)
-     .fillColor('#E2E8F0')
-     .text(settings.company_address || '41/10, KMR Complex, Old Bus Stand Road, Perundurai, Erode - 638052', textLeft, margin + (isA5 ? 25 : 35), { width: contentWidth - (textLeft - margin) - (isA5 ? 75 : 110) })
-     .text(`Phone: ${settings.company_phone || '+91 97156 22499'} | GSTIN: ${settings.company_gstin || '33AADFU6496M1ZJ'}`, textLeft, margin + (isA5 ? 35 : 47));
-
-  // Top-Right Header Elements (QUOTATION pill + Quote No + Date + Valid Till at page top)
-  const badgeWidth = isA5 ? 64 : 86;
-  const badgeHeight = isA5 ? 15 : 18;
-  const badgeX = pageWidth - margin - badgeWidth - (isA5 ? 5 : 8);
-  const badgeY = margin + (isA5 ? 4 : 6);
-
-  doc.roundedRect(badgeX, badgeY, badgeWidth, badgeHeight, R_SM).fill(COLOR_LIME);
-  doc.fillColor(COLOR_TEAL_DARK)
-     .font('Helvetica-Bold')
-     .fontSize(isA5 ? 7 : 9)
-     .text('QUOTATION', badgeX, badgeY + (isA5 ? 3.5 : 4.5), { width: badgeWidth, align: 'center' });
-
-  const metaRightW = isA5 ? 100 : 135;
-  const metaRightX = pageWidth - margin - metaRightW - (isA5 ? 5 : 8);
-  const metaTopY = badgeY + badgeHeight + (isA5 ? 2.5 : 3.5);
-
-  doc.fillColor('#FFFFFF')
-     .font('Helvetica-Bold')
-     .fontSize(isA5 ? 7.5 : 9.5)
-     .text(quoteNoDisplay, metaRightX, metaTopY, { width: metaRightW, align: 'right' });
-
-  doc.font('Helvetica')
-     .fontSize(isA5 ? 5.8 : 7.2)
-     .fillColor('#E2E8F0')
-     .text(`Date: ${quoteDateDisplay}`, metaRightX, metaTopY + (isA5 ? 10 : 13), { width: metaRightW, align: 'right' })
-     .text(`Valid Till: ${validDateDisplay}`, metaRightX, metaTopY + (isA5 ? 19 : 24), { width: metaRightW, align: 'right' });
-
-  let curY = margin + headerHeight + (isA5 ? 4 : 6);
-
-  // Customer & Quotation Meta Box (Rounded Card)
-  doc.roundedRect(margin, curY, contentWidth, infoBoxHeight, R_CARD).fillAndStroke('#FFFFFF', COLOR_BORDER);
-  const colWidth = (contentWidth - 16) / 2;
-
-  // Left: BILLED TO / CUSTOMER DETAILS
-  doc.fillColor(COLOR_TEAL)
-     .font('Helvetica-Bold')
-     .fontSize(isA5 ? 6.5 : 8)
-     .text('BILLED TO / CUSTOMER DETAILS:', margin + 8, curY + (isA5 ? 4 : 6));
-
-  doc.fillColor(COLOR_TEXT)
-     .font('Helvetica-Bold')
-     .fontSize(isA5 ? 8 : 10.5)
-     .text(quotation.customer_name || 'Valued Customer', margin + 8, curY + (isA5 ? 14 : 18));
-
-  let custDetailsY = curY + (isA5 ? 24 : 31);
-  const contactParts = [];
-  if (quotation.customer_phone && quotation.customer_phone !== '-') {
-    contactParts.push(`Phone: ${quotation.customer_phone}`);
-  }
-  if (quotation.customer_gstin) {
-    contactParts.push(`GSTIN: ${quotation.customer_gstin}`);
-  }
-  if (contactParts.length > 0) {
-    doc.font('Helvetica')
-       .fontSize(isA5 ? 5.8 : 7.5)
-       .fillColor(COLOR_MUTED)
-       .text(contactParts.join('  |  '), margin + 8, custDetailsY, { width: colWidth, height: 11, ellipsis: true });
-    custDetailsY += (isA5 ? 8 : 10);
-  }
-
-  if (quotation.customer_address) {
-    doc.font('Helvetica')
-       .fontSize(isA5 ? 5.5 : 7)
-       .fillColor(COLOR_MUTED)
-       .text(`Address: ${quotation.customer_address}`, margin + 8, custDetailsY, { width: colWidth, height: 11, ellipsis: true });
-  }
-
-  // Vertical divider between Customer & Quote details
-  doc.moveTo(margin + colWidth + 4, curY + 6)
-     .lineTo(margin + colWidth + 4, curY + infoBoxHeight - 6)
-     .strokeColor(COLOR_BORDER)
-     .lineWidth(0.5)
-     .stroke();
-
-  // Right: QUOTATION META
-  const rightX = margin + colWidth + 10;
-  const rightInnerW = colWidth - 10;
-
-  doc.fillColor(COLOR_TEAL)
-     .font('Helvetica-Bold')
-     .fontSize(isA5 ? 6.5 : 8)
-     .text('QUOTATION META:', rightX, curY + (isA5 ? 4 : 6), { width: rightInnerW, align: 'right' });
-
-  const metaLineY = curY + (isA5 ? 11 : 14);
-  const stepY = isA5 ? 8.5 : 11;
-
-  doc.font('Helvetica').fontSize(isA5 ? 5.8 : 7.5).fillColor(COLOR_MUTED)
-     .text(`Quote No: `, rightX, metaLineY, { width: rightInnerW - 75, align: 'right' });
-  doc.font('Helvetica-Bold').fillColor(COLOR_TEXT)
-     .text(quoteNoDisplay, rightX + rightInnerW - 72, metaLineY, { width: 72, align: 'right' });
-
-  doc.font('Helvetica').fontSize(isA5 ? 5.8 : 7.5).fillColor(COLOR_MUTED)
-     .text(`Date: `, rightX, metaLineY + stepY, { width: rightInnerW - 75, align: 'right' });
-  doc.font('Helvetica-Bold').fillColor(COLOR_TEXT)
-     .text(quoteDateDisplay, rightX + rightInnerW - 72, metaLineY + stepY, { width: 72, align: 'right' });
-
-  doc.font('Helvetica').fontSize(isA5 ? 5.8 : 7.5).fillColor(COLOR_MUTED)
-     .text(`Valid Till: `, rightX, metaLineY + stepY * 2, { width: rightInnerW - 75, align: 'right' });
-  doc.font('Helvetica-Bold').fillColor(COLOR_TEXT)
-     .text(validDateDisplay, rightX + rightInnerW - 72, metaLineY + stepY * 2, { width: 72, align: 'right' });
-
-  // Payment Terms badge positioned safely below Valid Till
-  const pTerms = (quotation.payment_terms || 'Cash').trim();
-  const isCredit = /credit/i.test(pTerms);
-  const pillBg = isCredit ? '#FEF3C7' : '#DCFCE7';
-  const pillFg = isCredit ? '#92400E' : '#166534';
-  const pillBorder = isCredit ? '#FCD34D' : '#86EFAC';
-  const pillW = isA5 ? 64 : 80;
-  const pillH = isA5 ? 9.5 : 12;
-  const pillX = margin + contentWidth - pillW - 6;
-  const pillY = curY + infoBoxHeight - pillH - (isA5 ? 3 : 5);
-
-  doc.roundedRect(pillX, pillY, pillW, pillH, 3).fillAndStroke(pillBg, pillBorder);
-  doc.fillColor(pillFg)
-     .font('Helvetica-Bold')
-     .fontSize(isA5 ? 5 : 6.8)
-     .text(`TERMS: ${pTerms.toUpperCase()}`, pillX, pillY + (isA5 ? 1.8 : 2.5), { width: pillW, align: 'center' });
-
-  curY += infoBoxHeight + (isA5 ? 4 : 6);
+  let currentPageNum = 1;
+  let curY = drawExecutiveHeader(margin);
+  curY = drawCustomerSubheader(curY, false);
 
   // Table bottom limit
   const maxTableBottomY = isSinglePageFit
     ? (pageHeight - margin - bottomBlocksHeight)
-    : (pageHeight - margin - (isA5 ? 20 : 25));
+    : (pageHeight - margin - footerBarHeight - 10);
 
   curY = drawTableHeader(curY);
   let currentPageTableStartY = curY;
@@ -356,9 +362,11 @@ async function generateQuotationPdf(quotation, settings = {}, res = null) {
       doc.rect(margin, currentPageTableStartY - tableHeaderHeight, contentWidth, curY - (currentPageTableStartY - tableHeaderHeight))
          .strokeColor(COLOR_BORDER).lineWidth(0.75).stroke();
 
-      // Add new page
+      // Add new page with the same executive header & subheader
       doc.addPage();
-      curY = drawContinuationHeader(margin);
+      currentPageNum++;
+      curY = drawExecutiveHeader(margin);
+      curY = drawCustomerSubheader(curY, true);
       curY = drawTableHeader(curY);
       currentPageTableStartY = curY;
     }
@@ -425,11 +433,13 @@ async function generateQuotationPdf(quotation, settings = {}, res = null) {
   doc.rect(margin, currentPageTableStartY - tableHeaderHeight, contentWidth, endTableY - (currentPageTableStartY - tableHeaderHeight))
      .strokeColor(COLOR_BORDER).lineWidth(0.75).stroke();
 
-  // If multi-page and not enough room for bottom cards on current page, add final summary page
-  const remainingVertical = pageHeight - margin - endTableY;
-  if (!isSinglePageFit && remainingVertical < bottomBlocksHeight) {
+  // If multi-page and not enough room for bottom cards on current page, wrap to final summary page with same header/subheader
+  const remainingVertical = pageHeight - margin - footerBarHeight - endTableY;
+  if (!isSinglePageFit && remainingVertical < (bottomBlocksHeight - footerBarHeight)) {
     doc.addPage();
-    curY = drawContinuationHeader(margin);
+    currentPageNum++;
+    curY = drawExecutiveHeader(margin);
+    curY = drawCustomerSubheader(curY, true);
   } else if (!isSinglePageFit) {
     curY = endTableY + (isA5 ? 6 : 8);
   } else {
@@ -640,29 +650,25 @@ async function generateQuotationPdf(quotation, settings = {}, res = null) {
   curY += bankCardHeight + (isA5 ? 4 : 6);
 
   // -------------------------------------------------------------
-  // 3. CORPORATE DISCLAIMER & VERIFICATION FOOTER BAR
-  // -------------------------------------------------------------
-  const footY = isSinglePageFit ? (pageHeight - margin - footerBarHeight + (isA5 ? 2 : 4)) : curY;
-  doc.moveTo(margin, footY).lineTo(margin + contentWidth, footY).strokeColor(COLOR_BORDER).lineWidth(0.5).stroke();
-
-  doc.fillColor(COLOR_MUTED).font('Helvetica').fontSize(isA5 ? 4.5 : 5.8)
-     .text('Computer-generated quotation valid without physical signature.', margin, footY + (isA5 ? 3 : 4), { width: contentWidth, align: 'center' });
-  doc.fillColor(COLOR_TEXT).font('Helvetica-Bold').fontSize(isA5 ? 4.8 : 6.2)
-     .text(`UDHAYAM AGENCIES • 41/10, KMR Complex, Old Bus Stand Road, Perundurai - 638052 • Phone: +91 97156 22499 • GSTIN: ${settings.company_gstin || '33AADFU6496M1ZJ'}`, margin, footY + (isA5 ? 9 : 12), { width: contentWidth, align: 'center' });
-
-  // -------------------------------------------------------------
-  // 4. MULTI-PAGE PAGE NUMBERING STAMP (Page X of Y)
+  // 3. MULTI-PAGE PAGE NUMBERING & CORPORATE FOOTER (ALL PAGES)
   // -------------------------------------------------------------
   const range = doc.bufferedPageRange();
   const totalPages = range.count;
 
-  if (totalPages > 1) {
-    for (let p = 0; p < totalPages; p++) {
-      doc.switchToPage(p);
-      const pageNumStr = `Page ${p + 1} of ${totalPages}`;
-      doc.fillColor(COLOR_MUTED).font('Helvetica-Bold').fontSize(isA5 ? 4.8 : 6)
-         .text(pageNumStr, pageWidth - margin - 60, pageHeight - margin + 2, { width: 60, align: 'right' });
-    }
+  for (let p = 0; p < totalPages; p++) {
+    doc.switchToPage(p);
+    const footY = pageHeight - margin - footerBarHeight + (isA5 ? 2 : 4);
+
+    doc.moveTo(margin, footY).lineTo(margin + contentWidth, footY).strokeColor(COLOR_BORDER).lineWidth(0.5).stroke();
+
+    doc.fillColor(COLOR_MUTED).font('Helvetica').fontSize(isA5 ? 4.5 : 5.8)
+       .text('Computer-generated quotation valid without physical signature.', margin, footY + (isA5 ? 2.5 : 3.5), { width: contentWidth - 65, height: 8, ellipsis: true, lineBreak: false, align: 'left' });
+    doc.fillColor(COLOR_TEXT).font('Helvetica-Bold').fontSize(isA5 ? 4.8 : 6.2)
+       .text(`UDHAYAM AGENCIES • 41/10, KMR Complex, Old Bus Stand Road, Perundurai - 638052 • Phone: +91 97156 22499 • GSTIN: ${settings.company_gstin || '33AADFU6496M1ZJ'}`, margin, footY + (isA5 ? 7.5 : 10.5), { width: contentWidth - 65, height: 9, ellipsis: true, lineBreak: false, align: 'left' });
+
+    const pageNumStr = totalPages > 1 ? `Page ${p + 1} of ${totalPages}` : `Page 1 of 1`;
+    doc.fillColor(COLOR_MUTED).font('Helvetica-Bold').fontSize(isA5 ? 4.8 : 6)
+       .text(pageNumStr, pageWidth - margin - 65, footY + (isA5 ? 5 : 7), { width: 65, height: 9, lineBreak: false, align: 'right' });
   }
 
   // End Document
@@ -683,7 +689,7 @@ function generatePriceListPdf(products, sectionName, paperFormat, settings, res)
     compress: false,
     margins: {
       top: isA5 ? 16 : 24,
-      bottom: isA5 ? 14 : 20,
+      bottom: isA5 ? 6 : 8,
       left: isA5 ? 16 : 24,
       right: isA5 ? 16 : 24
     },
