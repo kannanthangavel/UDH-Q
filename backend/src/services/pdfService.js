@@ -796,8 +796,10 @@ function generatePriceListPdf(products, sectionName, paperFormat, settings, res)
   doc.end();
 }
 
+const { generateQuotationPdf: generateQuotationHtmlPdf } = require('./quotationHtmlPdfService');
+
 module.exports = {
-  generateQuotationPdf,
+  generateQuotationPdf: generateQuotationHtmlPdf,
   generatePriceListPdf,
   numberToIndianWords
 };

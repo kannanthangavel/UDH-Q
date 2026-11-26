@@ -37,9 +37,11 @@ router.get('/quote/:identifier', async (req, res) => {
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `inline; filename="${filename}"`);
 
-    generateQuotationPdf(quotationData, settings, res);
+    await generateQuotationPdf(quotationData, settings, res);
   } catch (err) {
-    res.status(500).send(`Failed to generate quotation PDF: ${err.message}`);
+    if (!res.headersSent) {
+      res.status(500).send(`Failed to generate quotation PDF: ${err.message}`);
+    }
   }
 });
 

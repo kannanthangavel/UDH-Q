@@ -723,32 +723,39 @@ router.post('/:id/duplicate', (req, res) => {
   });
 });
 
-// GET /api/quotations/:id/pdf - Stream PDFKit PDF
-router.get('/:id/pdf', (req, res) => {
-  const quote = db.prepare('SELECT * FROM quotations WHERE id = ? OR quotation_number = ?').get(req.params.id, req.params.id);
-  if (!quote) {
-    return res.status(404).json({ error: 'Quotation not found' });
+// GET /api/quotations/:id/pdf - Render HTML+CSS quotation PDF via Puppeteer
+router.get('/:id/pdf', async (req, res) => {
+  try {
+    const quote = db.prepare('SELECT * FROM quotations WHERE id = ? OR quotation_number = ?').get(req.params.id, req.params.id);
+    if (!quote) {
+      return res.status(404).json({ error: 'Quotation not found' });
+    }
+
+    const items = db.prepare('SELECT * FROM quotation_items WHERE quotation_id = ? ORDER BY id ASC').all(quote.id);
+    const quotationData = { ...quote, items };
+
+    // Allow format override from query param if provided (e.g., ?format=a5)
+    if (req.query.format) {
+      quotationData.paper_format = req.query.format.toUpperCase() === 'A5' ? 'A5' : 'A4';
+    }
+
+    const settingsRows = db.prepare('SELECT key, value FROM settings').all();
+    const settings = {};
+    settingsRows.forEach(r => settings[r.key] = r.value);
+
+    const filename = getQuotationPdfFilename(quote.customer_name, quote.quotation_number);
+    const disposition = req.query.download === 'true' ? 'attachment' : 'inline';
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `${disposition}; filename="${filename}"`);
+
+    await generateQuotationPdf(quotationData, settings, res);
+  } catch (err) {
+    console.error('[Quotation PDF Error]:', err);
+    if (!res.headersSent) {
+      res.status(500).json({ error: `Failed to generate quotation PDF: ${err.message}` });
+    }
   }
-
-  const items = db.prepare('SELECT * FROM quotation_items WHERE quotation_id = ? ORDER BY id ASC').all(quote.id);
-  const quotationData = { ...quote, items };
-
-  // Allow format override from query param if provided (e.g., ?format=a5)
-  if (req.query.format) {
-    quotationData.paper_format = req.query.format.toUpperCase() === 'A5' ? 'A5' : 'A4';
-  }
-
-  const settingsRows = db.prepare('SELECT key, value FROM settings').all();
-  const settings = {};
-  settingsRows.forEach(r => settings[r.key] = r.value);
-
-  const filename = getQuotationPdfFilename(quote.customer_name, quote.quotation_number);
-  const disposition = req.query.download === 'true' ? 'attachment' : 'inline';
-
-  res.setHeader('Content-Type', 'application/pdf');
-  res.setHeader('Content-Disposition', `${disposition}; filename="${filename}"`);
-
-  generateQuotationPdf(quotationData, settings, res);
 });
 
 // POST /api/quotations/:id/audit-share - Record WhatsApp or Email sharing

@@ -116,6 +116,7 @@ function calculateQuotationFinancials({
         cgstPercent: isInterstate ? 0 : rate / 2,
         sgstPercent: isInterstate ? 0 : rate / 2,
         igstPercent: isInterstate ? rate : 0,
+        grossTotal: 0,
         taxableValue: 0,
         cgstAmount: 0,
         sgstAmount: 0,
@@ -124,13 +125,18 @@ function calculateQuotationFinancials({
       };
     }
 
-    slabsMap[rate].taxableValue += itemTaxable;
-    slabsMap[rate].totalTaxAmount += itemTax;
+    slabsMap[rate].grossTotal += discountedLineVal;
   }
 
   const taxSlabs = Object.values(slabsMap).sort((a, b) => a.rate - b.rate).map(s => {
-    s.taxableValue = Math.round(s.taxableValue * 100) / 100;
-    s.totalTaxAmount = Math.round(s.totalTaxAmount * 100) / 100;
+    const slabGross = Math.round(s.grossTotal * 100) / 100;
+    if (isTaxInclusive) {
+      s.taxableValue = s.rate > 0 ? Math.round((slabGross / (1 + s.rate / 100)) * 100) / 100 : slabGross;
+      s.totalTaxAmount = Math.round((slabGross - s.taxableValue) * 100) / 100;
+    } else {
+      s.taxableValue = slabGross;
+      s.totalTaxAmount = Math.round((s.taxableValue * (s.rate / 100)) * 100) / 100;
+    }
     if (s.isInterstate) {
       s.igstAmount = s.totalTaxAmount;
       s.cgstAmount = 0;
@@ -139,6 +145,7 @@ function calculateQuotationFinancials({
       s.cgstAmount = Math.round((s.taxableValue * (s.cgstPercent / 100)) * 100) / 100;
       s.sgstAmount = Math.round((s.totalTaxAmount - s.cgstAmount) * 100) / 100;
     }
+    delete s.grossTotal;
     return s;
   });
 
@@ -148,16 +155,9 @@ function calculateQuotationFinancials({
   const totalSgst = Math.round(taxSlabs.reduce((acc, s) => acc + s.sgstAmount, 0) * 100) / 100;
   const totalIgst = Math.round(taxSlabs.reduce((acc, s) => acc + s.igstAmount, 0) * 100) / 100;
 
-  // 4. Grand Total & Round-Off
+  // 4. Grand Total & Round-Off (invariant: taxable + totalTax + delivery + roundOff === grandTotal)
   const deliveryVal = Math.max(0, parseFloat(delivery_charges) || 0);
-  let unroundedTotal = 0;
-
-  if (isTaxInclusive) {
-    unroundedTotal = netAfterDiscount + deliveryVal;
-  } else {
-    unroundedTotal = totalTaxable + totalTax + deliveryVal;
-  }
-  unroundedTotal = Math.round(unroundedTotal * 100) / 100;
+  const unroundedTotal = Math.round((totalTaxable + totalTax + deliveryVal) * 100) / 100;
 
   const roundedGrandTotal = Math.round(unroundedTotal);
   const roundedOff = Math.round((roundedGrandTotal - unroundedTotal) * 100) / 100;

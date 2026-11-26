@@ -2,8 +2,10 @@ FROM node:20-slim
 
 WORKDIR /app
 
-# Install native dependencies required for better-sqlite3 build
-RUN apt-get update && apt-get install -y python3 make g++ && rm -rf /var/lib/apt/lists/*
+# Install native dependencies for better-sqlite3 and Chromium for Puppeteer PDF rendering
+RUN apt-get update && apt-get install -y python3 make g++ chromium fonts-noto-core && rm -rf /var/lib/apt/lists/*
+ENV PUPPETEER_SKIP_DOWNLOAD=true
+ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
 
 COPY package*.json ./
 RUN npm install --omit=dev
