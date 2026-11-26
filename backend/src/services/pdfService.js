@@ -250,7 +250,7 @@ async function generateQuotationPdf(quotation, settings = {}, res = null) {
       return y + contH + (isA5 ? 3 : 5);
     }
 
-    const boxH = isA5 ? 60 : 74;
+    const boxH = isA5 ? 68 : 82;
     doc.roundedRect(margin, y, contentWidth, boxH, R_CARD).fillAndStroke('#FFFFFF', COLOR_BORDER);
     const colWidth = (contentWidth - 16) / 2;
 
@@ -285,7 +285,7 @@ async function generateQuotationPdf(quotation, settings = {}, res = null) {
       doc.font('Helvetica')
          .fontSize(isA5 ? 5.5 : 7)
          .fillColor(COLOR_MUTED)
-         .text(`Address: ${quotation.customer_address}`, margin + 8, custDetailsY, { width: colWidth, height: 18, ellipsis: true });
+         .text(`Address: ${quotation.customer_address}`, margin + 8, custDetailsY, { width: colWidth, height: boxH - (custDetailsY - y) - 6, ellipsis: true });
     }
 
     // Vertical divider between Customer & Quote details
@@ -304,8 +304,8 @@ async function generateQuotationPdf(quotation, settings = {}, res = null) {
        .fontSize(isA5 ? 6.5 : 8)
        .text('QUOTATION META:', rightX, y + (isA5 ? 4 : 6), { width: rightInnerW, align: 'right' });
 
-    const metaLineY = y + (isA5 ? 13 : 17);
-    const stepY = isA5 ? 9 : 11.5;
+    const metaLineY = y + (isA5 ? 14 : 18);
+    const stepY = isA5 ? 10.5 : 13;
 
     // Line 1: Quote No
     doc.font('Helvetica').fontSize(isA5 ? 5.8 : 7.5).fillColor(COLOR_MUTED)
@@ -319,28 +319,31 @@ async function generateQuotationPdf(quotation, settings = {}, res = null) {
     doc.font('Helvetica-Bold').fillColor(COLOR_TEXT)
        .text(quoteDateDisplay, rightX + rightInnerW - 72, metaLineY + stepY, { width: 72, align: 'right' });
 
-    // Line 3: Valid Till
+    // Line 3: Valid Till (Cleanly isolated on its own row, zero overlap!)
     doc.font('Helvetica').fontSize(isA5 ? 5.8 : 7.5).fillColor(COLOR_MUTED)
        .text(`Valid Till: `, rightX, metaLineY + stepY * 2, { width: rightInnerW - 75, align: 'right' });
     doc.font('Helvetica-Bold').fillColor(COLOR_TEXT)
        .text(validDateDisplay, rightX + rightInnerW - 72, metaLineY + stepY * 2, { width: 72, align: 'right' });
 
-    // Payment Terms badge positioned safely on its own row below Valid Till (Zero overlap!)
+    // Line 4: Payment Terms Badge (Dedicated row 4, guaranteed gap below Valid Till)
     const pTerms = (quotation.payment_terms || 'Cash').trim();
     const isCredit = /credit/i.test(pTerms);
     const pillBg = isCredit ? '#FEF3C7' : '#DCFCE7';
     const pillFg = isCredit ? '#92400E' : '#166534';
     const pillBorder = isCredit ? '#FCD34D' : '#86EFAC';
-    const pillW = isA5 ? 64 : 80;
-    const pillH = isA5 ? 9.5 : 12;
-    const pillX = margin + contentWidth - pillW - 6;
-    const pillY = y + boxH - pillH - (isA5 ? 3 : 5);
+    const pillW = isA5 ? 64 : 78;
+    const pillH = isA5 ? 10 : 12;
+    const pillX = rightX + rightInnerW - pillW;
+    const pillY = metaLineY + stepY * 3 - (isA5 ? 1 : 1.5);
+
+    doc.font('Helvetica').fontSize(isA5 ? 5.8 : 7.5).fillColor(COLOR_MUTED)
+       .text('Payment Terms: ', rightX, metaLineY + stepY * 3, { width: rightInnerW - pillW - 6, align: 'right' });
 
     doc.roundedRect(pillX, pillY, pillW, pillH, 3).fillAndStroke(pillBg, pillBorder);
     doc.fillColor(pillFg)
        .font('Helvetica-Bold')
        .fontSize(isA5 ? 5 : 6.8)
-       .text(`TERMS: ${pTerms.toUpperCase()}`, pillX, pillY + (isA5 ? 1.8 : 2.5), { width: pillW, align: 'center' });
+       .text(`TERMS: ${pTerms.toUpperCase()}`, pillX, pillY + (isA5 ? 2 : 2.5), { width: pillW, align: 'center' });
 
     return y + boxH + (isA5 ? 4 : 6);
   }
@@ -367,7 +370,7 @@ async function generateQuotationPdf(quotation, settings = {}, res = null) {
     estimatedTableHeight += getItemRowHeight(it);
   }
 
-  const spaceOnFirstPage = pageHeight - margin - headerHeight - (isA5 ? 4 : 6) - (isA5 ? 60 : 74) - (isA5 ? 4 : 6) - tableHeaderHeight - bottomBlocksHeight;
+  const spaceOnFirstPage = pageHeight - margin - headerHeight - (isA5 ? 4 : 6) - (isA5 ? 68 : 82) - (isA5 ? 4 : 6) - tableHeaderHeight - bottomBlocksHeight;
   const isSinglePageFit = estimatedTableHeight <= spaceOnFirstPage;
 
   let currentPageNum = 1;
@@ -697,13 +700,11 @@ async function generateQuotationPdf(quotation, settings = {}, res = null) {
     doc.moveTo(margin, footY).lineTo(margin + contentWidth, footY).strokeColor(COLOR_BORDER).lineWidth(0.5).stroke();
 
     doc.fillColor(COLOR_MUTED).font('Helvetica').fontSize(isA5 ? 4.5 : 5.8)
-       .text('Computer-generated quotation valid without physical signature.', margin, footY + (isA5 ? 2.5 : 3.5), { width: contentWidth - 65, height: 8, ellipsis: true, lineBreak: false, align: 'left' });
-    doc.fillColor(COLOR_TEXT).font('Helvetica-Bold').fontSize(isA5 ? 4.8 : 6.2)
-       .text(`UDHAYAM AGENCIES • 41/10, KMR Complex, Old Bus Stand Road, Perundurai - 638052 • Phone: +91 97156 22499 • GSTIN: ${settings.company_gstin || '33AADFU6496M1ZJ'}`, margin, footY + (isA5 ? 7.5 : 10.5), { width: contentWidth - 65, height: 9, ellipsis: true, lineBreak: false, align: 'left' });
+       .text('Computer-generated quotation valid without physical signature.', margin, footY + (isA5 ? 3 : 4), { width: contentWidth - 65, height: 8, ellipsis: true, lineBreak: false, align: 'left' });
 
     const pageNumStr = totalPages > 1 ? `Page ${p + 1} of ${totalPages}` : `Page 1 of 1`;
     doc.fillColor(COLOR_MUTED).font('Helvetica-Bold').fontSize(isA5 ? 4.8 : 6)
-       .text(pageNumStr, pageWidth - margin - 65, footY + (isA5 ? 5 : 7), { width: 65, height: 9, lineBreak: false, align: 'right' });
+       .text(pageNumStr, pageWidth - margin - 65, footY + (isA5 ? 3 : 4), { width: 65, height: 8, lineBreak: false, align: 'right' });
   }
 
   // End Document

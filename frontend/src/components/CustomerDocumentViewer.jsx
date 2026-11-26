@@ -173,7 +173,7 @@ export default function CustomerDocumentViewer() {
       <footer className="bg-white border-t border-slate-200 py-4 text-center text-xs text-slate-500">
         <p className="font-semibold text-slate-700">UDHAYAM AGENCIES • Paint Division</p>
         <p className="text-[11px] text-slate-400 mt-0.5">
-          41/10, KMR Complex, Old Bus Stand Road, Perundurai, Erode - 638052 | Phone: +91 97156 22499 | GSTIN: 33AADFU6496M1ZJ
+          Official Customer Document Portal • Perundurai
         </p>
       </footer>
 

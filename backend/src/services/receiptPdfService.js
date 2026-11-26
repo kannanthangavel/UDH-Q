@@ -340,8 +340,6 @@ function generateReceiptPdf(receipt, settings = {}, res = null) {
 
   doc.fillColor(COLOR_MUTED).font('Helvetica').fontSize(isA5 ? 5 : 6.5)
      .text('Computer-generated payment receipt valid without physical signature.', margin, footY + (isA5 ? 3 : 4), { width: contentWidth, align: 'center' });
-  doc.fillColor(COLOR_TEXT).font('Helvetica-Bold').fontSize(isA5 ? 5.2 : 6.8)
-     .text(`UDHAYAM AGENCIES • 41/10, KMR Complex, Old Bus Stand Road, Perundurai - 638052 • Phone: ${settings.company_phone || '+91 97156 22499'} • GSTIN: ${settings.company_gstin || '33AADFU6496M1ZJ'}`, margin, footY + (isA5 ? 10 : 13), { width: contentWidth, align: 'center' });
 
   // End Document (Guaranteed single page fit!)
   doc.end();

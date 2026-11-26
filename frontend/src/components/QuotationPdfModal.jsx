@@ -547,7 +547,6 @@ export default function QuotationPdfModal({ quotation, onClose, onEdit, onDelete
             {/* Footer Corporate Verification Bar */}
             <div className="pt-2 border-t border-slate-200 text-center text-slate-500 text-[10px] space-y-0.5">
               <p>Computer-generated quotation valid without physical signature.</p>
-              <p className="font-bold text-slate-700">UDHAYAM AGENCIES • 41/10, KMR Complex, Old Bus Stand Road, Perundurai - 638052 • Phone: +91 97156 22499 • GSTIN: {settings?.company_gstin || '33AADFU6496M1ZJ'}</p>
             </div>
 
             </div>
