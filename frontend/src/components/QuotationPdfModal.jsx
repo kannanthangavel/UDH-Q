@@ -280,62 +280,41 @@ export default function QuotationPdfModal({ quotation, onClose, onEdit, onDelete
                   }`}>
                     QUOTATION
                   </div>
-                  <div className={`mt-1 text-emerald-100 ${isA5 ? 'text-[9px]' : 'text-[10.5px]'} leading-tight`}>
-                    <p className="font-bold text-white text-xs tracking-wider tabular-nums">{quotation.quotation_number}</p>
+                  <div className={`mt-1 text-emerald-100 ${isA5 ? 'text-[9px]' : 'text-[10.5px]'} leading-tight space-y-0.5`}>
+                    <p className="font-bold text-white text-xs tracking-wider tabular-nums">Q.No: {quotation.quotation_number}</p>
                     <p className="tabular-nums">Date: {formatToDMY(quotation.quotation_date) || formatToDMY(new Date())}</p>
                     <p className="tabular-nums text-slate-200">Valid Till: {formatToDMY(quotation.validity_date, quotation.quotation_date, 15)}</p>
+                    <p className={`font-extrabold uppercase tracking-wide ${
+                      /credit/i.test(quotation.payment_terms || '') ? 'text-amber-300' : 'text-[#BEF264]'
+                    }`}>
+                      Terms: {(quotation.payment_terms || 'Cash').toUpperCase()}
+                    </p>
                   </div>
                 </div>
               </div>
 
-              {/* Customer & Quote Meta Bar */}
-              <div className={`mt-2.5 sm:mt-3 grid grid-cols-2 gap-2 sm:gap-3.5 bg-slate-50/90 border border-slate-200 rounded-xl ${
+              {/* Full-Width Customer Details Bar (No duplicate Quote Meta) */}
+              <div className={`mt-2.5 sm:mt-3 bg-slate-50/90 border border-slate-200 rounded-xl ${
                 isA5 ? 'p-2 text-[10px]' : 'p-3.5 text-xs'
               }`}>
-                <div>
-                  <span className={`${
-                    isA5 ? 'text-[8px]' : 'text-[9px]'
-                  } font-extrabold text-[#00545C] uppercase tracking-wider block mb-0.5`}>
-                    BILLED TO / CUSTOMER DETAILS:
-                  </span>
-                  <p className={`font-extrabold text-slate-900 ${isA5 ? 'text-xs' : 'text-xs sm:text-sm'}`}>{quotation.customer_name}</p>
+                <span className={`${
+                  isA5 ? 'text-[8px]' : 'text-[9px]'
+                } font-extrabold text-[#00545C] uppercase tracking-wider block mb-0.5`}>
+                  BILLED TO / CUSTOMER DETAILS:
+                </span>
+                <p className={`font-extrabold text-slate-900 ${isA5 ? 'text-xs' : 'text-xs sm:text-sm'}`}>{quotation.customer_name}</p>
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-0.5 mt-0.5">
                   <p className={`${isA5 ? 'text-[10px]' : 'text-[11px]'} text-slate-600 font-medium tabular-nums`}>Phone: {quotation.customer_phone}</p>
+                  {quotation.customer_gstin && (
+                    <p className={`${isA5 ? 'text-[10px]' : 'text-[11px]'} text-slate-600 font-medium`}>GSTIN: {quotation.customer_gstin}</p>
+                  )}
                   {quotation.customer_email && (
                     <p className={`${isA5 ? 'text-[10px]' : 'text-[11px]'} text-slate-600`}>Email: {quotation.customer_email}</p>
                   )}
-                  {quotation.customer_address && (
-                    <p className={`${isA5 ? 'text-[10px]' : 'text-[11px]'} text-slate-600 mt-0.5 leading-snug`}>{quotation.customer_address}</p>
-                  )}
                 </div>
-                <div className="text-right flex flex-col justify-between">
-                  <div>
-                    <p className={`${isA5 ? 'text-[10px]' : 'text-[11px]'} text-slate-700`}>
-                      <span className="text-slate-500">Quote No:</span>{' '}
-                      <span className="font-bold text-slate-900 tabular-nums">{quotation.quotation_number}</span>
-                    </p>
-                    <p className={`${isA5 ? 'text-[10px]' : 'text-[11px]'} text-slate-700 mt-0.5`}>
-                      <span className="text-slate-500">Date:</span>{' '}
-                      <span className="font-bold text-slate-900 tabular-nums">
-                        {formatToDMY(quotation.quotation_date) || formatToDMY(new Date())}
-                      </span>
-                    </p>
-                    <p className={`${isA5 ? 'text-[10px]' : 'text-[11px]'} text-slate-700 mt-0.5`}>
-                      <span className="text-slate-500">Valid Till:</span>{' '}
-                      <span className="font-bold text-slate-900 tabular-nums">
-                        {formatToDMY(quotation.validity_date, quotation.quotation_date, 15)}
-                      </span>
-                    </p>
-                  </div>
-                  <div className="mt-2 flex justify-end">
-                    <span className={`inline-block px-2.5 py-0.5 rounded text-[10px] font-extrabold uppercase shadow-2xs ${
-                      /credit/i.test(quotation.payment_terms || '')
-                        ? 'bg-amber-100 text-amber-900 border border-amber-300'
-                        : 'bg-emerald-100 text-emerald-900 border border-emerald-300'
-                    }`}>
-                      TERMS: {(quotation.payment_terms || 'Cash').toUpperCase()}
-                    </span>
-                  </div>
-                </div>
+                {quotation.customer_address && (
+                  <p className={`${isA5 ? 'text-[10px]' : 'text-[11px]'} text-slate-600 mt-0.5 leading-snug`}>Address: {quotation.customer_address}</p>
+                )}
               </div>
 
               {/* Line Items Table with Clean Alignment */}
@@ -488,8 +467,8 @@ export default function QuotationPdfModal({ quotation, onClose, onEdit, onDelete
                     BANK DETAILS:
                   </span>
                   <p className="font-extrabold text-slate-900 leading-tight">{settings?.bank_account_name || 'Udhayam Agencies'}</p>
-                  <p className="font-mono font-bold text-slate-900 leading-tight">ACC No: {settings?.bank_account_no || '6659330152'}</p>
-                  <p className="text-slate-700 leading-tight">{settings?.bank_name ? `${settings.bank_name} - ${settings.bank_branch || 'Perundurai Branch'}` : 'Indian Bank - Perundurai Branch'}</p>
+                  <p className="font-mono font-bold text-slate-900 leading-tight">Acc Number: {settings?.bank_account_no || '6659330152'}</p>
+                  <p className="text-slate-700 leading-tight">{settings?.bank_name ? `${settings.bank_name} | ${settings.bank_branch || 'Perundurai Branch'}` : 'Indian Bank | Perundurai Branch'}</p>
                   <p className="font-bold text-[#004D40] leading-tight">IFSC Code: {settings?.bank_ifsc?.replace(/^IFSC\s*(Code)?\s*[:\-]\s*/i, '') || 'IDIB000P155'}</p>
                 </div>
 

@@ -98,9 +98,9 @@ async function generateQuotationPdf(quotation, settings = {}, res = null) {
   const validDateDisplay = formatToDMY(quotation.validity_date, quotation.quotation_date, 15);
 
   // Pre-calculate heights
-  const headerHeight = isA5 ? 52 : 72;
+  const headerHeight = isA5 ? 58 : 78;
   const accentHeight = isA5 ? 2.5 : 3.5;
-  const infoBoxHeight = isA5 ? 56 : 72;
+  const subheaderBoxH = isA5 ? 46 : 58;
   const tableHeaderHeight = isA5 ? 15 : 19;
   const footerBarHeight = isA5 ? 16 : 20;
   const bankCardHeight = isA5 ? 56 : 70;
@@ -196,65 +196,67 @@ async function generateQuotationPdf(quotation, settings = {}, res = null) {
        .fillColor('#E2E8F0')
        .text(`Phone: ${settings.company_phone || '+91 97156 22499'} | GSTIN: ${settings.company_gstin || '33AADFU6496M1ZJ'}`, textLeft, topY + (isA5 ? 35 : 47));
 
-    // Top-Right Header Elements (QUOTATION pill + Quote No + Date + Valid Till at page top)
+    // Top-Right Header Elements (QUOTATION pill + Q.No + Date + Valid Till + Terms - ONLY ONCE per page)
     const badgeWidth = isA5 ? 64 : 86;
-    const badgeHeight = isA5 ? 15 : 18;
+    const badgeHeight = isA5 ? 13 : 16;
     const badgeX = pageWidth - margin - badgeWidth - (isA5 ? 5 : 8);
-    const badgeY = topY + (isA5 ? 4 : 6);
+    const badgeY = topY + (isA5 ? 3.5 : 5);
 
     doc.roundedRect(badgeX, badgeY, badgeWidth, badgeHeight, R_SM).fill(COLOR_LIME);
     doc.fillColor(COLOR_TEAL_DARK)
        .font('Helvetica-Bold')
-       .fontSize(isA5 ? 7 : 9)
-       .text('QUOTATION', badgeX, badgeY + (isA5 ? 3.5 : 4.5), { width: badgeWidth, align: 'center' });
+       .fontSize(isA5 ? 6.8 : 8.8)
+       .text('QUOTATION', badgeX, badgeY + (isA5 ? 3 : 4), { width: badgeWidth, align: 'center' });
 
-    const metaRightW = isA5 ? 100 : 135;
+    const metaRightW = isA5 ? 105 : 140;
     const metaRightX = pageWidth - margin - metaRightW - (isA5 ? 5 : 8);
     const metaTopY = badgeY + badgeHeight + (isA5 ? 2.5 : 3.5);
 
     doc.fillColor('#FFFFFF')
        .font('Helvetica-Bold')
-       .fontSize(isA5 ? 7.5 : 9.5)
-       .text(quoteNoDisplay, metaRightX, metaTopY, { width: metaRightW, align: 'right' });
+       .fontSize(isA5 ? 7.2 : 9.2)
+       .text(`Q.No: ${quoteNoDisplay}`, metaRightX, metaTopY, { width: metaRightW, align: 'right' });
 
     doc.font('Helvetica')
-       .fontSize(isA5 ? 5.8 : 7.2)
+       .fontSize(isA5 ? 5.6 : 7.2)
        .fillColor('#E2E8F0')
-       .text(`Date: ${quoteDateDisplay}`, metaRightX, metaTopY + (isA5 ? 10 : 13), { width: metaRightW, align: 'right' });
+       .text(`Date: ${quoteDateDisplay}`, metaRightX, metaTopY + (isA5 ? 9 : 11.5), { width: metaRightW, align: 'right' });
 
     doc.font('Helvetica')
-       .fontSize(isA5 ? 5.8 : 7.2)
+       .fontSize(isA5 ? 5.6 : 7.2)
        .fillColor('#E2E8F0')
-       .text(`Valid Till: ${validDateDisplay}`, metaRightX, metaTopY + (isA5 ? 19 : 24), { width: metaRightW, align: 'right' });
+       .text(`Valid Till: ${validDateDisplay}`, metaRightX, metaTopY + (isA5 ? 17.5 : 22.5), { width: metaRightW, align: 'right' });
+
+    const pTerms = (quotation.payment_terms || 'Cash').trim();
+    const isCredit = /credit/i.test(pTerms);
+    doc.font('Helvetica-Bold')
+       .fontSize(isA5 ? 5.6 : 7.2)
+       .fillColor(isCredit ? '#FDE68A' : '#BEF264')
+       .text(`Terms: ${pTerms.toUpperCase()}`, metaRightX, metaTopY + (isA5 ? 26 : 33.5), { width: metaRightW, align: 'right' });
 
     return topY + headerHeight + (isA5 ? 4 : 6);
   }
 
   function drawCustomerSubheader(y, isContinuation = false) {
     if (isContinuation) {
-      const contH = isA5 ? 20 : 25;
+      const contH = isA5 ? 18 : 22;
       doc.roundedRect(margin, y, contentWidth, contH, R_SM).fillAndStroke('#F8FAFC', COLOR_BORDER);
 
-      const pTerms = (quotation.payment_terms || 'Cash').trim();
       const leftParts = [`BILLED TO: ${quotation.customer_name || 'Customer'}`];
       if (quotation.customer_phone && quotation.customer_phone !== '-') leftParts.push(`Ph: ${quotation.customer_phone}`);
       if (quotation.customer_gstin) leftParts.push(`GSTIN: ${quotation.customer_gstin}`);
 
       doc.fillColor(COLOR_TEAL).font('Helvetica-Bold').fontSize(isA5 ? 5.5 : 7.2)
-         .text(leftParts.join('  |  '), margin + 6, y + (isA5 ? 4.5 : 6), { width: contentWidth * 0.52, height: contH - 8, ellipsis: true });
-
-      const rightText = `Quote: ${quoteNoDisplay}  •  Valid Till: ${validDateDisplay}  •  TERMS: ${pTerms.toUpperCase()}`;
-      doc.font('Helvetica-Bold').fontSize(isA5 ? 5.5 : 7.2).fillColor(COLOR_TEXT)
-         .text(rightText, margin + contentWidth * 0.52, y + (isA5 ? 4.5 : 6), { width: contentWidth * 0.46, align: 'right', ellipsis: true });
+         .text(leftParts.join('  |  '), margin + 8, y + (isA5 ? 4.5 : 6), { width: contentWidth - 16, height: contH - 8, ellipsis: true });
 
       return y + contH + (isA5 ? 3 : 5);
     }
 
-    const boxH = isA5 ? 68 : 82;
+    const boxH = subheaderBoxH;
     doc.roundedRect(margin, y, contentWidth, boxH, R_CARD).fillAndStroke('#FFFFFF', COLOR_BORDER);
-    const colWidth = (contentWidth - 16) / 2;
+    const fullInnerW = contentWidth - 16;
 
-    // Left: BILLED TO / CUSTOMER DETAILS
+    // Full-width: BILLED TO / CUSTOMER DETAILS (No duplicate Quote Meta)
     doc.fillColor(COLOR_TEAL)
        .font('Helvetica-Bold')
        .fontSize(isA5 ? 6.5 : 8)
@@ -263,9 +265,9 @@ async function generateQuotationPdf(quotation, settings = {}, res = null) {
     doc.fillColor(COLOR_TEXT)
        .font('Helvetica-Bold')
        .fontSize(isA5 ? 8 : 10.5)
-       .text(quotation.customer_name || 'Valued Customer', margin + 8, y + (isA5 ? 13 : 18), { width: colWidth, height: 12, ellipsis: true });
+       .text(quotation.customer_name || 'Valued Customer', margin + 8, y + (isA5 ? 13 : 17), { width: fullInnerW, height: 12, ellipsis: true });
 
-    let custDetailsY = y + (isA5 ? 24 : 32);
+    let custDetailsY = y + (isA5 ? 23 : 30);
     const contactParts = [];
     if (quotation.customer_phone && quotation.customer_phone !== '-') {
       contactParts.push(`Phone: ${quotation.customer_phone}`);
@@ -277,7 +279,7 @@ async function generateQuotationPdf(quotation, settings = {}, res = null) {
       doc.font('Helvetica')
          .fontSize(isA5 ? 5.8 : 7.5)
          .fillColor(COLOR_MUTED)
-         .text(contactParts.join('  |  '), margin + 8, custDetailsY, { width: colWidth, height: 10, ellipsis: true });
+         .text(contactParts.join('  |  '), margin + 8, custDetailsY, { width: fullInnerW, height: 10, ellipsis: true });
       custDetailsY += (isA5 ? 8 : 11);
     }
 
@@ -285,57 +287,8 @@ async function generateQuotationPdf(quotation, settings = {}, res = null) {
       doc.font('Helvetica')
          .fontSize(isA5 ? 5.5 : 7)
          .fillColor(COLOR_MUTED)
-         .text(`Address: ${quotation.customer_address}`, margin + 8, custDetailsY, { width: colWidth, height: boxH - (custDetailsY - y) - 6, ellipsis: true });
+         .text(`Address: ${quotation.customer_address}`, margin + 8, custDetailsY, { width: fullInnerW, height: boxH - (custDetailsY - y) - 4, ellipsis: true });
     }
-
-    // Vertical divider between Customer & Quote details
-    doc.moveTo(margin + colWidth + 4, y + 6)
-       .lineTo(margin + colWidth + 4, y + boxH - 6)
-       .strokeColor(COLOR_BORDER)
-       .lineWidth(0.5)
-       .stroke();
-
-    // Right: Quotation Details (Quote No, Date, Valid Till, Terms)
-    const rightX = margin + colWidth + 10;
-    const rightInnerW = colWidth - 10;
-
-    const metaLineY = y + (isA5 ? 9 : 12);
-    const stepY = isA5 ? 11.5 : 14.5;
-
-    // Line 1: Quote No
-    doc.font('Helvetica').fontSize(isA5 ? 5.8 : 7.5).fillColor(COLOR_MUTED)
-       .text(`Quote No: `, rightX, metaLineY, { width: rightInnerW - 75, align: 'right' });
-    doc.font('Helvetica-Bold').fillColor(COLOR_TEXT)
-       .text(quoteNoDisplay, rightX + rightInnerW - 72, metaLineY, { width: 72, align: 'right' });
-
-    // Line 2: Date
-    doc.font('Helvetica').fontSize(isA5 ? 5.8 : 7.5).fillColor(COLOR_MUTED)
-       .text(`Date: `, rightX, metaLineY + stepY, { width: rightInnerW - 75, align: 'right' });
-    doc.font('Helvetica-Bold').fillColor(COLOR_TEXT)
-       .text(quoteDateDisplay, rightX + rightInnerW - 72, metaLineY + stepY, { width: 72, align: 'right' });
-
-    // Line 3: Valid Till (Cleanly isolated on its own row, zero overlap!)
-    doc.font('Helvetica').fontSize(isA5 ? 5.8 : 7.5).fillColor(COLOR_MUTED)
-       .text(`Valid Till: `, rightX, metaLineY + stepY * 2, { width: rightInnerW - 75, align: 'right' });
-    doc.font('Helvetica-Bold').fillColor(COLOR_TEXT)
-       .text(validDateDisplay, rightX + rightInnerW - 72, metaLineY + stepY * 2, { width: 72, align: 'right' });
-
-    // Line 4: Payment Terms Badge (Dedicated row 4, guaranteed gap below Valid Till)
-    const pTerms = (quotation.payment_terms || 'Cash').trim();
-    const isCredit = /credit/i.test(pTerms);
-    const pillBg = isCredit ? '#FEF3C7' : '#DCFCE7';
-    const pillFg = isCredit ? '#92400E' : '#166534';
-    const pillBorder = isCredit ? '#FCD34D' : '#86EFAC';
-    const pillW = isA5 ? 64 : 78;
-    const pillH = isA5 ? 10 : 12;
-    const pillX = rightX + rightInnerW - pillW;
-    const pillY = metaLineY + stepY * 3 - (isA5 ? 1 : 1.5);
-
-    doc.roundedRect(pillX, pillY, pillW, pillH, 3).fillAndStroke(pillBg, pillBorder);
-    doc.fillColor(pillFg)
-       .font('Helvetica-Bold')
-       .fontSize(isA5 ? 5 : 6.8)
-       .text(`TERMS: ${pTerms.toUpperCase()}`, pillX, pillY + (isA5 ? 2 : 2.5), { width: pillW, align: 'center' });
 
     return y + boxH + (isA5 ? 4 : 6);
   }
@@ -362,7 +315,7 @@ async function generateQuotationPdf(quotation, settings = {}, res = null) {
     estimatedTableHeight += getItemRowHeight(it);
   }
 
-  const spaceOnFirstPage = pageHeight - margin - headerHeight - (isA5 ? 4 : 6) - (isA5 ? 68 : 82) - (isA5 ? 4 : 6) - tableHeaderHeight - bottomBlocksHeight;
+  const spaceOnFirstPage = pageHeight - margin - headerHeight - (isA5 ? 4 : 6) - subheaderBoxH - (isA5 ? 4 : 6) - tableHeaderHeight - bottomBlocksHeight;
   const isSinglePageFit = estimatedTableHeight <= spaceOnFirstPage;
 
   let currentPageNum = 1;
@@ -620,10 +573,10 @@ async function generateQuotationPdf(quotation, settings = {}, res = null) {
 
   doc.fillColor(COLOR_TEXT).font('Helvetica-Bold').fontSize(isA5 ? 6 : 8)
      .text(accName, cx + 6, curY + (isA5 ? 12 : 15), { width: bCol1W - 10 });
-  doc.font('Helvetica-Bold').fontSize(isA5 ? 6 : 8)
-     .text(`ACC No: ${accNo}`, cx + 6, curY + (isA5 ? 20 : 25), { width: bCol1W - 10 });
+  doc.font('Helvetica-Bold').fontSize(isA5 ? 5.8 : 7.8)
+     .text(`Acc Number: ${accNo}`, cx + 6, curY + (isA5 ? 20 : 25), { width: bCol1W - 10 });
   doc.font('Helvetica').fontSize(isA5 ? 5.2 : 7)
-     .text(`${bName} - ${bBranch}`, cx + 6, curY + (isA5 ? 28 : 35), { width: bCol1W - 10 });
+     .text(`${bName} | ${bBranch}`, cx + 6, curY + (isA5 ? 28 : 35), { width: bCol1W - 10 });
   doc.font('Helvetica-Bold').fillColor(COLOR_TEAL).fontSize(isA5 ? 5.5 : 7.2)
      .text(`IFSC Code: ${ifscClean}`, cx + 6, curY + (isA5 ? 36 : 45), { width: bCol1W - 10 });
 
