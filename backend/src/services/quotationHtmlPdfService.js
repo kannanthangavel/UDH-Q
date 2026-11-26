@@ -144,13 +144,15 @@ async function resolveLaunchOptions() {
     }
 
     try {
-      const chromium = require('@sparticuz/chromium');
+      const mod = await import('@sparticuz/chromium');
+      const chromium = mod.default || mod;
       const sparticuzPath = await chromium.executablePath();
       if (sparticuzPath && fs.existsSync(sparticuzPath)) {
         return {
           headless: true,
           executablePath: sparticuzPath,
-          args: [...chromium.args, '--disable-dev-shm-usage']
+          args: [...chromium.args, '--disable-dev-shm-usage'],
+          _sparticuzMod: mod
         };
       }
     } catch (err) {
@@ -1046,10 +1048,36 @@ async function generateQuotationPdf(quotation, settings = {}, res = null) {
   const pdfBuffer = await runQueued(async () => {
     let browser;
     try {
-      browser = await puppeteer.launch({
-        ...launchOptions,
-        timeout: 30000
-      });
+      const { _sparticuzMod, ...puppeteerOpts } = launchOptions;
+      try {
+        browser = await puppeteer.launch({
+          ...puppeteerOpts,
+          timeout: 30000
+        });
+      } catch (launchErr) {
+        if (
+          process.platform === 'linux' &&
+          _sparticuzMod &&
+          /shared libraries|libnss3|libatk|libgbm|libasound|cannot open shared object/i.test(launchErr.message || '')
+        ) {
+          const os = require('os');
+          const { setupLambdaEnvironment, inflate } = _sparticuzMod;
+          const pkgRoot = path.resolve(path.dirname(require.resolve('@sparticuz/chromium')), '..');
+          const al2023Archive = path.join(pkgRoot, 'bin', 'al2023.tar.br');
+          if (typeof setupLambdaEnvironment === 'function' && typeof inflate === 'function' && fs.existsSync(al2023Archive)) {
+            setupLambdaEnvironment(path.join(os.tmpdir(), 'al2023', 'lib'));
+            await inflate(al2023Archive);
+            browser = await puppeteer.launch({
+              ...puppeteerOpts,
+              timeout: 30000
+            });
+          } else {
+            throw launchErr;
+          }
+        } else {
+          throw launchErr;
+        }
+      }
 
       const page = await browser.newPage();
       await page.setContent(html, { waitUntil: 'domcontentloaded', timeout: 30000 });
