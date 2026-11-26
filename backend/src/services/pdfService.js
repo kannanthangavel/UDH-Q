@@ -231,6 +231,25 @@ async function generateQuotationPdf(quotation, settings = {}, res = null) {
   }
 
   function drawCustomerSubheader(y, isContinuation = false) {
+    if (isContinuation) {
+      const contH = isA5 ? 20 : 25;
+      doc.roundedRect(margin, y, contentWidth, contH, R_SM).fillAndStroke('#F8FAFC', COLOR_BORDER);
+
+      const pTerms = (quotation.payment_terms || 'Cash').trim();
+      const leftParts = [`BILLED TO: ${quotation.customer_name || 'Customer'}`];
+      if (quotation.customer_phone && quotation.customer_phone !== '-') leftParts.push(`Ph: ${quotation.customer_phone}`);
+      if (quotation.customer_gstin) leftParts.push(`GSTIN: ${quotation.customer_gstin}`);
+
+      doc.fillColor(COLOR_TEAL).font('Helvetica-Bold').fontSize(isA5 ? 5.5 : 7.2)
+         .text(leftParts.join('  |  '), margin + 6, y + (isA5 ? 4.5 : 6), { width: contentWidth * 0.52, height: contH - 8, ellipsis: true });
+
+      const rightText = `Quote: ${quoteNoDisplay}  •  Valid Till: ${validDateDisplay}  •  TERMS: ${pTerms.toUpperCase()}`;
+      doc.font('Helvetica-Bold').fontSize(isA5 ? 5.5 : 7.2).fillColor(COLOR_TEXT)
+         .text(rightText, margin + contentWidth * 0.52, y + (isA5 ? 4.5 : 6), { width: contentWidth * 0.46, align: 'right', ellipsis: true });
+
+      return y + contH + (isA5 ? 3 : 5);
+    }
+
     const boxH = isA5 ? 60 : 74;
     doc.roundedRect(margin, y, contentWidth, boxH, R_CARD).fillAndStroke('#FFFFFF', COLOR_BORDER);
     const colWidth = (contentWidth - 16) / 2;
@@ -239,7 +258,7 @@ async function generateQuotationPdf(quotation, settings = {}, res = null) {
     doc.fillColor(COLOR_TEAL)
        .font('Helvetica-Bold')
        .fontSize(isA5 ? 6.5 : 8)
-       .text(isContinuation ? 'BILLED TO / CUSTOMER DETAILS (Contd.):' : 'BILLED TO / CUSTOMER DETAILS:', margin + 8, y + (isA5 ? 4 : 6));
+       .text('BILLED TO / CUSTOMER DETAILS:', margin + 8, y + (isA5 ? 4 : 6));
 
     doc.fillColor(COLOR_TEXT)
        .font('Helvetica-Bold')
@@ -326,12 +345,26 @@ async function generateQuotationPdf(quotation, settings = {}, res = null) {
     return y + boxH + (isA5 ? 4 : 6);
   }
 
+  // Dynamic row height calculator supporting long multi-line names and specifications
+  function getItemRowHeight(item) {
+    const descColW = colDef[1].width - 6;
+    doc.font('Helvetica-Bold').fontSize(isA5 ? 6.5 : 8);
+    const nameH = doc.heightOfString(item.item_name || '', { width: descColW });
+    let detailsH = 0;
+    if (item.details && item.details.trim().length > 0) {
+      doc.font('Helvetica-Oblique').fontSize(isA5 ? 5 : 6.5);
+      detailsH = doc.heightOfString(item.details.trim(), { width: descColW }) + (isA5 ? 1 : 1.5);
+    }
+    const totalContentH = nameH + detailsH + (isA5 ? 5 : 7);
+    const minH = (item.details && item.details.trim().length > 0) ? (isA5 ? 20 : 23) : (isA5 ? 15 : 18);
+    return Math.max(minH, Math.ceil(totalContentH));
+  }
+
   // Check if everything fits on a single page
   const items = financials.items || [];
   let estimatedTableHeight = 0;
   for (const it of items) {
-    const hasDetails = it.details && it.details.trim().length > 0;
-    estimatedTableHeight += hasDetails ? (isA5 ? 20 : 23) : (isA5 ? 15 : 18);
+    estimatedTableHeight += getItemRowHeight(it);
   }
 
   const spaceOnFirstPage = pageHeight - margin - headerHeight - (isA5 ? 4 : 6) - (isA5 ? 60 : 74) - (isA5 ? 4 : 6) - tableHeaderHeight - bottomBlocksHeight;
@@ -352,8 +385,7 @@ async function generateQuotationPdf(quotation, settings = {}, res = null) {
 
   for (let i = 0; i < items.length; i++) {
     const item = items[i];
-    const hasDetails = item.details && item.details.trim().length > 0;
-    const rowHeight = hasDetails ? (isA5 ? 20 : 23) : (isA5 ? 15 : 18);
+    const rowHeight = getItemRowHeight(item);
 
     if (curY + rowHeight > maxTableBottomY) {
       // Close current page table
@@ -362,7 +394,7 @@ async function generateQuotationPdf(quotation, settings = {}, res = null) {
       doc.rect(margin, currentPageTableStartY - tableHeaderHeight, contentWidth, curY - (currentPageTableStartY - tableHeaderHeight))
          .strokeColor(COLOR_BORDER).lineWidth(0.75).stroke();
 
-      // Add new page with the same executive header & subheader
+      // Add new page with the same executive header & compact continuation customer subheader
       doc.addPage();
       currentPageNum++;
       curY = drawExecutiveHeader(margin);
@@ -381,14 +413,17 @@ async function generateQuotationPdf(quotation, settings = {}, res = null) {
     doc.text(String(rowIdx + 1), x + 2, curY + (isA5 ? 3 : 4.5), { width: colDef[0].width - 4, align: 'center' });
     x += colDef[0].width;
 
-    // 2. ITEM DESCRIPTION & SPECIFICATIONS
+    // 2. ITEM DESCRIPTION & SPECIFICATIONS (Naturally wrapped multi-line text)
     doc.fillColor(COLOR_TEXT).font('Helvetica-Bold').fontSize(isA5 ? 6.5 : 8);
-    doc.text(item.item_name || '', x + 3, curY + (isA5 ? 2.5 : 3.5), { width: colDef[1].width - 6, height: 10, ellipsis: true });
-    if (hasDetails) {
+    const nameY = curY + (isA5 ? 2.5 : 3.5);
+    doc.text(item.item_name || '', x + 3, nameY, { width: colDef[1].width - 6 });
+    const nameTextH = doc.heightOfString(item.item_name || '', { width: colDef[1].width - 6 });
+
+    if (item.details && item.details.trim().length > 0) {
       doc.font('Helvetica-Oblique')
          .fontSize(isA5 ? 5 : 6.5)
          .fillColor(COLOR_MUTED)
-         .text(item.details, x + 3, curY + (isA5 ? 11 : 13.5), { width: colDef[1].width - 6, height: 8, ellipsis: true });
+         .text(item.details.trim(), x + 3, nameY + nameTextH + (isA5 ? 1 : 1.5), { width: colDef[1].width - 6 });
     }
     x += colDef[1].width;
 

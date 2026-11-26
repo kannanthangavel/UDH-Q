@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { api, getQuickDownloadUrl } from '../api/client';
 import ThemedConfirmDialog from '../components/ThemedConfirmDialog';
+import { toYMDString } from '../utils/dateHelper';
 
 export default function Receipts() {
   const [receipts, setReceipts] = useState([]);
@@ -457,13 +458,30 @@ UDHAYAM AGENCIES - Perundurai`;
               {/* Payment Date & Mode */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="block font-bold text-slate-700 mb-1">Payment Date</label>
-                  <input
-                    type="date"
-                    value={paymentDate}
-                    onChange={(e) => setPaymentDate(e.target.value)}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#00545C]"
-                  />
+                  <label className="block font-bold text-slate-700 mb-1">Payment Date *</label>
+                  <div className="relative">
+                    <input
+                      type="date"
+                      required
+                      value={toYMDString(paymentDate)}
+                      onChange={(e) => setPaymentDate(e.target.value)}
+                      onClick={(e) => { try { e.target.showPicker(); } catch (err) {} }}
+                      className="w-full px-3 py-2 pr-9 bg-slate-50 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#00545C] cursor-pointer font-medium text-slate-800"
+                    />
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        const input = e.currentTarget.previousElementSibling;
+                        if (input && input.showPicker) {
+                          try { input.showPicker(); } catch (err) { input.focus(); }
+                        }
+                      }}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-[#00545C] cursor-pointer p-0.5"
+                      title="Open calendar"
+                    >
+                      <Calendar className="w-4 h-4" />
+                    </button>
+                  </div>
                 </div>
                 <div>
                   <label className="block font-bold text-slate-700 mb-1">Payment Mode</label>

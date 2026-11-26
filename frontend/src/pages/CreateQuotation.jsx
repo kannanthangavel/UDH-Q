@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { 
   User, Search, Plus, Trash2, Check, FileText, Printer, MessageCircle, 
   Mail, AlertCircle, Sparkles, Building2, Phone, MapPin, Tag, 
-  MessageSquare, Edit3, X, QrCode, ArrowRight, CheckCircle2, ChevronDown, Layers, Loader2
+  MessageSquare, Edit3, X, QrCode, ArrowRight, CheckCircle2, ChevronDown, Layers, Loader2, Calendar
 } from 'lucide-react';
 import { api, getUploadUrl } from '../api/client';
 import { useAuth } from '../context/AuthContext';
@@ -14,6 +14,7 @@ import OptechPdfUploadModal from '../components/OptechPdfUploadModal';
 import ThemedConfirmDialog from '../components/ThemedConfirmDialog';
 import { numberToIndianWords } from '../utils/numberToWords';
 import { calculateQuotationFinancials } from '../utils/quotationEngine';
+import { toYMDString } from '../utils/dateHelper';
 
 const COMMON_UNITS = ['Nos', 'Ltr', 'Kg', 'Box', 'Bag', 'Can', 'Set', 'Drum', 'Roll', 'Meter', 'Pkt', 'Tin'];
 
@@ -48,7 +49,7 @@ export default function CreateQuotation({ setActivePage, initialCustomer, import
   const [activeDropdownIndex, setActiveDropdownIndex] = useState(-1);
 
   // Quotation Meta
-  const [quotationDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [quotationDate, setQuotationDate] = useState(() => new Date().toISOString().split('T')[0]);
   const [validityDate, setValidityDate] = useState(() => {
     const d = new Date();
     d.setDate(d.getDate() + (parseInt(settings?.default_validity_days) || 7));
@@ -224,7 +225,8 @@ export default function CreateQuotation({ setActivePage, initialCustomer, import
         setIsTaxInclusive(Boolean(editingQuote.is_tax_inclusive));
       }
       setPaperFormat(editingQuote.paper_format || 'A4');
-      if (editingQuote.validity_date) setValidityDate(editingQuote.validity_date);
+      if (editingQuote.quotation_date) setQuotationDate(toYMDString(editingQuote.quotation_date));
+      if (editingQuote.validity_date) setValidityDate(toYMDString(editingQuote.validity_date));
       if (editingQuote.notes != null) setNotes(editingQuote.notes);
       if (editingQuote.discount_percent != null) setDiscountPercent(editingQuote.discount_percent);
       if (editingQuote.gst_rate != null) setGstRate(editingQuote.gst_rate);
@@ -1136,9 +1138,38 @@ export default function CreateQuotation({ setActivePage, initialCustomer, import
           </div>
 
           <div>
+            <label className="block font-bold text-slate-700 mb-1">
+              Quotation Date (Issue Date) *
+            </label>
+            <div className="relative">
+              <input
+                type="date"
+                required
+                value={toYMDString(quotationDate)}
+                onChange={(e) => setQuotationDate(e.target.value)}
+                onClick={(e) => { try { e.target.showPicker(); } catch (err) {} }}
+                className="w-full px-3 py-2 pr-9 bg-white border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#00545C]/20 focus:border-[#00545C] cursor-pointer font-medium text-slate-800"
+              />
+              <button
+                type="button"
+                onClick={(e) => {
+                  const input = e.currentTarget.previousElementSibling;
+                  if (input && input.showPicker) {
+                    try { input.showPicker(); } catch (err) { input.focus(); }
+                  }
+                }}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-[#00545C] cursor-pointer p-0.5"
+                title="Open calendar"
+              >
+                <Calendar className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+
+          <div>
             <div className="flex items-center justify-between mb-1">
               <label className="font-bold text-slate-700">
-                Validity Until Date
+                Validity Until Date *
               </label>
               <div className="flex items-center space-x-1">
                 <button
@@ -1164,12 +1195,29 @@ export default function CreateQuotation({ setActivePage, initialCustomer, import
                 </button>
               </div>
             </div>
-            <input
-              type="date"
-              value={validityDate}
-              onChange={(e) => setValidityDate(e.target.value)}
-              className="w-full px-3 py-2 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#00545C]/20 focus:border-[#00545C]"
-            />
+            <div className="relative">
+              <input
+                type="date"
+                required
+                value={toYMDString(validityDate)}
+                onChange={(e) => setValidityDate(e.target.value)}
+                onClick={(e) => { try { e.target.showPicker(); } catch (err) {} }}
+                className="w-full px-3 py-2 pr-9 bg-white border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#00545C]/20 focus:border-[#00545C] cursor-pointer font-medium text-slate-800"
+              />
+              <button
+                type="button"
+                onClick={(e) => {
+                  const input = e.currentTarget.previousElementSibling;
+                  if (input && input.showPicker) {
+                    try { input.showPicker(); } catch (err) { input.focus(); }
+                  }
+                }}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-[#00545C] cursor-pointer p-0.5"
+                title="Open calendar"
+              >
+                <Calendar className="w-4 h-4" />
+              </button>
+            </div>
           </div>
 
           <div>

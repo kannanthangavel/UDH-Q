@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { api } from '../api/client';
 import { calculateQuotationFinancials } from '../utils/quotationEngine';
+import { toYMDString } from '../utils/dateHelper';
 
 export default function OptechPdfUploadModal({
   isOpen,
@@ -599,6 +600,35 @@ export default function OptechPdfUploadModal({
                     </span>
                   </div>
 
+                  {/* Quotation Issue Date */}
+                  <div>
+                    <label className="text-[11px] font-bold text-slate-700 block mb-1">
+                      Quotation Date (Issue Date)
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="date"
+                        value={toYMDString(quotationDate)}
+                        onChange={e => setQuotationDate(e.target.value)}
+                        onClick={(e) => { try { e.target.showPicker(); } catch (err) {} }}
+                        className="w-full px-3 py-2 pr-9 text-xs bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#00545C] font-mono font-medium text-slate-900 cursor-pointer"
+                      />
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          const input = e.currentTarget.previousElementSibling;
+                          if (input && input.showPicker) {
+                            try { input.showPicker(); } catch (err) { input.focus(); }
+                          }
+                        }}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-[#00545C] cursor-pointer p-0.5"
+                        title="Open calendar"
+                      >
+                        <Calendar className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+
                   {/* Manual Validity Date Operation */}
                   <div>
                     <div className="flex items-center justify-between mb-1">
@@ -629,12 +659,28 @@ export default function OptechPdfUploadModal({
                         </button>
                       </div>
                     </div>
-                    <input
-                      type="date"
-                      value={validityDate}
-                      onChange={e => setValidityDate(e.target.value)}
-                      className="w-full px-3 py-2 text-xs bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#00545C] font-mono font-medium text-slate-900"
-                    />
+                    <div className="relative">
+                      <input
+                        type="date"
+                        value={toYMDString(validityDate)}
+                        onChange={e => setValidityDate(e.target.value)}
+                        onClick={(e) => { try { e.target.showPicker(); } catch (err) {} }}
+                        className="w-full px-3 py-2 pr-9 text-xs bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#00545C] font-mono font-medium text-slate-900 cursor-pointer"
+                      />
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          const input = e.currentTarget.previousElementSibling;
+                          if (input && input.showPicker) {
+                            try { input.showPicker(); } catch (err) { input.focus(); }
+                          }
+                        }}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-[#00545C] cursor-pointer p-0.5"
+                        title="Open calendar"
+                      >
+                        <Calendar className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
                     <span className="text-[10px] text-slate-500 mt-1 block">
                       Manual calendar selection or quick presets.
                     </span>
