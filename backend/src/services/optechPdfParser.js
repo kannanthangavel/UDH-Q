@@ -157,10 +157,15 @@ function parseOptechText(rawText) {
       }
 
       // Check if To block ended by finding metadata or table start
-      if (line.match(/^(?:Payment\s+Terms|No\s*:|Date\s*:|S\.?No|Total|Taxable)/i)) {
+      if (line.match(/^(?:Payment\s+Terms|Pay(?:ment)?\s*Mode|Terms\s*:|No\s*:|Date\s*:|S\.?No|Total|Taxable)/i)) {
         inToBlock = false;
         // fall through to metadata extraction
       } else {
+        // Check for inline Payment Terms on an address/header line before discarding
+        const inlineTerms = line.match(/(?:Payment\s*Terms|Pay(?:ment)?\s*Mode)\s*[:\s]+([A-Za-z0-9\s()/-]+?)(?=\s+(?:No|Date)\s*:|$)/i);
+        if (inlineTerms && inlineTerms[1]) {
+          paymentTerms = inlineTerms[1].trim();
+        }
         // Address line (ignore shop keywords)
         if (!line.match(/(?:UDHAYAM|PAINT:|ELECTRICAL:|GSTIN:\s*33AADFU6496M1ZJ)/i)) {
           const cleanedAddr = line.replace(/,\s*,/g, ',').trim();
@@ -170,11 +175,13 @@ function parseOptechText(rawText) {
       }
     }
 
-    // Payment Terms (e.g. "Payment Terms : Cash")
-    const payMatch = line.match(/^Payment\s+Terms\s*[:\s]*(.+)$/i);
-    if (payMatch) {
+    // Payment Terms (e.g. "Payment Terms : Cash", "Terms : Credit", "Payment Mode : Credit 15 Days")
+    const payMatch = line.match(/(?:^|\b)(?:Payment\s*Terms|Pay\s*Terms|Payment\s*Mode|Terms(?!\s*&))\s*[:\-]+\s*(.+?)(?=\s+(?:No|Estimate\s*No|Quote\s*No|Date)\s*:|$)/i);
+    if (payMatch && payMatch[1]) {
       paymentTerms = payMatch[1].trim();
-      continue;
+      if (/^Payment\s*Terms|^Terms\s*:/i.test(line)) {
+        continue;
+      }
     }
 
     // Quote / Estimate No (e.g. "No : 1182")

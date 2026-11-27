@@ -5,8 +5,12 @@ import {
   ChevronRight, Phone, MapPin, Hash, Calendar, Layers, Check, ShieldCheck, AlertTriangle
 } from 'lucide-react';
 import { api } from '../api/client';
+import { useAuth } from '../context/AuthContext';
 import { calculateQuotationFinancials } from '../utils/quotationEngine';
 import { toYMDString } from '../utils/dateHelper';
+
+const DEFAULT_OFFICIAL_TERMS =
+  '1. Quotation valid for 15 days from date of issue.\n2. Goods once sold will not be taken back or exchanged.\n3. 100% payment on delivery / as per agreed terms.\n4. Subject to Perundurai jurisdiction only.';
 
 export default function OptechPdfUploadModal({
   isOpen,
@@ -14,6 +18,7 @@ export default function OptechPdfUploadModal({
   onApplyToStudio,
   onQuotationCreated
 }) {
+  const { settings } = useAuth();
   const [file, setFile] = useState(null);
   const [isParsing, setIsParsing] = useState(false);
   const [parseError, setParseError] = useState('');
@@ -204,7 +209,9 @@ export default function OptechPdfUploadModal({
         gst_amount: Math.round(totalTaxAmount * 100) / 100,
         grand_total: Math.round(grandTotal * 100) / 100,
         is_tax_inclusive: false, // Optech uses Tax Exclusive breakdown
-        notes: parsedData?.referenceNo ? `Optech Quote #${parsedData.referenceNo}` : 'Converted from Optech Quotation',
+        notes: (settings?.default_terms && !/7 days/i.test(settings.default_terms))
+          ? settings.default_terms
+          : DEFAULT_OFFICIAL_TERMS,
         items: items.map(it => ({
           product_id: it.product_id || null,
           item_name: it.item_name,

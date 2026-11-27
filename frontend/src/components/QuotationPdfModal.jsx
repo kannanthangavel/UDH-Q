@@ -478,22 +478,26 @@ export default function QuotationPdfModal({ quotation, onClose, onEdit, onDelete
                     TERMS & CONDITIONS:
                   </span>
                   <p className="line-clamp-4 leading-relaxed whitespace-pre-line text-[9px] text-slate-600">
-                    {(quotation.notes && !/auto-generated|test_msg/i.test(quotation.notes))
+                    {(quotation.notes && !/auto-generated|test_msg|^Optech Quote\s*#|^Converted from Optech/i.test(quotation.notes))
                       ? quotation.notes
                       : '1. Quotation valid for 15 days from date of issue.\n2. Goods once sold will not be taken back or exchanged.\n3. 100% payment on delivery / as per agreed terms.\n4. Subject to Perundurai jurisdiction only.'}
                   </p>
                 </div>
 
-                {/* Col 3: Dynamic UPI QR Code */}
+                {/* Col 3: Official Paytm / Dynamic UPI QR Code */}
                 <div className="flex flex-col items-center justify-center border-r border-slate-200/80 pr-2">
                   <div className="bg-white p-1 rounded-lg border border-slate-200 shadow-2xs flex flex-col items-center">
                     <img
-                      src={dynamicQrUrl || getUploadUrl(`/uploads/qr/${settings?.payment_qr_code || 'default_upi_qr.png'}`)}
+                      src={
+                        settings?.payment_qr_code_data ||
+                        getUploadUrl(`/uploads/qr/${settings?.payment_qr_code || 'default_upi_qr.png'}`) ||
+                        dynamicQrUrl
+                      }
                       alt="UPI QR Code"
-                      className="w-14 h-14 object-contain rounded"
+                      className="w-16 h-16 object-contain rounded"
                       onError={(e) => {
                         e.target.onerror = null;
-                        e.target.src = getUploadUrl('/uploads/qr/default_upi_qr.png');
+                        e.target.src = dynamicQrUrl || getUploadUrl('/uploads/qr/default_upi_qr.png');
                       }}
                     />
                     <span className="text-[7.5px] font-black text-[#00545C] mt-0.5 uppercase tracking-wider">

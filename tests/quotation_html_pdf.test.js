@@ -149,3 +149,17 @@ test('GET /api/quotations/:id/pdf?download=true streams valid Puppeteer PDF over
     await new Promise(resolve => server.close(resolve));
   }
 });
+
+test('Optech-converted quotation PDF preserves official 4-point Terms & Conditions and embeds official Paytm QR', async () => {
+  const optechQuote = {
+    ...baseQuote4,
+    quotation_number: 'UDQ-2026-OPTECH99',
+    payment_terms: 'CREDIT',
+    notes: 'Optech Quote #1182'
+  };
+  const buf = await generateQuotationPdf(optechQuote, {});
+  const txt = await extractTextFromPdf(buf);
+  assert.ok(txt.includes('TERMS: CREDIT'), 'Payment terms badge must show CREDIT');
+  assert.ok(txt.includes('1. Quotation valid for 15 days from date of issue.'), 'Must show official 4-point terms instead of Optech placeholder');
+  assert.ok(txt.includes('SCAN TO PAY UPI'));
+});

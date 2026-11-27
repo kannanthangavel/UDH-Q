@@ -6,6 +6,7 @@ const { numberToIndianWords, formatINR } = require('../utils/numberToWords');
 const { resolveUploadedFile } = require('../utils/storagePaths');
 const { formatToDMY } = require('../utils/dateHelper');
 const { calculateQuotationFinancials } = require('../utils/quotationEngine');
+const { resolveQuotationQrSource } = require('./qrService');
 
 let cachedFontCss = null;
 let pdfQueue = Promise.resolve();
@@ -218,7 +219,9 @@ function buildQuotationHtml({ quotation, settings, financials, logoDataUrl, qrDa
   const bankIfsc = (settings.bank_ifsc || 'IDIB000P155').trim().replace(/^IFSC\s*(Code)?\s*[:\-]\s*/i, '');
 
   const rawNotes = (quotation.notes || '').trim();
-  const useCustomNotes = rawNotes.length > 0 && !/auto-generated|test_msg/i.test(rawNotes);
+  const useCustomNotes =
+    rawNotes.length > 0 &&
+    !/auto-generated|test_msg|^Optech Quote\s*#|^Converted from Optech/i.test(rawNotes);
   const defaultTermsLines = [
     '1. Quotation valid for 15 days from date of issue.',
     '2. Goods once sold will not be taken back or exchanged.',
@@ -799,6 +802,7 @@ table.totals-table tbody td.grand-cell {
 .qr-frame img {
   width: ${isA5 ? '64px' : '88px'};
   height: ${isA5 ? '64px' : '88px'};
+  object-fit: contain;
   display: block;
 }
 
@@ -1022,14 +1026,27 @@ async function generateQuotationPdf(quotation, settings = {}, res = null) {
   const payeeName = settings.bank_account_name || 'Udhayam Agencies';
   const quoteNo = quotation.quotation_number || 'UDQ-2026-0001';
 
-  const [qrDataUrl] = await Promise.all([
-    generateUpiQrDataUrl({
+  let qrDataUrl = '';
+  try {
+    const officialQrBuffer = await resolveQuotationQrSource(
+      { ...quotation, grand_total: financials.grandTotal, upi_id: upiId },
+      settings
+    );
+    if (officialQrBuffer && Buffer.isBuffer(officialQrBuffer) && officialQrBuffer.length > 0) {
+      qrDataUrl = `data:image/png;base64,${officialQrBuffer.toString('base64')}`;
+    }
+  } catch (err) {
+    console.warn('[PDF QR] Official QR resolution failed:', err.message);
+  }
+
+  if (!qrDataUrl) {
+    qrDataUrl = await generateUpiQrDataUrl({
       upiId,
       payeeName,
       grandTotal: financials.grandTotal,
       quoteNo
-    })
-  ]);
+    });
+  }
 
   const logoDataUrl = getLogoDataUrl(settings);
   const fontCss = getEmbeddedNotoSansCss();

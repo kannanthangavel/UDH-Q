@@ -131,4 +131,21 @@ BANK DETAILS: INDIAN BANK, A/C NO: 6659-3301-52, IFSC:IDIB000P155, PERUNDURAI BR
     assert.equal(result.items[1].quantity, 4);
   });
 
+  test('extracts Credit and inline Payment Terms variants from Optech PDFs', () => {
+    const sample = `
+UDHAYAM AGENCIES
+To. SRI MURUGAN PAINTS
+PERUNDURAI
+Terms : Credit (15 Days)
+No : 2045
+Date : 26/11/2026
+S.No Description HSN/SAC Qty Rate Tax% Amount
+1 AS EN 20LT WHITE 32089021 1 Nos 4000.00 18 4000.00
+Total 1.000 4000.00
+Net Amount : 4720.00
+    `;
+    const parsed = parseOptechText(sample);
+    assert.equal(parsed.paymentTerms, 'Credit (15 Days)');
+  });
+
 });
