@@ -1028,12 +1028,16 @@ async function generateQuotationPdf(quotation, settings = {}, res = null) {
 
   let qrDataUrl = '';
   try {
-    const officialQrBuffer = await resolveQuotationQrSource(
+    const officialQrSource = await resolveQuotationQrSource(
       { ...quotation, grand_total: financials.grandTotal, upi_id: upiId },
       settings
     );
-    if (officialQrBuffer && Buffer.isBuffer(officialQrBuffer) && officialQrBuffer.length > 0) {
-      qrDataUrl = `data:image/png;base64,${officialQrBuffer.toString('base64')}`;
+    if (officialQrSource && Buffer.isBuffer(officialQrSource) && officialQrSource.length > 0) {
+      qrDataUrl = `data:image/png;base64,${officialQrSource.toString('base64')}`;
+    } else if (typeof officialQrSource === 'string' && fs.existsSync(officialQrSource)) {
+      const ext = path.extname(officialQrSource).toLowerCase().replace('.', '') || 'png';
+      const mime = ext === 'jpg' ? 'image/jpeg' : `image/${ext}`;
+      qrDataUrl = `data:${mime};base64,${fs.readFileSync(officialQrSource).toString('base64')}`;
     }
   } catch (err) {
     console.warn('[PDF QR] Official QR resolution failed:', err.message);
